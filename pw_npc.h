@@ -1,3 +1,10 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright(c) 2019-2020 Darek Stojaczyk for pwmirage.com
+ */
+
+#ifndef PW_NPC_H
+#define PW_NPC_H
+
 #include <inttypes.h>
 #include <stdint.h>
 
@@ -48,21 +55,18 @@ struct pw_npc_resource_group {
 	struct __attribute__((packed)) pw_npc_resource_group_data {
 		int _unused_type;
 		int type;
-		int respawn;
-		int amount;
-		int height_offset;
+		int respawn_time;
+		int count;
+		float height_offset;
 	} data;
 };
 
 struct pw_npc_resource_set {
 	struct __attribute__((packed)) pw_npc_resource_set_data {
-		float spawn_x;
-		float spawn_alt;
-		float spawn_z;
-		float spread_x;
-		float spread_z;
+		float pos[3];
+		float spread[2];
 		int groups_count;
-		bool spawn_initially;
+		bool auto_spawn;
 		bool auto_respawn;
 		bool _unused1;
 		int _unused2;
@@ -283,3 +287,5 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 	fclose(fp);
 	return 0;
 }
+
+#endif /* PW_NPC_H */

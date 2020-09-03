@@ -1,11 +1,60 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright(c) 2019-2020 Darek Stojaczyk for pwmirage.com
+ */
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <errno.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdbool.h>
+#include <wchar.h>
+#include <locale.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <assert.h>
 
+#include "pw_elements.h"
 #include "pw_npc.h"
+
+#define EXPORT_TABLE(elements, table, filename) \
+({ \
+	FILE *fp = fopen(filename, "wb"); \
+	long sz; \
+\
+	if (fp == NULL) { \
+		fprintf(stderr, "cant open %s for writing\n", filename); \
+	} else { \
+		sz = pw_elements_serialize(fp, (elements)->table ## _serializer, \
+				(void *)(elements)->table, (elements)->table ## _cnt); \
+		fclose(fp); \
+		truncate(filename, sz); \
+	} \
+})
+
+static int
+print_elements(const char *path)
+{
+	struct pw_elements elements;
+	int rc;
+	rc = pw_elements_load(&elements, path);
+	if (rc != 0) {
+		return 1;
+	}
+
+	EXPORT_TABLE(&elements, mine_essence, "mines.json");
+	EXPORT_TABLE(&elements, monster_essence, "monsters.json");
+	EXPORT_TABLE(&elements, recipe_essence, "recipes.json");
+	EXPORT_TABLE(&elements, npc_essence, "npcs.json");
+	EXPORT_TABLE(&elements, npc_sell_service, "npc_sells.json");
+	EXPORT_TABLE(&elements, npc_make_service, "npc_craft.json");
+	return 0;
+}
 
 static int
 print_npcgen(const char *npcgen_path, const char *mapname)
@@ -28,13 +77,11 @@ print_npcgen(const char *npcgen_path, const char *mapname)
 		return -errno;
 	}
 
-	fprintf(fp, "g_db.spawners={};\n");
 	for (set_idx = 0; set_idx < npcs.hdr.creature_sets_count; set_idx++) {
 		struct pw_npc_creature_set_data *set = &npcs.creature_sets[set_idx].data;
 		struct pw_npc_creature_group *groups = npcs.creature_sets[set_idx].groups;
 		uint32_t grp_idx;
 
-		fprintf(fp, "g_db.npc_spawners[\"%s\"][%u]={", mapname, set_idx);
 		if (set->is_npc) {
 			if (set->groups_count != 1) {
 				fprintf(stderr, "WARNING: set %u: expected 1 group in npc struct, found %d\n", set_idx, set->groups_count);
@@ -42,6 +89,7 @@ print_npcgen(const char *npcgen_path, const char *mapname)
 			}
 		}
 
+		fprintf(fp, "g_db.spawners_%s[%u]={", mapname, set_idx);
 		fprintf(fp, "id:%u,", set_idx);
 		fprintf(fp, "is_npc:%u,", set->is_npc);
 		fprintf(fp, "mob_type:%u,", set->mob_type);
@@ -50,7 +98,6 @@ print_npcgen(const char *npcgen_path, const char *mapname)
 		fprintf(fp, "spread:[%.8f,%.8f,%.8f],", set->spread[0], set->spread[1], set->spread[2]);
 		fprintf(fp, "auto_spawn:%u,", set->auto_spawn);
 		fprintf(fp, "auto_respawn:%u,", set->auto_respawn);
-		fprintf(fp, "gen_id:%u,", set->gen_id);
 		fprintf(fp, "trigger:%u,", set->trigger);
 		fprintf(fp, "hp:%u,", set->hp);
 		fprintf(fp, "max_num:%u,", set->max_num);
@@ -83,13 +130,68 @@ print_npcgen(const char *npcgen_path, const char *mapname)
 		}
 		fprintf(fp,"]};\n");
 	}
-
 	fclose(fp);
+
+	snprintf(buf, sizeof(buf), "resources_%s.js", mapname);
+	fp = fopen(buf, "w");
+	if (fp == NULL) {
+		fprintf(stderr, "cant open %s for writing\n", buf);
+		return -errno;
+	}
+
+	for (set_idx = 0; set_idx < npcs.hdr.resource_sets_count; set_idx++) {
+		struct pw_npc_resource_set_data *set = &npcs.resource_sets[set_idx].data;
+		struct pw_npc_resource_group *groups = npcs.resource_sets[set_idx].groups;
+		uint32_t grp_idx;
+
+		if (set->groups_count == 0) {
+				fprintf(stderr, "WARNING: set %u: expected 1 group in resource struct, found 0\n", set_idx);
+				continue;
+		}
+
+		fprintf(fp, "g_db.resources_%s[%u]={", mapname, set_idx);
+		fprintf(fp, "id:%u,", set_idx);
+		fprintf(fp, "pos:[%.8f,%.8f,%.8f],", set->pos[0], set->pos[1], set->pos[2]);
+		fprintf(fp, "dir:[%.8f,%.8f,%.8f],", (float)set->dir[0], 0.0f, (float)set->dir[1]);
+		fprintf(fp, "spread:[%.8f,0,%.8f],", set->spread[0], set->spread[1]);
+		fprintf(fp, "auto_spawn:%u,", set->auto_spawn);
+		fprintf(fp, "auto_respawn:%u,", set->auto_respawn);
+		fprintf(fp, "max_num:%u,", set->max_num);
+		fprintf(fp, "groups:[\n");
+
+		for (grp_idx = 0; grp_idx < set->groups_count; grp_idx++) {
+			struct pw_npc_resource_group_data *grp = &groups[grp_idx].data;
+			if (grp->type == 0) {
+				fprintf(stderr, "WARNING: empty group in spawner %u\n", set_idx);
+				/* invalid resource, won't spawn anyway */
+				continue;
+			}
+
+			fprintf(fp, "{");
+			fprintf(fp, "type:%u,", grp->type);
+			fprintf(fp, "count:%u,", grp->count);
+			fprintf(fp, "respawn_time_sec:%u,", grp->respawn_time);
+			fprintf(fp, "height_offset:%.8f,", grp->height_offset);
+			fprintf(fp, "}");
+			if (grp_idx != set->groups_count - 1) {
+				fprintf(fp, ",\n");
+			}
+		}
+		fprintf(fp,"]};\n");
+	}
+	fclose(fp);
+
 	return 0;
 }
 
 int
 main(void)
 {
-	return print_npcgen("world/npcgen.data", "world");
+	int rc;
+	setlocale(LC_ALL, "en_US.UTF-8");
+
+	rc = print_npcgen("world/npcgen.data", "world");
+	rc = rc || print_elements("elements.data");
+
+	return rc;
 }
