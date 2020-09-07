@@ -50,13 +50,14 @@ print_npcgen(const char *npcgen_path, const char *mapname)
 		return rc;
 	}
 
-	snprintf(buf, sizeof(buf), "spawners_%s.js", mapname);
+	snprintf(buf, sizeof(buf), "spawners_%s.json", mapname);
 	fp = fopen(buf, "w");
 	if (fp == NULL) {
 		fprintf(stderr, "cant open %s for writing\n", buf);
 		return -errno;
 	}
 
+	fprintf(fp, "[");
 	for (set_idx = 0; set_idx < npcs.hdr.creature_sets_count; set_idx++) {
 		struct pw_npc_creature_set_data *set = &npcs.creature_sets[set_idx].data;
 		struct pw_npc_creature_group *groups = npcs.creature_sets[set_idx].groups;
@@ -69,19 +70,23 @@ print_npcgen(const char *npcgen_path, const char *mapname)
 			}
 		}
 
-		fprintf(fp, "g_db.spawners_%s[%u]={", mapname, set_idx);
-		fprintf(fp, "id:%u,", set_idx);
-		fprintf(fp, "is_npc:%u,", set->is_npc);
-		fprintf(fp, "mob_type:%u,", set->mob_type);
-		fprintf(fp, "pos:[%.8f,%.8f,%.8f],", set->pos[0], set->fixed_y ? set->pos[1] : 0, set->pos[2]);
-		fprintf(fp, "dir:[%.8f,%.8f,%.8f],", set->dir[0], set->dir[1], set->dir[2]);
-		fprintf(fp, "spread:[%.8f,%.8f,%.8f],", set->spread[0], set->spread[1], set->spread[2]);
-		fprintf(fp, "auto_spawn:%u,", set->auto_spawn);
-		fprintf(fp, "auto_respawn:%u,", set->auto_respawn);
-		fprintf(fp, "trigger:%u,", set->trigger);
-		fprintf(fp, "hp:%u,", set->hp);
-		fprintf(fp, "max_num:%u,", set->max_num);
-		fprintf(fp, "groups:[\n");
+		if (set_idx > 0) {
+			fprintf(fp, ",\n");
+		}
+
+		fprintf(fp, "{");
+		fprintf(fp, "\"id\":%u,", set_idx);
+		fprintf(fp, "\"is_npc\":%u,", set->is_npc);
+		fprintf(fp, "\"mob_type\":%u,", set->mob_type);
+		fprintf(fp, "\"pos\":[%.8f,%.8f,%.8f],", set->pos[0], set->fixed_y ? set->pos[1] : 0, set->pos[2]);
+		fprintf(fp, "\"dir\":[%.8f,%.8f,%.8f],", set->dir[0], set->dir[1], set->dir[2]);
+		fprintf(fp, "\"spread\":[%.8f,%.8f,%.8f],", set->spread[0], set->spread[1], set->spread[2]);
+		fprintf(fp, "\"auto_spawn\":%u,", set->auto_spawn);
+		fprintf(fp, "\"auto_respawn\":%u,", set->auto_respawn);
+		fprintf(fp, "\"trigger\":%u,", set->trigger);
+		fprintf(fp, "\"hp\":%u,", set->hp);
+		fprintf(fp, "\"max_num\":%u,", set->max_num);
+		fprintf(fp, "\"groups\":[");
 
 		for (grp_idx = 0; grp_idx < set->groups_count; grp_idx++) {
 			struct pw_npc_creature_group_data *grp = &groups->data;
@@ -92,33 +97,35 @@ print_npcgen(const char *npcgen_path, const char *mapname)
 			}
 
 			fprintf(fp, "{");
-			fprintf(fp, "type:%u,", grp->type);
-			fprintf(fp, "count:%u,", grp->count);
-			fprintf(fp, "aggro:%u,", grp->aggro);
-			fprintf(fp, "group_id:%u,", !grp->default_group ? grp->group_id : 0);
-			fprintf(fp, "accept_help_group_id:%u,", grp->need_help && !grp->default_help ? grp->accept_help_group_id : 0);
-			fprintf(fp, "help_group_id:%u,", !grp->default_need ? grp->help_group_id : 0);
+			fprintf(fp, "\"type\":%u,", grp->type);
+			fprintf(fp, "\"count\":%u,", grp->count);
+			fprintf(fp, "\"aggro\":%u,", grp->aggro);
+			fprintf(fp, "\"group_id\":%u,", !grp->default_group ? grp->group_id : 0);
+			fprintf(fp, "\"accept_help_group_id\":%u,", grp->need_help && !grp->default_help ? grp->accept_help_group_id : 0);
+			fprintf(fp, "\"help_group_id\":%u,", !grp->default_need ? grp->help_group_id : 0);
 
-			fprintf(fp, "path_id:%u,", grp->path_id);
-			fprintf(fp, "path_type:%u,", grp->path_type);
-			fprintf(fp, "path_speed:%u,", grp->path_speed);
-			fprintf(fp, "disappear_time:%u", grp->disappear_time);
+			fprintf(fp, "\"path_id\":%u,", grp->path_id);
+			fprintf(fp, "\"path_type\":%u,", grp->path_type);
+			fprintf(fp, "\"path_speed\":%u,", grp->path_speed);
+			fprintf(fp, "\"disappear_time\":%u", grp->disappear_time);
 			fprintf(fp, "}");
 			if (grp_idx != set->groups_count - 1) {
-				fprintf(fp, ",\n");
+				fprintf(fp, ",");
 			}
 		}
-		fprintf(fp,"]};\n");
+		fprintf(fp, "]}");
 	}
+	fprintf(fp, "]");
 	fclose(fp);
 
-	snprintf(buf, sizeof(buf), "resources_%s.js", mapname);
+	snprintf(buf, sizeof(buf), "resources_%s.json", mapname);
 	fp = fopen(buf, "w");
 	if (fp == NULL) {
 		fprintf(stderr, "cant open %s for writing\n", buf);
 		return -errno;
 	}
 
+	fprintf(fp, "[");
 	for (set_idx = 0; set_idx < npcs.hdr.resource_sets_count; set_idx++) {
 		struct pw_npc_resource_set_data *set = &npcs.resource_sets[set_idx].data;
 		struct pw_npc_resource_group *groups = npcs.resource_sets[set_idx].groups;
@@ -129,15 +136,19 @@ print_npcgen(const char *npcgen_path, const char *mapname)
 				continue;
 		}
 
-		fprintf(fp, "g_db.resources_%s[%u]={", mapname, set_idx);
-		fprintf(fp, "id:%u,", set_idx);
-		fprintf(fp, "pos:[%.8f,%.8f,%.8f],", set->pos[0], set->pos[1], set->pos[2]);
-		fprintf(fp, "dir:[%.8f,%.8f,%.8f],", (float)set->dir[0], 0.0f, (float)set->dir[1]);
-		fprintf(fp, "spread:[%.8f,0,%.8f],", set->spread[0], set->spread[1]);
-		fprintf(fp, "auto_spawn:%u,", set->auto_spawn);
-		fprintf(fp, "auto_respawn:%u,", set->auto_respawn);
-		fprintf(fp, "max_num:%u,", set->max_num);
-		fprintf(fp, "groups:[\n");
+		if (set_idx > 0) {
+			fprintf(fp, ",\n");
+		}
+
+		fprintf(fp, "{");
+		fprintf(fp, "\"id\":%u,", set_idx);
+		fprintf(fp, "\"pos\":[%.8f,%.8f,%.8f],", set->pos[0], set->pos[1], set->pos[2]);
+		fprintf(fp, "\"dir\":[%.8f,%.8f,%.8f],", (float)set->dir[0], 0.0f, (float)set->dir[1]);
+		fprintf(fp, "\"spread\":[%.8f,0,%.8f],", set->spread[0], set->spread[1]);
+		fprintf(fp, "\"auto_spawn\":%u,", set->auto_spawn);
+		fprintf(fp, "\"auto_respawn\":%u,", set->auto_respawn);
+		fprintf(fp, "\"max_num\":%u,", set->max_num);
+		fprintf(fp, "\"groups\":[");
 
 		for (grp_idx = 0; grp_idx < set->groups_count; grp_idx++) {
 			struct pw_npc_resource_group_data *grp = &groups[grp_idx].data;
@@ -148,17 +159,18 @@ print_npcgen(const char *npcgen_path, const char *mapname)
 			}
 
 			fprintf(fp, "{");
-			fprintf(fp, "type:%u,", grp->type);
-			fprintf(fp, "count:%u,", grp->count);
-			fprintf(fp, "respawn_time_sec:%u,", grp->respawn_time);
-			fprintf(fp, "height_offset:%.8f,", grp->height_offset);
+			fprintf(fp, "\"type\":%u,", grp->type);
+			fprintf(fp, "\"count\":%u,", grp->count);
+			fprintf(fp, "\"respawn_time_sec\":%u,", grp->respawn_time);
+			fprintf(fp, "\"height_offset\":%.8f", grp->height_offset);
 			fprintf(fp, "}");
 			if (grp_idx != set->groups_count - 1) {
-				fprintf(fp, ",\n");
+				fprintf(fp, ",");
 			}
 		}
-		fprintf(fp,"]};\n");
+		fprintf(fp, "]}");
 	}
+	fprintf(fp, "]");
 	fclose(fp);
 
 	return 0;
