@@ -12,159 +12,7 @@
 #include "common.h"
 #include "pw_elements.h"
 
-#define TYPE_END 0
-#define INT16 1
-#define INT32 2
-#define FLOAT 3
-#define ARRAY_END 4
-#define WSTRING(n) (0x1000 + (n))
-#define STRING(n) (0x2000 + (n))
-#define ARRAY_START(n) (0x3000 + (n))
-
-struct pw_elements_serializer {
-	const char *name;
-	unsigned type;
-};
-
-static long
-serialize(FILE *fp, struct pw_elements_serializer **slzr_table_p, void **data_p,
-		unsigned data_cnt, bool skip_empty_objs, bool newlines)
-{
-	unsigned data_idx;
-	struct pw_elements_serializer *slzr;
-	void *data = *data_p;
-	bool nonzero, obj_printed;
-	long sz, arr_sz;
-
-	fprintf(fp, "[");
-	/* in case the arr is full of empty objects or just 0-fields -> print just [] */
-	arr_sz = ftell(fp);
-	for (data_idx = 0; data_idx < data_cnt; data_idx++) {
-		slzr = *slzr_table_p;
-		obj_printed = false;
-		if (slzr->name[0] != 0) {
-			obj_printed = true;
-			fprintf(fp, "{");
-		}
-		/* when obj contains only 0-fields -> print {} */
-		sz = ftell(fp);
-		nonzero = false;
-
-		while (true) {
-			if (slzr->type == INT16) {
-				if (!obj_printed || (*(uint16_t *)data != 0 && slzr->name[0] != '_')) {
-					if (slzr->name[0] != 0) {
-						fprintf(fp, "\"%s\":", slzr->name);
-					}
-					fprintf(fp, "%u,", *(uint16_t *)data);
-					nonzero = *(uint16_t *)data != 0;
-				}
-				data += 2;
-			} else if (slzr->type == INT32) {
-				if (!obj_printed || (*(uint32_t *)data != 0 && slzr->name[0] != '_')) {
-					if (slzr->name[0] != 0) {
-						fprintf(fp, "\"%s\":", slzr->name);
-					}
-					fprintf(fp, "%u,", *(uint32_t *)data);
-					nonzero = *(uint32_t *)data != 0;
-				}
-				data += 4;
-			} else if (slzr->type == FLOAT) {
-				if (!obj_printed || (*(float *)data != 0 && slzr->name[0] != '_')) {
-					if (slzr->name[0] != 0) {
-						fprintf(fp, "\"%s\":", slzr->name);
-					}
-					fprintf(fp, "%.8f,", *(float *)data);
-					nonzero = *(float *)data != 0;
-				}
-				data += 4;
-			} else if (slzr->type > WSTRING(0) && slzr->type <= WSTRING(0x1000)) {
-				unsigned len = slzr->type - WSTRING(0);
-
-				if (slzr->name[0] != '_') {
-					if (slzr->name[0] != 0) {
-						fprintf(fp, "\"%s\":", slzr->name);
-					}
-					fprintf(fp, "\"");
-					fwsprint(fp, (const uint16_t *)data, len);
-					fprintf(fp, "\",");
-					nonzero = *(uint16_t *)data != 0;
-				}
-				data += len * 2;
-			} else if (slzr->type > STRING(0) && slzr->type <= STRING(0x1000)) {
-				unsigned len = slzr->type - STRING(0);
-
-				if (slzr->name[0] != '_') {
-					if (slzr->name[0] != 0) {
-						fprintf(fp, "\"%s\":", slzr->name);
-					}
-					fprintf(fp, "\"");
-					fprintf(fp, "%s", (char *)data);
-					fprintf(fp, "\",");
-					nonzero = *(char *)data != 0;
-				}
-				data += len;
-			} else if (slzr->type > ARRAY_START(0) && slzr->type <= ARRAY_START(0x1000)) {
-				unsigned cnt = slzr->type - ARRAY_START(0);
-
-				if (slzr->name[0] != '_') {
-					if (slzr->name[0] != 0) {
-						fprintf(fp, "\"%s\":", slzr->name);
-					}
-					slzr++;
-					serialize(fp, &slzr, &data, cnt, true, false);
-					fprintf(fp, ",");
-				}
-			} else if (slzr->type == ARRAY_END) {
-				break;
-			} else if (slzr->type == TYPE_END) {
-				break;
-			}
-			slzr++;
-		}
-
-		if (skip_empty_objs && !nonzero) {
-			if (obj_printed) {
-				/* go back to { */
-				fseek(fp, sz, SEEK_SET);
-			} else {
-				/* overwrite previous comma */
-				fseek(fp, -1, SEEK_CUR);
-			}
-		} else {
-			/* overwrite previous comma */
-			fseek(fp, -1, SEEK_CUR);
-			/* save } of the last non-empty object since we may need to strip
-			 * all subsequent objects from the array */
-			arr_sz = ftell(fp) + (obj_printed ? 1 : 0);
-		}
-
-		if (obj_printed) {
-			fprintf(fp, "}");
-		}
-		fprintf(fp, ",");
-		if (newlines) {
-			fprintf(fp, "\n");
-		}
-	}
-
-	/* overwrite previous comma and strip empty objects from the array */
-	fseek(fp, arr_sz, SEEK_SET);
-
-	fprintf(fp, "]");
-
-	*slzr_table_p = slzr;
-	*data_p = data;
-	return arr_sz + 1;
-}
-
-long
-pw_elements_serialize(FILE *fp, struct pw_elements_serializer *slzr_table, void *data, unsigned data_cnt)
-{
-	return serialize(fp, &slzr_table, &data, data_cnt, false, true);
-}
-
-static struct pw_elements_serializer mine_essence_serializer[] = {
+static struct serializer mine_essence_serializer[] = {
 	{ "id", INT32 },
 	{ "id_type", INT32 },
 	{ "name", WSTRING(32) },
@@ -176,7 +24,7 @@ static struct pw_elements_serializer mine_essence_serializer[] = {
 	{ "time_max", INT32 },
 	{ "exp", INT32 },
 	{ "sp", INT32 },
-	{ "file_model", WSTRING(64) },
+	{ "file_model", STRING(128) },
 	{ "mat_item", ARRAY_START(16) },
 		{ "id", INT32 },
 		{ "prob", FLOAT },
@@ -200,7 +48,7 @@ static struct pw_elements_serializer mine_essence_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct pw_elements_serializer monster_essence_serializer[] = {
+static struct serializer monster_essence_serializer[] = {
 	{ "id", INT32 },
 	{ "id_type", INT32 },
 	{ "name", WSTRING(32) },
@@ -286,7 +134,7 @@ static struct pw_elements_serializer monster_essence_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct pw_elements_serializer recipe_essence_serializer[] = {
+static struct serializer recipe_essence_serializer[] = {
 	{ "id", INT32 },
 	{ "id_major_type", INT32 },
 	{ "id_sub_type", INT32 },
@@ -312,7 +160,7 @@ static struct pw_elements_serializer recipe_essence_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct pw_elements_serializer npc_sell_service_serializer[] = {
+static struct serializer npc_sell_service_serializer[] = {
 	{ "id", INT32 },
 	{ "name", WSTRING(32) },
 	{ "pages", ARRAY_START(8) },
@@ -325,7 +173,7 @@ static struct pw_elements_serializer npc_sell_service_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct pw_elements_serializer npc_essence_serializer[] = {
+static struct serializer npc_essence_serializer[] = {
 	{ "id", INT32 },
 	{ "name", WSTRING(32) },
 	{ "id_type", INT32 },
@@ -368,7 +216,7 @@ static struct pw_elements_serializer npc_essence_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct pw_elements_serializer npc_make_service_serializer[] = {
+static struct serializer npc_make_service_serializer[] = {
 	{ "id", INT32 },
 	{ "name", WSTRING(32) },
 	{ "make_skill_id", INT32 },
@@ -381,6 +229,940 @@ static struct pw_elements_serializer npc_make_service_serializer[] = {
 	{ "", ARRAY_END },
 	{ "", TYPE_END },
 };
+
+static struct serializer weapon_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(1) },
+	{ "id_major_type", INT32 },
+	{ "id_sub_type", INT32 },
+	{ "name", WSTRING(32) },
+	{ "require_projectile", INT32 },
+	{ "file_model_right", STRING(128) },
+	{ "file_model_left", STRING(128) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "require_strength", INT32 },
+	{ "require_agility", INT32 },
+	{ "require_energy", INT32 },
+	{ "require_tili", INT32 },
+	{ "character_combo_id", INT32 },
+	{ "require_level", INT32 },
+	{ "level", INT32 },
+	{ "fixed_props", INT32 },
+	{ "damage_low", INT32 },
+	{ "damage_high_min", INT32 },
+	{ "damage_high_max", INT32 },
+	{ "magic_damage_low", INT32 },
+	{ "magic_damage_high_min", INT32 },
+	{ "magic_damage_high_max", INT32 },
+	{ "attack_range", FLOAT },
+	{ "short_range_mode", INT32 },
+	{ "durability_min", INT32 },
+	{ "durability_max", INT32 },
+	{ "levelup_addon", INT32 },
+	{ "material_need", INT32 },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "repairfee", INT32 },
+	{ "drop_socket_prob", ARRAY_START(3) },
+		{ "", FLOAT },
+	{ "", ARRAY_END },
+	{ "make_socket_prob", ARRAY_START(3) },
+		{ "", FLOAT },
+	{ "", ARRAY_END },
+	{ "addon_num_prob", ARRAY_START(4) },
+		{ "", FLOAT },
+	{ "", ARRAY_END },
+	{ "probability_unique", FLOAT },
+	{ "addons", ARRAY_START(32) },
+		{ "id", INT32 },
+		{ "prob", FLOAT },
+	{ "", ARRAY_END },
+	{ "rands", ARRAY_START(32) },
+		{ "id", INT32 },
+		{ "prob", FLOAT },
+	{ "", ARRAY_END },
+	{ "uniques", ARRAY_START(16) },
+		{ "id", INT32 },
+		{ "prob", FLOAT },
+	{ "", ARRAY_END },
+	{ "durability_drop_min", INT32 },
+	{ "durability_drop_max", INT32 },
+	{ "decompose_price", INT32 },
+	{ "decompose_time", INT32 },
+	{ "element_id", INT32 },
+	{ "element_num", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer armor_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(2) },
+	{ "id_major_type", INT32 },
+	{ "id_sub_type", INT32 },
+	{ "name", WSTRING(32) },
+	{ "realname", STRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "equip_location", INT32 },
+	{ "level", INT32 },
+	{ "require_strength", INT32 },
+	{ "require_agility", INT32 },
+	{ "require_energy", INT32 },
+	{ "require_tili", INT32 },
+	{ "character_combo_id", INT32 },
+	{ "require_level", INT32 },
+	{ "fixed_props", INT32 },
+	{ "defence_low", INT32 },
+	{ "defence_high", INT32 },
+	{ "magic_def", ARRAY_START(5) },
+		{ "low", INT32 },
+		{ "high", INT32 },
+	{ "", ARRAY_END },
+	{ "mp_enhance_low", INT32 },
+	{ "mp_enhance_high", INT32 },
+	{ "hp_enhance_low", INT32 },
+	{ "hp_enhance_high", INT32 },
+	{ "armor_enhance_low", INT32 },
+	{ "armor_enhance_high", INT32 },
+	{ "durability_min", INT32 },
+	{ "durability_max", INT32 },
+	{ "levelup_addon", INT32 },
+	{ "material_need", INT32 },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "repairfee", INT32 },
+	{ "drop_socket_prob", ARRAY_START(5) },
+		{ "", FLOAT },
+	{ "", ARRAY_END },
+	{ "make_socket_prob", ARRAY_START(5) },
+		{ "", FLOAT },
+	{ "", ARRAY_END },
+	{ "addon_num_prob", ARRAY_START(4) },
+		{ "", FLOAT },
+	{ "", ARRAY_END },
+	{ "addons", ARRAY_START(32) },
+		{ "id", INT32 },
+		{ "prob", FLOAT },
+	{ "", ARRAY_END },
+	{ "rands", ARRAY_START(32) },
+		{ "id", INT32 },
+		{ "prob", FLOAT },
+	{ "", ARRAY_END },
+	{ "durability_drop_min", INT32 },
+	{ "durability_drop_max", INT32 },
+	{ "decompose_price", INT32 },
+	{ "decompose_time", INT32 },
+	{ "element_id", INT32 },
+	{ "element_num", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer decoration_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(3) },
+	{ "id_major_type", INT32 },
+	{ "id_sub_type", INT32 },
+	{ "name", WSTRING(32) },
+	{ "file_model", STRING(128) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "level", INT32 },
+	{ "require_strength", INT32 },
+	{ "require_agility", INT32 },
+	{ "require_energy", INT32 },
+	{ "require_tili", INT32 },
+	{ "character_combo_id", INT32 },
+	{ "require_level", INT32 },
+	{ "fixed_props", INT32 },
+	{ "damage_low", INT32 },
+	{ "damage_high", INT32 },
+	{ "magic_damage_low", INT32 },
+	{ "magic_damage_high", INT32 },
+	{ "phys_def_low", INT32 },
+	{ "phys_def_high", INT32 },
+	{ "magic_def", ARRAY_START(5) },
+		{ "low", INT32 },
+		{ "high", INT32 },
+	{ "", ARRAY_END },
+	{ "armor_enhance_low", INT32 },
+	{ "armor_enhance_high", INT32 },
+	{ "durability_min", INT32 },
+	{ "durability_max", INT32 },
+	{ "levelup_addon", INT32 },
+	{ "material_need", INT32 },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "repairfee", INT32 },
+	{ "addon_num_prob", ARRAY_START(4) },
+		{ "", FLOAT },
+	{ "", ARRAY_END },
+	{ "addons", ARRAY_START(32) },
+		{ "id", INT32 },
+		{ "prob", FLOAT },
+	{ "addons", ARRAY_END },
+	{ "rands", ARRAY_START(32) },
+		{ "id", INT32 },
+		{ "prob", FLOAT },
+	{ "", ARRAY_END },
+	{ "durability_drop_min", INT32 },
+	{ "durability_drop_max", INT32 },
+	{ "decompose_price", INT32 },
+	{ "decompose_time", INT32 },
+	{ "element_id", INT32 },
+	{ "element_num", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+};
+
+static struct serializer medicine_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(4) },
+	{ "id_major_type", INT32 },
+	{ "id_sub_type", INT32 },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "require_level", INT32 },
+	{ "cool_time", INT32 },
+	{ "hp_add_total", INT32 },
+	{ "hp_add_time", INT32 },
+	{ "mp_add_total", INT32 },
+	{ "mp_add_time", INT32 },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer material_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(5) },
+	{ "id_major_type", INT32 },
+	{ "id_sub_type", INT32 },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "decompose_price", INT32 },
+	{ "decompose_time", INT32 },
+	{ "element_id", INT32 },
+	{ "element_num", INT32 },
+	{ "stack_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer damagerune_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(6) },
+	{ "id_sub_type", INT32 },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "is_magic", INT32 },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "require_weapon_level_min", INT32 },
+	{ "require_weapon_level_max", INT32 },
+	{ "damage_increased", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer armorrune_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(7) },
+	{ "id_sub_type", INT32 },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "file_gfx", STRING(128) },
+	{ "file_sfx", STRING(128) },
+	{ "is_magic", INT32 },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "require_player_level_min", INT32 },
+	{ "require_player_level_max", INT32 },
+	{ "damage_reduce_percent", FLOAT },
+	{ "damage_reduce_time", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer skilltome_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(8) },
+	{ "id_sub_type", INT32 },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer flysword_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(9) },
+	{ "name", WSTRING(32) },
+	{ "file_model", STRING(128) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "level", INT32 },
+	{ "require_player_level_min", INT32 },
+	{ "speed_increase_min", FLOAT },
+	{ "speed_increase_max", FLOAT },
+	{ "speed_rush_increase_min", FLOAT },
+	{ "speed_rush_increase_max", FLOAT },
+	{ "time_max_min", FLOAT },
+	{ "time_max_max", FLOAT },
+	{ "time_increase_per_element", FLOAT },
+	{ "fly_mode", INT32 },
+	{ "character_combo_id", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer wingmanwing_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(10) },
+	{ "name", WSTRING(32) },
+	{ "file_model", STRING(128) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "require_player_level_min", INT32 },
+	{ "speed_increase", FLOAT },
+	{ "mp_launch", INT32 },
+	{ "mp_per_second", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer townscroll_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(11) },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "use_time", FLOAT },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer revivescroll_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(12) },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "use_time", FLOAT },
+	{ "cool_time", INT32 },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer element_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(13) },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "level", INT32 },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer taskmatter_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(14) },
+	{ "name", WSTRING(32) },
+	{ "file_icon", STRING(128) },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer tossmatter_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(15) },
+	{ "name", WSTRING(32) },
+	{ "file_model", STRING(128) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "file_firegfx", STRING(128) },
+	{ "file_hitgfx", STRING(128) },
+	{ "file_hitsfx", STRING(128) },
+	{ "require_strength", INT32 },
+	{ "require_agility", INT32 },
+	{ "require_level", INT32 },
+	{ "damage_low", INT32 },
+	{ "damage_high_min", INT32 },
+	{ "damage_high_max", INT32 },
+	{ "use_time", FLOAT },
+	{ "attack_range", FLOAT },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer projectile_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(16) },
+	{ "type", INT32 },
+	{ "name", WSTRING(32) },
+	{ "file_model", STRING(128) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "file_firegfx", STRING(128) },
+	{ "file_hitgfx", STRING(128) },
+	{ "file_hitsfx", STRING(128) },
+	{ "require_weapon_level_min", INT32 },
+	{ "require_weapon_level_max", INT32 },
+	{ "damage_enhance", INT32 },
+	{ "damage_scale_enhance", INT32 },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "addon_ids", ARRAY_START(4) },
+		{ "", INT32 },
+	{ "", ARRAY_END },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer quiver_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(17) },
+	{ "id_sub_type", INT32 },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "id_projectile", INT32 },
+	{ "num_min", INT32 },
+	{ "num_max", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer stone_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(18) },
+	{ "id_sub_type", INT32 },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "level", INT32 },
+	{ "color", INT32 },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "install_price", INT32 },
+	{ "uninstall_price", INT32 },
+	{ "id_addon_damage", INT32 },
+	{ "id_addon_defence", INT32 },
+	{ "weapon_desc", WSTRING(16) },
+	{ "armor_desc", WSTRING(16) },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer taskdice_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(19) },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "tasks", ARRAY_START(8) },
+		{ "id", INT32 },
+		{ "prob", FLOAT },
+	{ "", ARRAY_END },
+	{ "use_on_pick", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+};
+
+static struct serializer tasknormalmatter_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(20) },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer fashion_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(21) },
+	{ "id_major_type", INT32 },
+	{ "id_sub_type", INT32 },
+	{ "name", WSTRING(32) },
+	{ "realname", STRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "equip_location", INT32 },
+	{ "level", INT32 },
+	{ "require_level", INT32 },
+	{ "require_dye_count", INT32 },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "gender", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer faceticket_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(22) },
+	{ "id_major_type", INT32 },
+	{ "id_sub_type", INT32 },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "require_level", INT32 },
+	{ "bound_file", STRING(128) },
+	{ "unsymmetrical", INT32 },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer facepill_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(23) },
+	{ "id_major_type", INT32 },
+	{ "id_sub_type", INT32 },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "duration", INT32 },
+	{ "camera_scale", FLOAT },
+	{ "character_combo_id", INT32 },
+	{ "pllfiles", ARRAY_START(16) },
+		{ "", STRING(128) },
+	{ "", ARRAY_END },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer gm_generator_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(24) },
+	{ "id_type", INT32 },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "id_object", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer pet_egg_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(25) },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "id_pet", INT32 },
+	{ "money_hatched", INT32 },
+	{ "money_restored", INT32 },
+	{ "honor_point", INT32 },
+	{ "level", INT32 },
+	{ "exp", INT32 },
+	{ "skill_point", INT32 },
+	{ "skills", ARRAY_START(32) },
+		{ "id", INT32 },
+		{ "level", INT32 },
+	{ "", ARRAY_END },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer pet_food_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(26) },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "level", INT32 },
+	{ "hornor", INT32 },
+	{ "exp", INT32 },
+	{ "food_type", INT32 },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer pet_faceticket_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(27) },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer fireworks_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(28) },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "file_fw", STRING(128) },
+	{ "level", INT32 },
+	{ "time_to_fire", INT32 },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer war_tankcallin_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(29) },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer skillmatter_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(30) },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "level_required", INT32 },
+	{ "id_skill", INT32 },
+	{ "level_skill", INT32 },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer refine_ticket_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(31) },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "desc", WSTRING(16) },
+	{ "ext_reserved_prob", FLOAT },
+	{ "ext_succeed_prob", FLOAT },
+	{ "fail_reserve_level", INT32 },
+	{ "fail_ext_succeed_probs", ARRAY_START(12) },
+		{ "", FLOAT },
+	{ "", ARRAY_END },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer bible_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(32) },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "addon_ids", ARRAY_START(10) },
+		{ "", INT32 },
+	{ "", ARRAY_END },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer speaker_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(33) },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "id_icon_set", INT32 },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer autohp_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(34) },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "total_hp", INT32 },
+	{ "trigger_amount", FLOAT },
+	{ "cool_time", INT32 },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer automp_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(35) },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "total_mp", INT32 },
+	{ "trigger_amount", FLOAT },
+	{ "cool_time", INT32 },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer double_exp_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(36) },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "double_exp_time", INT32 },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer transmitscroll_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(37) },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer dye_ticket_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "type", CONST_INT(38) },
+	{ "name", WSTRING(32) },
+	{ "file_matter", STRING(128) },
+	{ "file_icon", STRING(128) },
+	{ "h_min", FLOAT },
+	{ "h_max", FLOAT },
+	{ "s_min", FLOAT },
+	{ "s_max", FLOAT },
+	{ "v_min", FLOAT },
+	{ "v_max", FLOAT },
+	{ "price", INT32 },
+	{ "shop_price", INT32 },
+	{ "pile_num_max", INT32 },
+	{ "has_guid", INT32 },
+	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer suite_essence_serializer[] = {
+	{ "id", INT32 },
+	{ "name", WSTRING(32) },
+	{ "max_equips", INT32 },
+	{ "equip_ids", ARRAY_START(12) },
+		{ "", INT32 },
+	{ "", ARRAY_END },
+	{ "addon_ids", ARRAY_START(11) },
+		{ "", INT32 },
+	{ "", ARRAY_END },
+	{ "file_gfx", STRING(128) },
+	{ "", TYPE_END },
+};
+
+#define EXPORT_TABLE(elements, table, filename) \
+({ \
+	FILE *fp = fopen(filename, "wb"); \
+	long sz; \
+\
+	if (fp == NULL) { \
+		fprintf(stderr, "cant open %s for writing\n", filename); \
+	} else { \
+		sz = serialize(fp, table ## _serializer, \
+				(void *)(elements)->table, (elements)->table ## _cnt); \
+		fclose(fp); \
+		truncate(filename, sz); \
+	} \
+})
+
+
+void
+pw_elements_serialize(struct pw_elements *elements)
+{
+	EXPORT_TABLE(elements, mine_essence, "mines.json");
+	EXPORT_TABLE(elements, monster_essence, "monsters.json");
+	EXPORT_TABLE(elements, recipe_essence, "recipes.json");
+	EXPORT_TABLE(elements, npc_essence, "npcs.json");
+	EXPORT_TABLE(elements, npc_sell_service, "npc_sells.json");
+	EXPORT_TABLE(elements, npc_make_service, "npc_crafts.json");
+
+	FILE *fp = fopen("items.json", "wb");
+	if (fp == NULL) {
+		fprintf(stderr, "cant open items.json for writing\n");
+		return;
+	}
+	size_t prev_sz, sz = 0;
+
+#define EXPORT_ITEMS(table) \
+({ \
+	prev_sz = sz; \
+	sz = serialize(fp, table ## _essence_serializer, \
+			(void *)(elements)->table ## _essence, (elements)->table ## _essence_cnt); \
+	if (prev_sz > 0) { \
+		fseek(fp, prev_sz - 1, SEEK_SET); \
+		fprintf(fp, ",\n"); /* overwrite ] and [ */ \
+		fseek(fp, sz, SEEK_SET); \
+	} \
+})
+
+	EXPORT_ITEMS(weapon);
+	EXPORT_ITEMS(armor);
+	EXPORT_ITEMS(decoration);
+	EXPORT_ITEMS(medicine);
+	EXPORT_ITEMS(material);
+	EXPORT_ITEMS(damagerune);
+	EXPORT_ITEMS(armorrune);
+	EXPORT_ITEMS(skilltome);
+	EXPORT_ITEMS(flysword);
+	EXPORT_ITEMS(wingmanwing);
+	EXPORT_ITEMS(townscroll);
+	EXPORT_ITEMS(revivescroll);
+	EXPORT_ITEMS(element);
+	EXPORT_ITEMS(taskmatter);
+	EXPORT_ITEMS(tossmatter);
+	EXPORT_ITEMS(projectile);
+	EXPORT_ITEMS(quiver);
+	EXPORT_ITEMS(stone);
+	EXPORT_ITEMS(taskdice);
+	EXPORT_ITEMS(tasknormalmatter);
+	EXPORT_ITEMS(fashion);
+	EXPORT_ITEMS(faceticket);
+	EXPORT_ITEMS(facepill);
+	EXPORT_ITEMS(gm_generator);
+	EXPORT_ITEMS(pet_egg);
+	EXPORT_ITEMS(pet_food);
+	EXPORT_ITEMS(pet_faceticket);
+	EXPORT_ITEMS(fireworks);
+	EXPORT_ITEMS(war_tankcallin);
+	EXPORT_ITEMS(skillmatter);
+	EXPORT_ITEMS(refine_ticket);
+	EXPORT_ITEMS(bible);
+	EXPORT_ITEMS(speaker);
+	EXPORT_ITEMS(autohp);
+	EXPORT_ITEMS(automp);
+	EXPORT_ITEMS(double_exp);
+	EXPORT_ITEMS(transmitscroll);
+	EXPORT_ITEMS(dye_ticket);
+	EXPORT_ITEMS(flysword);
+
+#undef EXPORT_ITEMS
+
+	fclose(fp);
+	truncate("items.json", sz);
+	fprintf(stderr, "items exported with %u bytes\n", sz);
+}
 
 static int32_t
 pw_elements_load_table(void **table, uint32_t el_size, FILE *fp)
@@ -539,13 +1321,6 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 		fclose(fp);
 		return 1;
 	}
-
-	el->mine_essence_serializer = mine_essence_serializer;
-	el->monster_essence_serializer = monster_essence_serializer;
-	el->recipe_essence_serializer = recipe_essence_serializer;
-	el->npc_essence_serializer = npc_essence_serializer;
-	el->npc_sell_service_serializer = npc_sell_service_serializer;
-	el->npc_make_service_serializer = npc_make_service_serializer;
 
 	el->equipment_addon_cnt = pw_elements_load_table((void **)&el->equipment_addon, sizeof(struct equipment_addon), fp);
 	el->weapon_major_type_cnt = pw_elements_load_table((void **)&el->weapon_major_type, sizeof(struct weapon_major_type), fp);

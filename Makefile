@@ -9,7 +9,7 @@ clean:
 		rm -f $(OBJECTS:%.o=build/%.o) $(OBJECTS:%.o=build/%.d)
 
 build/export: $(OBJECTS:%.o=build/%.o)
-		gcc $(CFLAGS) -o $@ -s $^
+		gcc $(CFLAGS) -o $@ $^
 
 build/%.o: %.c
 		gcc $(CFLAGS) -c -o $@ $<

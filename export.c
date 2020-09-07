@@ -22,21 +22,6 @@
 #include "pw_elements.h"
 #include "pw_npc.h"
 
-#define EXPORT_TABLE(elements, table, filename) \
-({ \
-	FILE *fp = fopen(filename, "wb"); \
-	long sz; \
-\
-	if (fp == NULL) { \
-		fprintf(stderr, "cant open %s for writing\n", filename); \
-	} else { \
-		sz = pw_elements_serialize(fp, (elements)->table ## _serializer, \
-				(void *)(elements)->table, (elements)->table ## _cnt); \
-		fclose(fp); \
-		truncate(filename, sz); \
-	} \
-})
-
 static int
 print_elements(const char *path)
 {
@@ -47,12 +32,7 @@ print_elements(const char *path)
 		return 1;
 	}
 
-	EXPORT_TABLE(&elements, mine_essence, "mines.json");
-	EXPORT_TABLE(&elements, monster_essence, "monsters.json");
-	EXPORT_TABLE(&elements, recipe_essence, "recipes.json");
-	EXPORT_TABLE(&elements, npc_essence, "npcs.json");
-	EXPORT_TABLE(&elements, npc_sell_service, "npc_sells.json");
-	EXPORT_TABLE(&elements, npc_make_service, "npc_craft.json");
+	pw_elements_serialize(&elements);
 	return 0;
 }
 
