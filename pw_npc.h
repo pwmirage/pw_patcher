@@ -43,9 +43,9 @@ struct pw_npc_creature_set {
 		bool auto_spawn;
 		bool auto_respawn;
 		bool _unused1;
-		uint32_t gen_id;
+		uint32_t _unused2;
 		uint32_t trigger;
-		uint32_t hp;
+		uint32_t lifetime;
 		uint32_t max_num;
 	} data;
 	struct pw_npc_creature_group *groups;
@@ -72,7 +72,7 @@ struct pw_npc_resource_set {
 		int _unused2;
 		unsigned char dir[2];
 		unsigned char rad;
-		int gen_id;
+		unsigned trigger;
 		int max_num;
 	} data;
 	struct pw_npc_resource_group *groups;
@@ -81,14 +81,11 @@ struct pw_npc_resource_set {
 struct pw_npc_dynamic {
 	struct __attribute__((packed)) pw_npc_dynamic_data {
 		int id;
-		float spawn_x;
-		float spawn_alt;
-		float spawn_z;
-		unsigned char unknown_5;
-		unsigned char unknown_6;
-		unsigned char unknown_7;
+		float pos[3];
+		unsigned char dir[2];
+		unsigned char rad;
 		int trigger;
-		unsigned char unknown_8;
+		unsigned char scale;
 	} data;
 };
 
@@ -114,7 +111,7 @@ struct pw_npc_trigger {
 		int day_2;
 		int hour_2;
 		int minute_2;
-		int duration;
+		int interval;
 	} data;
 };
 
@@ -144,11 +141,18 @@ pw_npcs_load(struct pw_npc_file *npc, const char *file_path)
 		return -errno;
 	}
 
-	fread(&npc->hdr, 1, sizeof(npc->hdr), fp);
-	if (npc->hdr.version != 0xA) {
+	fread(&npc->hdr.version, 1, sizeof(npc->hdr.version), fp);
+	if (npc->hdr.version != 0xA && npc->hdr.version != 0x5) {
 		fprintf(stderr, "Invalid version %u (first four bytes)!\n", npc->hdr.version);
 		goto err;
 	}
+
+	fread(&npc->hdr.creature_sets_count, 1, sizeof(npc->hdr.creature_sets_count), fp);
+	fread(&npc->hdr.resource_sets_count, 1, sizeof(npc->hdr.resource_sets_count), fp);
+	if (npc->hdr.version == 10) {
+        fread(&npc->hdr.dynamics_count, 1, sizeof(npc->hdr.dynamics_count), fp);
+        fread(&npc->hdr.triggers_count, 1, sizeof(npc->hdr.triggers_count), fp);
+    }
 
 	npc->creature_sets = calloc(npc->hdr.creature_sets_count, sizeof(*npc->creature_sets));
 	if (!npc->creature_sets) {
@@ -158,7 +162,12 @@ pw_npcs_load(struct pw_npc_file *npc, const char *file_path)
 	for (int i = 0;	i < npc->hdr.creature_sets_count; i++) {
 		struct pw_npc_creature_set *set = &npc->creature_sets[i];
 
-		fread(&set->data, 1, sizeof(set->data), fp);
+		fread(&set->data, 1, offsetof(struct pw_npc_creature_set_data, trigger), fp);
+        if (npc->hdr.version >= 7) {
+            fread(&set->data.trigger, 1, sizeof(set->data.trigger), fp);
+            fread(&set->data.lifetime, 1, sizeof(set->data.lifetime), fp);
+            fread(&set->data.max_num, 1, sizeof(set->data.max_num), fp);
+        }
 		if (set->data.groups_count == 0) continue;
 
 		set->groups = calloc(set->data.groups_count, sizeof(*set->groups));
@@ -177,7 +186,15 @@ pw_npcs_load(struct pw_npc_file *npc, const char *file_path)
 	for (int i = 0;	i < npc->hdr.resource_sets_count; i++) {
 		struct pw_npc_resource_set *set = &npc->resource_sets[i];
 
-		fread(&set->data, 1, sizeof(set->data), fp);
+		fread(&set->data, 1, offsetof(struct pw_npc_resource_set_data, dir), fp);
+        if (npc->hdr.version >= 6) {
+            fread(&set->data.dir, 1, sizeof(set->data.dir), fp);
+            fread(&set->data.rad, 1, sizeof(set->data.rad), fp);
+        }
+        if (npc->hdr.version >= 7) {
+            fread(&set->data.trigger, 1, sizeof(set->data.trigger), fp);
+            fread(&set->data.max_num, 1, sizeof(set->data.max_num), fp);
+        }
 		if (set->data.groups_count == 0) continue;
 
 		set->groups = calloc(set->data.groups_count, sizeof(*set->groups));
@@ -196,7 +213,15 @@ pw_npcs_load(struct pw_npc_file *npc, const char *file_path)
 	for (int i = 0;	i < npc->hdr.dynamics_count; i++) {
 		struct pw_npc_dynamic *dyn = &npc->dynamics[i];
 
-		fread(&dyn->data, 1, sizeof(dyn->data), fp);
+		fread(&dyn->data, 1, offsetof(struct pw_npc_dynamic_data, trigger), fp);
+        if (npc->hdr.version >= 9) {
+            fread(&dyn->data.trigger, 1, sizeof(dyn->data.trigger), fp);
+        }
+        if (npc->hdr.version >= 10) {
+            fread(&dyn->data.scale, 1, sizeof(dyn->data.scale), fp);
+        } else {
+            dyn->data.scale = 1;
+        }
 	}
 
 	npc->triggers = calloc(npc->hdr.triggers_count, sizeof(*npc->triggers));
@@ -207,7 +232,10 @@ pw_npcs_load(struct pw_npc_file *npc, const char *file_path)
 	for (int i = 0;	i < npc->hdr.triggers_count; i++) {
 		struct pw_npc_trigger *trig = &npc->triggers[i];
 
-		fread(&trig->data, 1, sizeof(trig->data), fp);
+		fread(&trig->data, 1, offsetof(struct pw_npc_trigger_data, interval), fp);
+        if (npc->hdr.version >= 8) {
+            fread(&trig->data.interval, 1, sizeof(trig->data.interval), fp);
+        }
 	}
 
 	fclose(fp);
