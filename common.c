@@ -173,12 +173,18 @@ fwsprint(FILE *fp, const uint16_t *buf, int maxlen)
 }
 
 void
+sprint(char *dst, size_t dstsize, const char *src, int srcsize)
+{
+    change_charset("GB2312", "UTF-8", (char *)src, srcsize, dst, dstsize);
+}
+
+void
 fsprint(FILE *fp, const char *buf, int maxlen)
 {
     char out[1024] = {};
     char *b = out;
 
-    change_charset("GB2312", "UTF-8", (char *)buf, maxlen, out, sizeof(out));
+    sprint(out, sizeof(out), buf, maxlen);
     while (*b) {
         if (*b == '\\') {
             fputs("\\\\", fp);
@@ -188,6 +194,7 @@ fsprint(FILE *fp, const char *buf, int maxlen)
         b++;
     }
 }
+
 
 void
 fwsprintf(FILE *fp, const char *fmt, const uint16_t *buf, int maxlen)
@@ -341,6 +348,8 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 					_serialize(fp, &slzr, &data, cnt, true, false);
 					fprintf(fp, ",");
 				}
+			} else if (slzr->type == CUSTOM) {
+				data += slzr->fn(fp, data);
 			} else if (slzr->type == ARRAY_END) {
 				break;
 			} else if (slzr->type == TYPE_END) {

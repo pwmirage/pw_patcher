@@ -11,6 +11,8 @@
 struct serializer {
 	const char *name;
 	unsigned type;
+	/* custom parser. returns number of bytes processed */
+	size_t (*fn)(FILE *fp, void *data);
 };
 
 #define TYPE_END 0
@@ -18,6 +20,7 @@ struct serializer {
 #define INT32 2
 #define FLOAT 3
 #define ARRAY_END 4
+#define CUSTOM 5
 #define WSTRING(n) (0x1000 + (n))
 #define STRING(n) (0x2000 + (n))
 #define ARRAY_START(n) (0x3000 + (n))
@@ -27,6 +30,7 @@ int download(const char *url, char *filename);
 int readfile(const char *path, char **buf, size_t *len);
 int download_mem(const char *url, char **buf, size_t *len);
 
+void sprint(char *dst, size_t dstsize, const char *src, int srcsize);
 void fsprint(FILE *fp, const char *buf, int maxlen);
 void fwsprint(FILE *fp, const uint16_t *buf, int maxlen);
 void fwsprintf(FILE *fp, const char *fmt, const uint16_t *buf, int maxlen);

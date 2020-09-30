@@ -17,46 +17,46 @@ int pw_elements_load(struct pw_elements *el, const char *filename);
 void pw_elements_serialize(struct pw_elements *elements);
 
 struct pw_elements {
-		struct header {
-				int16_t version;
-				int16_t signature;
-				int32_t unk1;
-		} hdr;
+	struct header {
+			int16_t version;
+			int16_t signature;
+			int32_t unk1;
+	} hdr;
 
-		struct control_block0 {
-				int32_t unk1;
-				int32_t size;
-				char *unk2;
-				int32_t unk3;
-		} control_block0;
+	struct control_block0 {
+			int32_t unk1;
+			int32_t size;
+			char *unk2;
+			int32_t unk3;
+	} control_block0;
 
-		struct control_block1 {
-				int32_t unk1;
-				int32_t size;
-				char *unk2;
-		} control_block1;
+	struct control_block1 {
+			int32_t unk1;
+			int32_t size;
+			char *unk2;
+	} control_block1;
 
-		struct talk_proc {
-				int32_t id;
-				char16_t name[64];
-				int32_t questions_cnt;
+	struct talk_proc {
+			int32_t id;
+			char16_t name[64];
+			int32_t questions_cnt;
 
-				struct question {
-						int32_t id;
-						int32_t control;
-						int32_t text_size;
-						char16_t *text;
-						int32_t choices_cnt;
+			struct question {
+					int32_t id;
+					int32_t control;
+					int32_t text_size;
+					char16_t *text;
+					int32_t choices_cnt;
 
-						struct choice {
-								int32_t id;
-								char16_t text[64];
-								int32_t param;
-						} *choices;
-				} *questions;
-		} *talk_proc;
+					struct choice {
+							int32_t id;
+							char16_t text[64];
+							int32_t param;
+					} *choices;
+			} *questions;
+	} *talk_proc;
 
-		int32_t equipment_addon_cnt;
+	int32_t equipment_addon_cnt;
 	struct equipment_addon {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
