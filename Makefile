@@ -1,5 +1,5 @@
 OBJECTS = export.o common.o pw_elements.o
-CFLAGS := -O3 -MD -MP $(CFLAGS)
+CFLAGS := -O3 -MD -MP -Wall $(CFLAGS)
 
 $(shell mkdir -p build &>/dev/null)
 
