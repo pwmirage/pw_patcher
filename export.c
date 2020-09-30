@@ -39,7 +39,7 @@ print_elements(const char *path)
 static int
 print_npcgen(const char *npcgen_path, const char *mapname)
 {
-	struct pw_npc_file npcs;
+	struct pw_npc_file npcs = {};
 	FILE *fp;
 	uint32_t set_idx;
 	char buf[64];
@@ -50,7 +50,11 @@ print_npcgen(const char *npcgen_path, const char *mapname)
 		return rc;
 	}
 
-	snprintf(buf, sizeof(buf), "spawners_%s.json", mapname);
+    char tmp[1024];
+    snprintf(tmp, sizeof(tmp), "mkdir -p %s", mapname);
+    system(tmp);
+
+	snprintf(buf, sizeof(buf), "%s/spawners.json", mapname);
 	fp = fopen(buf, "w");
 	if (fp == NULL) {
 		fprintf(stderr, "cant open %s for writing\n", buf);
@@ -62,13 +66,6 @@ print_npcgen(const char *npcgen_path, const char *mapname)
 		struct pw_npc_creature_set_data *set = &npcs.creature_sets[set_idx].data;
 		struct pw_npc_creature_group *groups = npcs.creature_sets[set_idx].groups;
 		uint32_t grp_idx;
-
-		if (set->is_npc) {
-			if (set->groups_count != 1) {
-				fprintf(stderr, "WARNING: set %u: expected 1 group in npc struct, found %d\n", set_idx, set->groups_count);
-				continue;
-			}
-		}
 
 		if (set_idx > 0) {
 			fprintf(fp, ",\n");
@@ -84,16 +81,14 @@ print_npcgen(const char *npcgen_path, const char *mapname)
 		fprintf(fp, "\"auto_spawn\":%u,", set->auto_spawn);
 		fprintf(fp, "\"auto_respawn\":%u,", set->auto_respawn);
 		fprintf(fp, "\"trigger\":%u,", set->trigger);
-		fprintf(fp, "\"hp\":%u,", set->hp);
+		fprintf(fp, "\"lifetime\":%u,", set->lifetime);
 		fprintf(fp, "\"max_num\":%u,", set->max_num);
 		fprintf(fp, "\"groups\":[");
 
 		for (grp_idx = 0; grp_idx < set->groups_count; grp_idx++) {
-			struct pw_npc_creature_group_data *grp = &groups->data;
+			struct pw_npc_creature_group_data *grp = &groups[grp_idx].data;
 			if (grp->type == 0) {
 				fprintf(stderr, "WARNING: empty group in spawner %u\n", set_idx);
-				/* invalid mob, won't spawn anyway */
-				continue;
 			}
 
 			fprintf(fp, "{");
@@ -118,7 +113,7 @@ print_npcgen(const char *npcgen_path, const char *mapname)
 	fprintf(fp, "]");
 	fclose(fp);
 
-	snprintf(buf, sizeof(buf), "resources_%s.json", mapname);
+	snprintf(buf, sizeof(buf), "%s/resources.json", mapname);
 	fp = fopen(buf, "w");
 	if (fp == NULL) {
 		fprintf(stderr, "cant open %s for writing\n", buf);
@@ -130,11 +125,6 @@ print_npcgen(const char *npcgen_path, const char *mapname)
 		struct pw_npc_resource_set_data *set = &npcs.resource_sets[set_idx].data;
 		struct pw_npc_resource_group *groups = npcs.resource_sets[set_idx].groups;
 		uint32_t grp_idx;
-
-		if (set->groups_count == 0) {
-				fprintf(stderr, "WARNING: set %u: expected 1 group in resource struct, found 0\n", set_idx);
-				continue;
-		}
 
 		if (set_idx > 0) {
 			fprintf(fp, ",\n");
@@ -148,14 +138,13 @@ print_npcgen(const char *npcgen_path, const char *mapname)
 		fprintf(fp, "\"auto_spawn\":%u,", set->auto_spawn);
 		fprintf(fp, "\"auto_respawn\":%u,", set->auto_respawn);
 		fprintf(fp, "\"max_num\":%u,", set->max_num);
+		fprintf(fp, "\"trigger\":%u,", set->trigger);
 		fprintf(fp, "\"groups\":[");
 
 		for (grp_idx = 0; grp_idx < set->groups_count; grp_idx++) {
 			struct pw_npc_resource_group_data *grp = &groups[grp_idx].data;
 			if (grp->type == 0) {
 				fprintf(stderr, "WARNING: empty group in spawner %u\n", set_idx);
-				/* invalid resource, won't spawn anyway */
-				continue;
 			}
 
 			fprintf(fp, "{");
@@ -177,13 +166,22 @@ print_npcgen(const char *npcgen_path, const char *mapname)
 }
 
 int
-main(void)
+main(int argc, char *argv[])
 {
 	int rc;
 	setlocale(LC_ALL, "en_US.UTF-8");
 
-	rc = print_npcgen("world/npcgen.data", "world");
-	rc = rc || print_elements("elements.data");
+    if (argc < 3) {
+        printf("./%s path_to_npcgen.data world_name\n", argv[0]);
+        printf("./%s path_to_elements.data\n", argv[0]);
+        return 0;
+    }
+
+    if (argc == 2) {
+        rc = print_elements(argv[1]);
+    } else {
+        rc = print_npcgen(argv[1], argv[2]);
+    }
 
 	return rc;
 }
