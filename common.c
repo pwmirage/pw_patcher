@@ -400,3 +400,9 @@ serialize(FILE *fp, struct serializer *slzr_table, void *data, unsigned data_cnt
 	return _serialize(fp, &slzr_table, &data, data_cnt, false, true);
 }
 
+
+long
+deserialize(FILE *fp, struct serializer *slzr_table, void *data, unsigned data_cnt)
+{
+	return _serialize(fp, &slzr_table, &data, data_cnt, false, true);
+}
