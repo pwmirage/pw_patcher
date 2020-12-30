@@ -350,6 +350,7 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 				}
 			} else if (slzr->type == CUSTOM) {
 				data += slzr->fn(fp, data);
+                nonzero = true;
 			} else if (slzr->type == ARRAY_END) {
 				break;
 			} else if (slzr->type == TYPE_END) {

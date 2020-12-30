@@ -171,7 +171,7 @@ main(int argc, char *argv[])
 	int rc;
 	setlocale(LC_ALL, "en_US.UTF-8");
 
-    if (argc < 3) {
+    if (argc < 2) {
         printf("./%s path_to_npcgen.data world_name\n", argv[0]);
         printf("./%s path_to_elements.data\n", argv[0]);
         return 0;

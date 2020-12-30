@@ -14,6 +14,8 @@
 #include "pw_elements.h"
 
 static char g_icon_names[4096 / 32 * 2048 / 32 + 1][64] = {};
+static char g_item_colors[65536] = {};
+static char *g_item_descs[65536] = {};
 
 static int
 load_icons(void)
@@ -45,13 +47,88 @@ load_icons(void)
 	return 0;
 }
 
+static int
+load_colors(void)
+{
+	FILE *fp = fopen("item_color.txt", "r");
+	size_t len = 64;
+	ssize_t read;
+	char *line= calloc(1, len);
+
+	if (fp == NULL) {
+		fprintf(stderr, "Can't open item_color.txt\n");
+		return -1;
+	}
+
+	unsigned i = 0;
+	while ((read = getline(&line, &len, fp)) != -1) {
+		char *id, *color;
+
+		id = strtok(line, "\t");
+		if (id == NULL || strlen(id) == 0) {
+			break;
+		}
+
+		color = strtok(NULL, "\t");
+		g_item_colors[atoi(id)] = (char)atoi(color);
+
+		i++;
+	}
+
+	fprintf(stderr, "Parsed %u item colors\n", i);
+	fclose(fp);
+	return 0;
+}
+
+static int
+load_descriptions(void)
+{
+	FILE *fp = fopen("item_ext_desc.txt", "r");
+	size_t len = 0;
+	ssize_t read;
+	char *line = NULL;
+
+	if (fp == NULL) {
+		fprintf(stderr, "Can't open item_ext_desc.txt\n");
+		return -1;
+	}
+
+	/* skip header */
+	for (int i = 0; i < 5; i++) {
+		getline(&line, &len, fp);
+	}
+
+	unsigned i = 0;
+
+	while ((read = getline(&line, &len, fp)) != -1) {
+		char *id, *txt;
+
+		id = strtok(line, " ");
+		if (id == NULL || strlen(id) == 0) {
+			break;
+		}
+
+		txt = strtok(NULL, "\"");
+		txt = strtok(NULL, "\"");
+		g_item_descs[atoi(id)] = txt;
+		/* FIXME: line is technically leaked */
+		line = NULL;
+		len = 0;
+		i++;
+	}
+
+	fprintf(stderr, "Parsed %u item descriptions\n", i);
+	fclose(fp);
+	return 0;
+}
+
+
 static size_t
 icon_serialize_fn(FILE *fp, void *data)
 {
 	unsigned len = 128;
 	char out[1024] = {};
 	char *tmp = out, *basename = out;
-	char c;
 	int i;
 
 	sprint(out, sizeof(out), data, len);
@@ -76,6 +153,51 @@ icon_serialize_fn(FILE *fp, void *data)
 	fprintf(fp, "\"icon\":%d,", i);
 	return 128;
 }
+
+static size_t
+float_or_int_fn(FILE *fp, void *data)
+{
+	uint32_t u = *(uint32_t *)data;
+
+	if (u > 10240) {
+		fprintf(fp, "%.8f,", *(float *)&u);
+	} else {
+		fprintf(fp, "%u,", u);
+	}
+
+	return 4;
+}
+
+static size_t
+serialize_item_id_fn(FILE *fp, void *data)
+{
+	uint32_t id = *(uint32_t *)data;
+	uint32_t color;
+	char *desc;
+
+	fprintf(fp, "\"id\":%u,", id);
+	color = g_item_colors[id];
+	if (color) {
+		fprintf(fp, "\"color\":%u,", color);
+	}
+
+	desc = g_item_descs[id];
+	if (desc) {
+		fprintf(fp, "\"desc\":\"%s\",", desc);
+	}
+
+	return 4;
+}
+
+static struct serializer equipment_addon_serializer[] = {
+	{ "id", INT32 },
+	{ "name", WSTRING(32) },
+	{ "num_params", INT32 },
+	{ "params", ARRAY_START(3) },
+        { "", CUSTOM, float_or_int_fn },
+	{ "", ARRAY_END },
+	{ "", TYPE_END },
+};
 
 static struct serializer mine_essence_serializer[] = {
 	{ "id", INT32 },
@@ -201,8 +323,8 @@ static struct serializer monster_essence_serializer[] = {
 
 static struct serializer recipe_essence_serializer[] = {
 	{ "id", INT32 },
-	{ "id_major_type", INT32 },
-	{ "id_sub_type", INT32 },
+	{ "major_type", INT32 },
+	{ "minor_type", INT32 },
 	{ "name", WSTRING(32) },
 	{ "recipe_level", INT32 },
 	{ "skill_id", INT32 },
@@ -215,12 +337,12 @@ static struct serializer recipe_essence_serializer[] = {
 	{ "fail_prob", FLOAT },
 	{ "num_to_make", INT32 },
 	{ "coins", INT32 },
-	{ "duration", INT32 },
+	{ "duration", FLOAT },
 	{ "xp", INT32 },
 	{ "sp", INT32 },
 	{ "mats", ARRAY_START(32) },
+		{ "id", INT32 },
 		{ "num", INT32 },
-		{ "prob", FLOAT },
 	{ "", ARRAY_END },
 	{ "", TYPE_END },
 };
@@ -229,12 +351,12 @@ static struct serializer npc_sell_service_serializer[] = {
 	{ "id", INT32 },
 	{ "name", WSTRING(32) },
 	{ "pages", ARRAY_START(8) },
-		{ "page_title", WSTRING(8) },
+		{ "title", WSTRING(8) },
 		{ "item_id", ARRAY_START(32) },
 			{ "", INT32 },
 		{ "", ARRAY_END },
 	{ "", ARRAY_END },
-	{ "id_dialog", INT32 },
+	{ "_id_dialog", INT32 },
 	{ "", TYPE_END },
 };
 
@@ -285,23 +407,45 @@ static struct serializer npc_make_service_serializer[] = {
 	{ "id", INT32 },
 	{ "name", WSTRING(32) },
 	{ "make_skill_id", INT32 },
-	{ "produce_type", INT32 },
+	{ "_produce_type", INT32 },
 	{ "pages", ARRAY_START(8) },
-		{ "page_title", WSTRING(8) },
-		{ "item_id", ARRAY_START(32) },
+		{ "title", WSTRING(8) },
+		{ "recipe_id", ARRAY_START(32) },
 			{ "", INT32 },
 		{ "", ARRAY_END },
 	{ "", ARRAY_END },
 	{ "", TYPE_END },
 };
 
-static struct serializer weapon_essence_serializer[] = {
+static struct serializer weapon_major_type_serializer[] = {
 	{ "id", INT32 },
-	{ "type", CONST_INT(1) },
-	{ "id_major_type", INT32 },
-	{ "id_sub_type", INT32 },
 	{ "name", WSTRING(32) },
-	{ "require_projectile", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer weapon_sub_type_serializer[] = {
+	{ "id", INT32 },
+	{ "name", WSTRING(32) },
+	{ "file_hitgfx", STRING(128) },
+	{ "file_hitsfx", STRING(128) },
+	{ "probability_fastest", FLOAT },
+	{ "probability_fast", FLOAT },
+	{ "probability_normal", FLOAT },
+	{ "probability_slow", FLOAT },
+	{ "probability_slowest", FLOAT },
+	{ "attack_speed", FLOAT },
+	{ "attack_short_range", FLOAT },
+	{ "action_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer weapon_essence_serializer[] = {
+	{ "id", CUSTOM, serialize_item_id_fn },
+	{ "type", CONST_INT(1) },
+	{ "major_type", INT32 },
+	{ "minor_type", INT32 },
+	{ "name", WSTRING(32) },
+	{ "_require_projectile", INT32 }, /* 1 whenever major_type == 13 (ranged) */
 	{ "file_model_right", STRING(128) },
 	{ "file_model_left", STRING(128) },
 	{ "file_matter", STRING(128) },
@@ -316,16 +460,16 @@ static struct serializer weapon_essence_serializer[] = {
 	{ "fixed_props", INT32 },
 	{ "damage_low", INT32 },
 	{ "damage_high", INT32 },
-	{ "_damage_high_max", INT32 },
+	{ "_damage_high_max", INT32 }, /* must == damage_high, otherwise won't spawn */
 	{ "magic_damage_low", INT32 },
 	{ "magic_damage_high", INT32 },
-	{ "_magic_damage_high_max", INT32 },
+	{ "_magic_damage_high_max", INT32 }, /* must == magic_damage_high, otherwise won't spawn */
 	{ "attack_range", FLOAT },
-	{ "_is_ranged", INT32 }, /* 1 whenever id_major_type == 13 (ranged) */
+	{ "_is_ranged", INT32 }, /* 1 whenever major_type == 13 (ranged) */
 	{ "durability_min", INT32 },
 	{ "durability_max", INT32 },
 	{ "levelup_addon", INT32 },
-	{ "material_need", INT32 },
+	{ "mirages_to_refine", INT32 },
 	{ "price", INT32 },
 	{ "shop_price", INT32 },
 	{ "repairfee", INT32 },
@@ -363,11 +507,24 @@ static struct serializer weapon_essence_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct serializer armor_essence_serializer[] = {
+static struct serializer armor_major_type_serializer[] = {
 	{ "id", INT32 },
+	{ "name", WSTRING(32) },
+	{ "", TYPE_END },
+};
+
+static struct serializer armor_sub_type_serializer[] = {
+	{ "id", INT32 },
+	{ "name", WSTRING(32) },
+	{ "equip_mask", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer armor_essence_serializer[] = {
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(2) },
-	{ "id_major_type", INT32 },
-	{ "id_sub_type", INT32 },
+	{ "major_type", INT32 },
+	{ "minor_type", INT32 },
 	{ "name", WSTRING(32) },
 	{ "realname", STRING(32) },
 	{ "file_matter", STRING(128) },
@@ -429,11 +586,24 @@ static struct serializer armor_essence_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct serializer decoration_essence_serializer[] = {
+static struct serializer decoration_major_type_serializer[] = {
 	{ "id", INT32 },
+	{ "name", WSTRING(32) },
+	{ "", TYPE_END },
+};
+
+static struct serializer decoration_sub_type_serializer[] = {
+	{ "id", INT32 },
+	{ "name", WSTRING(32) },
+	{ "equip_mask", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer decoration_essence_serializer[] = {
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(3) },
-	{ "id_major_type", INT32 },
-	{ "id_sub_type", INT32 },
+	{ "major_type", INT32 },
+	{ "minor_type", INT32 },
 	{ "name", WSTRING(32) },
 	{ "file_model", STRING(128) },
 	{ "file_matter", STRING(128) },
@@ -485,13 +655,26 @@ static struct serializer decoration_essence_serializer[] = {
 	{ "pile_num_max", INT32 },
 	{ "has_guid", INT32 },
 	{ "proc_type", INT32 },
+	{ "", TYPE_END },
+};
+
+static struct serializer medicine_major_type_serializer[] = {
+	{ "id", INT32 },
+	{ "name", WSTRING(32) },
+	{ "", TYPE_END },
+};
+
+static struct serializer medicine_sub_type_serializer[] = {
+	{ "id", INT32 },
+	{ "name", WSTRING(32) },
+	{ "", TYPE_END },
 };
 
 static struct serializer medicine_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(4) },
-	{ "id_major_type", INT32 },
-	{ "id_sub_type", INT32 },
+	{ "major_type", INT32 },
+	{ "minor_type", INT32 },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
 	{ "icon", CUSTOM, icon_serialize_fn },
@@ -509,11 +692,23 @@ static struct serializer medicine_essence_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct serializer material_essence_serializer[] = {
+static struct serializer material_major_type_serializer[] = {
 	{ "id", INT32 },
+	{ "name", WSTRING(32) },
+	{ "", TYPE_END },
+};
+
+static struct serializer material_sub_type_serializer[] = {
+	{ "id", INT32 },
+	{ "name", WSTRING(32) },
+	{ "", TYPE_END },
+};
+
+static struct serializer material_essence_serializer[] = {
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(5) },
-	{ "id_major_type", INT32 },
-	{ "id_sub_type", INT32 },
+	{ "major_type", INT32 },
+	{ "minor_type", INT32 },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
 	{ "icon", CUSTOM, icon_serialize_fn },
@@ -530,9 +725,9 @@ static struct serializer material_essence_serializer[] = {
 };
 
 static struct serializer damagerune_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(6) },
-	{ "id_sub_type", INT32 },
+	{ "minor_type", INT32 },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
 	{ "icon", CUSTOM, icon_serialize_fn },
@@ -549,9 +744,9 @@ static struct serializer damagerune_essence_serializer[] = {
 };
 
 static struct serializer armorrune_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(7) },
-	{ "id_sub_type", INT32 },
+	{ "minor_type", INT32 },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
 	{ "icon", CUSTOM, icon_serialize_fn },
@@ -571,9 +766,9 @@ static struct serializer armorrune_essence_serializer[] = {
 };
 
 static struct serializer skilltome_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(8) },
-	{ "id_sub_type", INT32 },
+	{ "minor_type", INT32 },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
 	{ "icon", CUSTOM, icon_serialize_fn },
@@ -586,7 +781,7 @@ static struct serializer skilltome_essence_serializer[] = {
 };
 
 static struct serializer flysword_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(9) },
 	{ "name", WSTRING(32) },
 	{ "file_model", STRING(128) },
@@ -612,7 +807,7 @@ static struct serializer flysword_essence_serializer[] = {
 };
 
 static struct serializer wingmanwing_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(10) },
 	{ "name", WSTRING(32) },
 	{ "file_model", STRING(128) },
@@ -631,7 +826,7 @@ static struct serializer wingmanwing_essence_serializer[] = {
 };
 
 static struct serializer townscroll_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(11) },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
@@ -646,7 +841,7 @@ static struct serializer townscroll_essence_serializer[] = {
 };
 
 static struct serializer revivescroll_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(12) },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
@@ -662,7 +857,7 @@ static struct serializer revivescroll_essence_serializer[] = {
 };
 
 static struct serializer element_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(13) },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
@@ -677,7 +872,7 @@ static struct serializer element_essence_serializer[] = {
 };
 
 static struct serializer taskmatter_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(14) },
 	{ "name", WSTRING(32) },
 	{ "icon", CUSTOM, icon_serialize_fn },
@@ -688,7 +883,7 @@ static struct serializer taskmatter_essence_serializer[] = {
 };
 
 static struct serializer tossmatter_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(15) },
 	{ "name", WSTRING(32) },
 	{ "file_model", STRING(128) },
@@ -713,10 +908,16 @@ static struct serializer tossmatter_essence_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct serializer projectile_essence_serializer[] = {
+static struct serializer projectile_type_serializer[] = {
 	{ "id", INT32 },
+	{ "name", WSTRING(32) },
+	{ "", TYPE_END },
+};
+
+static struct serializer projectile_essence_serializer[] = {
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(16) },
-	{ "type", INT32 },
+	{ "projectile_type", INT32 },
 	{ "name", WSTRING(32) },
 	{ "file_model", STRING(128) },
 	{ "file_matter", STRING(128) },
@@ -739,10 +940,16 @@ static struct serializer projectile_essence_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct serializer quiver_essence_serializer[] = {
+static struct serializer quiver_sub_type_serializer[] = {
 	{ "id", INT32 },
+	{ "name", WSTRING(32) },
+	{ "", TYPE_END },
+};
+
+static struct serializer quiver_essence_serializer[] = {
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(17) },
-	{ "id_sub_type", INT32 },
+	{ "minor_type", INT32 },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
 	{ "icon", CUSTOM, icon_serialize_fn },
@@ -752,10 +959,16 @@ static struct serializer quiver_essence_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct serializer stone_essence_serializer[] = {
+static struct serializer stone_sub_type_serializer[] = {
 	{ "id", INT32 },
+	{ "name", WSTRING(32) },
+	{ "", TYPE_END },
+};
+
+static struct serializer stone_essence_serializer[] = {
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(18) },
-	{ "id_sub_type", INT32 },
+	{ "minor_type", INT32 },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
 	{ "icon", CUSTOM, icon_serialize_fn },
@@ -776,7 +989,7 @@ static struct serializer stone_essence_serializer[] = {
 };
 
 static struct serializer taskdice_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(19) },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
@@ -792,7 +1005,7 @@ static struct serializer taskdice_essence_serializer[] = {
 };
 
 static struct serializer tasknormalmatter_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(20) },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
@@ -806,10 +1019,10 @@ static struct serializer tasknormalmatter_essence_serializer[] = {
 };
 
 static struct serializer fashion_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(21) },
-	{ "id_major_type", INT32 },
-	{ "id_sub_type", INT32 },
+	{ "major_type", INT32 },
+	{ "minor_type", INT32 },
 	{ "name", WSTRING(32) },
 	{ "realname", STRING(32) },
 	{ "file_matter", STRING(128) },
@@ -828,10 +1041,10 @@ static struct serializer fashion_essence_serializer[] = {
 };
 
 static struct serializer faceticket_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(22) },
-	{ "id_major_type", INT32 },
-	{ "id_sub_type", INT32 },
+	{ "major_type", INT32 },
+	{ "minor_type", INT32 },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
 	{ "icon", CUSTOM, icon_serialize_fn },
@@ -847,10 +1060,10 @@ static struct serializer faceticket_essence_serializer[] = {
 };
 
 static struct serializer facepill_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(23) },
-	{ "id_major_type", INT32 },
-	{ "id_sub_type", INT32 },
+	{ "major_type", INT32 },
+	{ "minor_type", INT32 },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
 	{ "icon", CUSTOM, icon_serialize_fn },
@@ -869,7 +1082,7 @@ static struct serializer facepill_essence_serializer[] = {
 };
 
 static struct serializer gm_generator_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(24) },
 	{ "id_type", INT32 },
 	{ "name", WSTRING(32) },
@@ -883,7 +1096,7 @@ static struct serializer gm_generator_essence_serializer[] = {
 };
 
 static struct serializer pet_egg_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(25) },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
@@ -908,7 +1121,7 @@ static struct serializer pet_egg_essence_serializer[] = {
 };
 
 static struct serializer pet_food_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(26) },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
@@ -926,7 +1139,7 @@ static struct serializer pet_food_essence_serializer[] = {
 };
 
 static struct serializer pet_faceticket_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(27) },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
@@ -940,7 +1153,7 @@ static struct serializer pet_faceticket_essence_serializer[] = {
 };
 
 static struct serializer fireworks_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(28) },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
@@ -957,7 +1170,7 @@ static struct serializer fireworks_essence_serializer[] = {
 };
 
 static struct serializer war_tankcallin_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(29) },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
@@ -971,7 +1184,7 @@ static struct serializer war_tankcallin_essence_serializer[] = {
 };
 
 static struct serializer skillmatter_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(30) },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
@@ -988,7 +1201,7 @@ static struct serializer skillmatter_essence_serializer[] = {
 };
 
 static struct serializer refine_ticket_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(31) },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
@@ -1009,7 +1222,7 @@ static struct serializer refine_ticket_essence_serializer[] = {
 };
 
 static struct serializer bible_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(32) },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
@@ -1026,7 +1239,7 @@ static struct serializer bible_essence_serializer[] = {
 };
 
 static struct serializer speaker_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(33) },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
@@ -1041,7 +1254,7 @@ static struct serializer speaker_essence_serializer[] = {
 };
 
 static struct serializer autohp_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(34) },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
@@ -1058,7 +1271,7 @@ static struct serializer autohp_essence_serializer[] = {
 };
 
 static struct serializer automp_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(35) },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
@@ -1075,7 +1288,7 @@ static struct serializer automp_essence_serializer[] = {
 };
 
 static struct serializer double_exp_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(36) },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
@@ -1090,7 +1303,7 @@ static struct serializer double_exp_essence_serializer[] = {
 };
 
 static struct serializer transmitscroll_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(37) },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
@@ -1104,7 +1317,7 @@ static struct serializer transmitscroll_essence_serializer[] = {
 };
 
 static struct serializer dye_ticket_essence_serializer[] = {
-	{ "id", INT32 },
+	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(38) },
 	{ "name", WSTRING(32) },
 	{ "file_matter", STRING(128) },
@@ -1161,6 +1374,25 @@ pw_elements_serialize(struct pw_elements *elements)
 	EXPORT_TABLE(elements, npc_essence, "npcs.json");
 	EXPORT_TABLE(elements, npc_sell_service, "npc_sells.json");
 	EXPORT_TABLE(elements, npc_make_service, "npc_crafts.json");
+
+	EXPORT_TABLE(elements, weapon_major_type, "weapon_major_types.json");
+	EXPORT_TABLE(elements, weapon_sub_type, "weapon_minor_types.json");
+	EXPORT_TABLE(elements, armor_major_type, "armor_major_types.json");
+	EXPORT_TABLE(elements, armor_sub_type, "armor_minor_types.json");
+	EXPORT_TABLE(elements, decoration_major_type, "decoration_major_types.json");
+	EXPORT_TABLE(elements, decoration_sub_type, "decoration_minor_types.json");
+
+	EXPORT_TABLE(elements, medicine_major_type, "medicine_major_types.json");
+	EXPORT_TABLE(elements, medicine_sub_type, "medicine_minor_types.json");
+	EXPORT_TABLE(elements, material_major_type, "material_major_types.json");
+	EXPORT_TABLE(elements, material_sub_type, "material_minor_types.json");
+
+	EXPORT_TABLE(elements, projectile_type, "projectile_types.json");
+	EXPORT_TABLE(elements, quiver_sub_type, "quiver_types.json");
+	EXPORT_TABLE(elements, stone_sub_type, "stone_types.json");
+
+	EXPORT_TABLE(elements, suite_essence, "armor_sets.json");
+	EXPORT_TABLE(elements, equipment_addon, "equipment_addon.json");
 
 	FILE *fp = fopen("items.json", "wb");
 	if (fp == NULL) {
@@ -1225,7 +1457,6 @@ pw_elements_serialize(struct pw_elements *elements)
 
 	fclose(fp);
 	truncate("items.json", sz);
-	fprintf(stderr, "items exported with %u bytes\n", sz);
 }
 
 static int32_t
@@ -1372,6 +1603,8 @@ int
 pw_elements_load(struct pw_elements *el, const char *filename)
 {
 	FILE *fp = fopen(filename, "rb");
+	int rc;
+
 	if (fp == NULL) {
 		fprintf(stderr, "cant open %s\n", filename);
 		return 1;
@@ -1510,7 +1743,10 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 
 	fclose(fp);
 
-	return load_icons();
+	rc = load_icons();
+	rc = rc || load_colors();
+	rc = rc || load_descriptions();
+	return rc;
 }
 
 int

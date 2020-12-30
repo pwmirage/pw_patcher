@@ -1,5 +1,5 @@
 OBJECTS = export.o common.o pw_elements.o
-CFLAGS := -O3 -MD -MP -Wall $(CFLAGS)
+CFLAGS := -O3 -MD -MP -fno-strict-aliasing -Wall $(CFLAGS)
 
 $(shell mkdir -p build &>/dev/null)
 
