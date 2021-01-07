@@ -20,20 +20,77 @@
 #include <assert.h>
 
 #include "pw_elements.h"
+#include "common.h"
+#include "cjson.h"
+#include "cjson_ext.h"
 #include "pw_npc.h"
+
+struct cjson_stream_feeder_ctx {
+    void *stream;
+    char buf[33];
+};
+
+static void
+print_obj(struct cjson *obj, int depth)
+{
+    int i;
+
+    while (obj) {
+        for (i = 0; i < depth; i++) {
+            fprintf(stderr, "  ");
+        }
+        fprintf(stderr, "%s\n", obj->key);
+
+        if (obj->type == CJSON_TYPE_OBJECT) {
+            print_obj(obj->a, depth + 1);
+        }
+
+        obj = obj->next;
+    }
+}
+
+static void
+import_stream_cb(void *ctx, struct cjson *obj)
+{
+    struct cjson *f;
+
+    if (obj->type != CJSON_TYPE_OBJECT) {
+        pwlog(LOG_ERROR, "found non-object in the patch file (type=%d)\n", obj->type);
+        assert(false);
+        return;
+    }
+
+    fprintf(stderr, "type: %s\n", JSs(obj, "_db", "type"), obj->count - 1);
+    
+    print_obj(obj->a, 1);
+}
 
 static int
 patch(const char *elements_path, const char *url)
 {
 	struct pw_elements elements;
+    char *buf;
+    size_t num_bytes = 1;
 	int rc;
 
 	rc = pw_elements_load(&elements, elements_path);
 	if (rc != 0) {
+        fprintf(stderr, "pw_elements_load(%s) failed: %d\n", elements_path, rc);
 		return 1;
 	}
 
-	pw_elements_serialize(&elements);
+    rc = download_mem(url, &buf, &num_bytes);
+    if (rc) {
+        pwlog(LOG_ERROR, "download_mem(%s) failed: %d\n", url, rc);
+        return 1;
+    }
+
+    rc = cjson_parse_arr_stream(buf, import_stream_cb, NULL);
+    if (rc) {
+        pwlog(LOG_ERROR, "cjson_parse_arr_stream() failed: %d\n", url, rc);
+        return 1;
+    }
+
 	return 0;
 }
 

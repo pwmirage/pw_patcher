@@ -16,6 +16,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <assert.h>
+#include <errno.h>
 
 #include "common.h"
 
@@ -66,7 +67,7 @@ download_wininet(const char *url, char *filename)
 #else
 
 static int
-download_wget(const char *url, char *filename)
+download_wget(const char *url, const char *filename)
 {
 	char buf[2048];
 	int rc;
@@ -82,7 +83,7 @@ download_wget(const char *url, char *filename)
 #endif
 
 int
-download(const char *url, char *filename)
+download(const char *url, const char *filename)
 {
 #ifdef __MINGW32__
 	return download_wininet(url, filename);
@@ -144,7 +145,7 @@ change_charset(char *src_charset, char *dst_charset, char *src, long srclen, cha
         return -1;
     }
 
-    rc = iconv(cd, &src, &srclen, &dst, &dstlen);
+    rc = iconv(cd, &src, (size_t *) &srclen, &dst, (size_t *) &dstlen);
     iconv_close(cd);
     return rc;
 }
@@ -406,3 +407,28 @@ deserialize(FILE *fp, struct serializer *slzr_table, void *data, unsigned data_c
 {
 	return _serialize(fp, &slzr_table, &data, data_cnt, false, true);
 }
+
+void
+pwlog(int type, const char *fmt, ...)
+{
+	va_list args;
+	const char *type_str;
+
+	switch (type) {
+		case LOG_ERROR:
+			type_str = "ERROR";
+			break;
+		case LOG_INFO:
+			type_str = "INFO";
+			break;
+		default:
+			return;
+	}
+	
+
+	va_start(args, fmt);
+	fprintf(stderr, "%s: ", type_str);
+	vfprintf(stderr, fmt, args);
+	va_end(args);
+}
+
