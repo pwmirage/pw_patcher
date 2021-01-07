@@ -1,6 +1,6 @@
-OBJECTS = common.o pw_elements.o
-ALL_OBJECTS := ($OBJECTS) export.o import.o
-CFLAGS := -O3 -MD -MP -fno-strict-aliasing -Wall $(CFLAGS)
+OBJECTS = common.o pw_elements.o cjson.o
+ALL_OBJECTS := $(OBJECTS) export.o import.o
+CFLAGS := -O0 -g -MD -MP -fno-strict-aliasing -Wall $(CFLAGS)
 
 $(shell mkdir -p build &>/dev/null)
 
