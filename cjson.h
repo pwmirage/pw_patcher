@@ -38,7 +38,9 @@ struct cjson {
 	};
 };
 
-struct cjson *cjson_parse(char *str);
+typedef void (*cjson_parse_arr_stream_cb)(void *ctx, struct cjson *obj);
+//struct cjson *cjson_parse(char *str);
+int cjson_parse_arr_stream(char *str, cjson_parse_arr_stream_cb obj_cb, void *cb_ctx);
 struct cjson *cjson_obj(struct cjson *json, const char *key);
 void cjson_free(struct cjson *json);
 

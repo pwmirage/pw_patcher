@@ -40,6 +40,18 @@ new_obj(struct cjson_mempool **mem_p)
 	return &mem->obj[0];
 }
 
+static void
+cjson_clean_mem(struct cjson *json)
+{
+	struct cjson_mempool *mem = json->mem;
+
+	while (mem) {
+		mem->count = 0;
+		memset(mem->obj, 0, mem->capacity * sizeof(*mem->obj));
+		mem = mem->next;
+	}
+}
+
 void
 cjson_free(struct cjson *json)
 {
@@ -79,32 +91,32 @@ add_child(struct cjson *parent, struct cjson *child)
 	return 0;
 }
 
-struct cjson *
-cjson_parse(char *str)
+int
+cjson_parse_arr_stream(char *str, cjson_parse_arr_stream_cb obj_cb, void *cb_ctx)
 {
 	struct cjson_mempool *mem;
-	struct cjson *top_obj; 
+	struct cjson top_obj = {0};
 	struct cjson *cur_obj;
 	char *cur_key = NULL;
 	char *b = str;
 	bool need_comma = false;
 
-	if (*b != '{' && *b != '[') {
+	if (*b != '[') {
 		assert(false);
-		return NULL;
+		return -EINVAL;
 	}
 
 	mem = calloc(1, sizeof(*mem) + CJSON_MIN_POOLSIZE * sizeof(struct cjson));
 	if (!mem) {
 		assert(false);
-		return NULL;
+		return -ENOMEM;
 	}
 	mem->capacity = CJSON_MIN_POOLSIZE;
 
-	top_obj = cur_obj = new_obj(&mem);
+	cur_obj = &top_obj;
 	cur_obj->parent = NULL;
 	cur_obj->key = "";
-	cur_obj->type = *b == '{' ? CJSON_TYPE_OBJECT : CJSON_TYPE_ARRAY;
+	cur_obj->type = CJSON_TYPE_ARRAY;
 	cur_obj->mem = mem;
 
 	/* we handled the root object/array separately, go on */
@@ -147,9 +159,15 @@ cjson_parse(char *str)
 					goto err;
 				}
 
-				cur_obj = cur_obj->parent;
-				if (!cur_obj) {
-					return top_obj;
+				if (cur_obj->parent == &top_obj) {
+					obj_cb(cb_ctx, cur_obj);
+					cjson_clean_mem(&top_obj);
+					cur_obj = &top_obj;
+				} else {
+					cur_obj = cur_obj->parent;
+					if (!cur_obj) {
+						return 0;
+					}
 				}
 				break;
 			}
@@ -160,7 +178,7 @@ cjson_parse(char *str)
 				if (*b == 0 || *(b + 1) == 0) {
 					goto err;
 				}
-				*b++ = 0;
+				*b = 0;
 
 				if (cur_key || cur_obj->type == CJSON_TYPE_ARRAY) {
 					struct cjson *obj = new_obj(&mem);
@@ -263,10 +281,11 @@ cjson_parse(char *str)
 		b++;
 	}
 
-	return top_obj;
+	cjson_free(&top_obj);
+	return 0;
 err:
-	cjson_free(top_obj);
-	return NULL;
+	cjson_free(&top_obj);
+	return -EFAULT;
 }
 
 struct cjson *
