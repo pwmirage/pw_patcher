@@ -12,9 +12,11 @@
 #include <uchar.h>
 
 struct pw_elements;
+struct cjson;
 
 int pw_elements_load(struct pw_elements *el, const char *filename);
 void pw_elements_serialize(struct pw_elements *elements);
+int pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj);
 
 struct pw_elements {
 	struct header {

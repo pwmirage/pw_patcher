@@ -6,6 +6,7 @@
 #include <assert.h>
 
 #include "cjson_ext.h"
+#include "common.h"
 
 static struct cjson g_null_json = {};
 

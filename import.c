@@ -25,10 +25,7 @@
 #include "cjson_ext.h"
 #include "pw_npc.h"
 
-struct cjson_stream_feeder_ctx {
-    void *stream;
-    char buf[33];
-};
+struct pw_elements *g_elements;
 
 static void
 print_obj(struct cjson *obj, int depth)
@@ -52,28 +49,24 @@ print_obj(struct cjson *obj, int depth)
 static void
 import_stream_cb(void *ctx, struct cjson *obj)
 {
-    struct cjson *f;
-
     if (obj->type != CJSON_TYPE_OBJECT) {
         pwlog(LOG_ERROR, "found non-object in the patch file (type=%d)\n", obj->type);
         assert(false);
         return;
     }
 
-    fprintf(stderr, "type: %s\n", JSs(obj, "_db", "type"), obj->count - 1);
-    
-    print_obj(obj->a, 1);
+    fprintf(stderr, "type: %s\n", JSs(obj, "_db", "type"));
+    pw_elements_patch_obj(g_elements, obj);
 }
 
 static int
 patch(const char *elements_path, const char *url)
 {
-	struct pw_elements elements;
     char *buf;
     size_t num_bytes = 1;
 	int rc;
 
-	rc = pw_elements_load(&elements, elements_path);
+	rc = pw_elements_load(g_elements, elements_path);
 	if (rc != 0) {
         fprintf(stderr, "pw_elements_load(%s) failed: %d\n", elements_path, rc);
 		return 1;
@@ -104,6 +97,12 @@ main(int argc, char *argv[])
         printf("./%s path_to_npcgen.data world_name\n", argv[0]);
         printf("./%s path_to_elements.data\n", argv[0]);
         return 0;
+    }
+
+    g_elements = calloc(1, sizeof(*g_elements));
+    if (!g_elements) {
+	    pwlog(LOG_ERROR, "calloc() failed\n");
+	    return -ENOMEM;
     }
 
     rc = patch(argv[1], argv[2]);

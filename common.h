@@ -10,11 +10,14 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+struct cjson;
 struct serializer {
 	const char *name;
 	unsigned type;
 	/* custom parser. returns number of bytes processed */
 	size_t (*fn)(FILE *fp, void *data);
+	/* custom deserializer. returns number of bytes processed */
+	size_t (*des_fn)(struct cjson *f, void *data);
 };
 
 #define TYPE_END 0
@@ -32,10 +35,6 @@ int download(const char *url, const char *filename);
 int readfile(const char *path, char **buf, size_t *len);
 int download_mem(const char *url, char **buf, size_t *len);
 
-void *stream_download(const char *url);
-int stream_read(void *stream_data, char *buf, size_t buflen, size_t *bytes_read);
-void stream_close(void *stream_data);
-
 void sprint(char *dst, size_t dstsize, const char *src, int srcsize);
 void fsprint(FILE *fp, const char *buf, int maxlen);
 void fwsprint(FILE *fp, const uint16_t *buf, int maxlen);
@@ -44,6 +43,8 @@ void wsnprintf(uint16_t *dst, size_t dstsize, const char *src);
 
 long serialize(FILE *fp, struct serializer *slzr_table,
 		void *data, unsigned data_cnt);
+
+void deserialize(struct cjson *obj, struct serializer *slzr_table, void *data);
 
 #define LOG_ERROR 0
 #define LOG_INFO 1

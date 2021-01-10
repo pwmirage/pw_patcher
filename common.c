@@ -19,8 +19,11 @@
 #include <errno.h>
 
 #include "common.h"
+#include "cjson.h"
 
 #include <iconv.h>
+
+static FILE *g_nullfile;
 
 #ifdef __MINGW32__
 #include <wininet.h>
@@ -401,11 +404,115 @@ serialize(FILE *fp, struct serializer *slzr_table, void *data, unsigned data_cnt
 	return _serialize(fp, &slzr_table, &data, data_cnt, false, true);
 }
 
-
-long
-deserialize(FILE *fp, struct serializer *slzr_table, void *data, unsigned data_cnt)
+static void
+_deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 {
-	return _serialize(fp, &slzr_table, &data, data_cnt, false, true);
+	struct serializer *slzr = *slzr_table_p;
+	void *data = *data_p;
+
+	while (true) {
+		struct cjson *json_f;
+
+		if (slzr->type == ARRAY_END) {
+			break;
+		} else if (slzr->type == TYPE_END) {
+			break;
+		}
+
+		if (strlen(slzr->name) == 0) {
+			assert(obj->type != CJSON_TYPE_OBJECT);
+			json_f = obj;
+		} else {
+			json_f = cjson_obj(obj, slzr->name);
+			if (json_f->type == CJSON_TYPE_NONE) {
+				slzr++;
+				continue;
+			}
+		}
+
+		if (slzr->type == INT16) {
+			*(uint16_t *)data = json_f->i;
+			data += 2;
+		} else if (slzr->type == INT32) {
+			size_t t = 0;
+			char buf[2048] = {0};
+			struct cjson *json = json_f;
+			while (json && json->key) {
+				char buf2[2048];
+				memcpy(buf2, buf, sizeof(buf2));
+				t = snprintf(buf, sizeof(buf), "%s->%s", json->key, buf2);
+				json = json->parent;
+			}
+			buf[strlen(buf) - 2] = 0;
+			pwlog(LOG_INFO, "patching \"%s\" (prev:%d, new:%d)\n", buf, *(uint32_t *)data, json_f->i);
+			*(uint32_t *)data = json_f->i;
+			data += 4;
+		} else if (slzr->type > CONST_INT(0) && slzr->type <= CONST_INT(0x1000)) {
+			continue;
+		} else if (slzr->type == FLOAT) {
+			*(float *)data = json_f->d;
+			data += 4;
+		} else if (slzr->type > WSTRING(0) && slzr->type <= WSTRING(0x1000)) {
+			unsigned len = slzr->type - WSTRING(0);
+
+			memset(data, 0, len * 2);
+			change_charset("UTF-8", "UTF-16", json_f->s, strlen(json_f->s), (char *)data, len * 2);
+			data += len * 2;
+		} else if (slzr->type > STRING(0) && slzr->type <= STRING(0x1000)) {
+			unsigned len = slzr->type - STRING(0);
+
+			memset(data, 0, len * 2);
+			change_charset("UTF-8", "GB2312", json_f->s, strlen(json_f->s), (char *)data, len);
+			data += len;
+		} else if (slzr->type > ARRAY_START(0) && slzr->type <= ARRAY_START(0x1000)) {
+			unsigned cnt = slzr->type - ARRAY_START(0);
+			void *arr_data_end = data;
+			struct serializer *tmp_slzr = ++slzr;
+			size_t arr_el_size = 0;
+			struct cjson *json_el;
+
+			/* serialize to /dev/null to get arr element's size */
+			_serialize(g_nullfile, &tmp_slzr, &arr_data_end, 1, true, false);
+			arr_el_size = (size_t)((uintptr_t)arr_data_end - (uintptr_t)data);
+
+			json_el = json_f->a;
+			while (json_el) {
+				char *end;
+				unsigned idx = strtod(json_el->key, &end);
+				if (end == json_el->key || errno == ERANGE) {
+					/* non-numeric key in array */
+					json_el = json_el->next;
+					assert(false);
+					continue;
+				}
+
+				void *arr_data_el = data + arr_el_size * idx;
+				tmp_slzr = slzr;
+
+				_deserialize(json_el, &tmp_slzr, &arr_data_el);
+				json_el = json_el->next;
+			}
+
+			data += arr_el_size * cnt;
+			slzr = tmp_slzr;
+		} else if (slzr->type == CUSTOM) {
+			if (slzr->des_fn) {
+				data += slzr->des_fn(obj, data);
+			}
+		}
+
+		slzr++;
+	}
+
+	*slzr_table_p = slzr;
+	*data_p = data;
+}
+
+
+void
+deserialize(struct cjson *obj, struct serializer *slzr_table, void *data)
+{
+	_deserialize(obj, &slzr_table, &data);
 }
 
 void
@@ -432,3 +539,11 @@ pwlog(int type, const char *fmt, ...)
 	va_end(args);
 }
 
+static void __attribute__((constructor))
+common_init()
+{
+	g_nullfile = fopen("/dev/null", "w");
+	if (g_nullfile == NULL) {
+		g_nullfile = fopen("NULL", "w");
+	}
+}

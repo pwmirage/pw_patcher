@@ -11,6 +11,7 @@
 #include <limits.h>
 
 #include "common.h"
+#include "cjson_ext.h"
 #include "pw_elements.h"
 
 static char g_icon_names[4096 / 32 * 2048 / 32 + 1][64] = {};
@@ -1457,6 +1458,101 @@ pw_elements_serialize(struct pw_elements *elements)
 
 	fclose(fp);
 	truncate("items.json", sz);
+}
+
+static int
+pw_elements_get_table(struct pw_elements *elements, const char *name, void **table, size_t *tbl_el_size, int32_t *tbl_size, struct serializer **serializer)
+{
+
+#define MAP(tbl_name, table_id) \
+	if (strcmp(tbl_name, name) == 0) { \
+		*serializer = table_id ## _serializer; \
+		*tbl_size = (elements)->table_id ## _cnt; \
+		*tbl_el_size = sizeof(*(elements)->table_id); \
+		*table = (elements)->table_id; \
+		return 0; \
+	}
+
+	MAP("mines", mine_essence);
+	MAP("monsters", monster_essence);
+	MAP("recipes", recipe_essence);
+	MAP("npcs", npc_essence);
+	MAP("npc_sells", npc_sell_service);
+	MAP("npc_crafts", npc_make_service);
+
+	MAP("weapon_major_types", weapon_major_type);
+	MAP("weapon_minor_types", weapon_sub_type);
+	MAP("armor_major_types", armor_major_type);
+	MAP("armor_minor_types", armor_sub_type);
+	MAP("decoration_major_types", decoration_major_type);
+	MAP("decoration_minor_types", decoration_sub_type);
+
+	MAP("medicine_major_types", medicine_major_type);
+	MAP("medicine_minor_types", medicine_sub_type);
+	MAP("material_major_types", material_major_type);
+	MAP("material_minor_types", material_sub_type);
+
+	MAP("projectile_types", projectile_type);
+	MAP("quiver_types", quiver_sub_type);
+	MAP("stone_types", stone_sub_type);
+
+	MAP("armor_sets", suite_essence);
+	MAP("equipment_addon", equipment_addon);
+
+#undef MAP
+	return -1;
+}
+
+int
+pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
+{
+	void *table, *table_el;
+	size_t table_el_size;
+	int32_t table_size;
+	struct serializer *serializer;
+	const char *obj_type;
+	int32_t i;
+	int64_t id;
+	int rc;
+
+	obj_type = JSs(obj, "_db", "type");
+	if (!obj_type) {
+		pwlog(LOG_ERROR, "missing obj._db.type\n");
+		return -1;
+	}
+
+	id = JSi(obj, "id");
+	if (!id) {
+		pwlog(LOG_ERROR, "missing obj.id\n");
+		return -1;
+	}
+
+	rc = pw_elements_get_table(elements, obj_type, &table, &table_el_size, &table_size, &serializer);
+	if (rc) {
+		pwlog(LOG_ERROR, "pw_elements_get_table() failed: %d\n", rc);
+		return -1;
+	}
+
+	/* TODO: handle new objects and custom IDs */
+	table_el = table;
+	for (i = 0; i < table_size; i++) {
+		/* id is always the first field */
+		int32_t obj_id = *(int32_t *)table_el;
+
+		if (obj_id == id) {
+			break;
+		}
+
+		table_el += table_el_size;
+	}
+
+	if (i == table_size) {
+		pwlog(LOG_INFO, "patched element not in array (id=%"PRId64")\n", id);
+		return -1;
+	}
+
+	deserialize(obj, serializer, table_el);
+	return 0;
 }
 
 static int32_t
