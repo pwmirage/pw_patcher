@@ -434,13 +434,12 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 			*(uint16_t *)data = json_f->i;
 			data += 2;
 		} else if (slzr->type == INT32) {
-			size_t t = 0;
 			char buf[2048] = {0};
 			struct cjson *json = json_f;
 			while (json && json->key) {
 				char buf2[2048];
 				memcpy(buf2, buf, sizeof(buf2));
-				t = snprintf(buf, sizeof(buf), "%s->%s", json->key, buf2);
+				snprintf(buf, sizeof(buf), "%s->%s", json->key, buf2);
 				json = json->parent;
 			}
 			buf[strlen(buf) - 2] = 0;

@@ -18,6 +18,9 @@ static char g_icon_names[4096 / 32 * 2048 / 32 + 1][64] = {};
 static char g_item_colors[65536] = {};
 static char *g_item_descs[65536] = {};
 
+uint32_t g_elements_last_id;
+struct pw_idmap *g_elements_map;
+
 static int
 load_icons(void)
 {
@@ -1533,21 +1536,9 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 		return -1;
 	}
 
-	/* TODO: handle new objects and custom IDs */
-	table_el = table;
-	for (i = 0; i < table_size; i++) {
-		/* id is always the first field */
-		int32_t obj_id = *(int32_t *)table_el;
-
-		if (obj_id == id) {
-			break;
-		}
-
-		table_el += table_el_size;
-	}
-
-	if (i == table_size) {
-		pwlog(LOG_INFO, "patched element not in array (id=%"PRId64")\n", id);
+	table_el = pw_idmap_get(g_elements_map, id);
+	if (!table_el) {
+		/* FIXME append to &table (linked list somewhere?) */
 		return -1;
 	}
 
@@ -1558,13 +1549,26 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 static int32_t
 pw_elements_load_table(void **table, uint32_t el_size, FILE *fp)
 {
-		int32_t count;
+	int32_t i, count;
+	void *el;
 
-		fread(&count, 1, sizeof(count), fp);
-		*table = calloc(count, el_size);
-		fread(*table, 1, count * el_size, fp);
+	fread(&count, 1, sizeof(count), fp);
+	*table = calloc(count, el_size);
+	fread(*table, 1, count * el_size, fp);
 
-		return count;
+	el = *table;
+	for (i = 0; i < count; i++) {
+		unsigned id = *(uint32_t *)el;
+
+		if (id > g_elements_last_id) {
+			g_elements_last_id = id;
+		}
+
+		pw_idmap_set(g_elements_map, id, el);
+		el += el_size;
+	}
+
+	return count;
 }
 
 static void
@@ -1703,6 +1707,13 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 
 	if (fp == NULL) {
 		fprintf(stderr, "cant open %s\n", filename);
+		return 1;
+	}
+
+	g_elements_map = pw_idmap_init();
+	if (!g_elements_map) {
+		fprintf(stderr, "pw_idmap_init() failed\n");
+		fclose(fp);
 		return 1;
 	}
 
@@ -2168,251 +2179,4 @@ pw_elements_save_srv(struct pw_elements *el, const char *filename)
 
 	fclose(fp);
 	return 0;
-}
-
-int
-pw_elements_get_last_id(struct pw_elements *el)
-{
-	int id = 0;
-
-	for (int i = 0; i < el->equipment_addon_cnt; i++)
-		if (el->equipment_addon[i].id > id) id = el->equipment_addon[i].id;
-	for (int i = 0; i < el->weapon_major_type_cnt; i++)
-		if (el->weapon_major_type[i].id > id) id = el->weapon_major_type[i].id;
-	for (int i = 0; i < el->weapon_sub_type_cnt; i++)
-		if (el->weapon_sub_type[i].id > id) id = el->weapon_sub_type[i].id;
-	for (int i = 0; i < el->weapon_essence_cnt; i++)
-		if (el->weapon_essence[i].id > id) id = el->weapon_essence[i].id;
-	for (int i = 0; i < el->armor_major_type_cnt; i++)
-		if (el->armor_major_type[i].id > id) id = el->armor_major_type[i].id;
-	for (int i = 0; i < el->armor_sub_type_cnt; i++)
-		if (el->armor_sub_type[i].id > id) id = el->armor_sub_type[i].id;
-	for (int i = 0; i < el->armor_essence_cnt; i++)
-		if (el->armor_essence[i].id > id) id = el->armor_essence[i].id;
-	for (int i = 0; i < el->decoration_major_type_cnt; i++)
-		if (el->decoration_major_type[i].id > id) id = el->decoration_major_type[i].id;
-	for (int i = 0; i < el->decoration_sub_type_cnt; i++)
-		if (el->decoration_sub_type[i].id > id) id = el->decoration_sub_type[i].id;
-	for (int i = 0; i < el->decoration_essence_cnt; i++)
-		if (el->decoration_essence[i].id > id) id = el->decoration_essence[i].id;
-	for (int i = 0; i < el->medicine_major_type_cnt; i++)
-		if (el->medicine_major_type[i].id > id) id = el->medicine_major_type[i].id;
-	for (int i = 0; i < el->medicine_sub_type_cnt; i++)
-		if (el->medicine_sub_type[i].id > id) id = el->medicine_sub_type[i].id;
-	for (int i = 0; i < el->medicine_essence_cnt; i++)
-		if (el->medicine_essence[i].id > id) id = el->medicine_essence[i].id;
-	for (int i = 0; i < el->material_major_type_cnt; i++)
-		if (el->material_major_type[i].id > id) id = el->material_major_type[i].id;
-	for (int i = 0; i < el->material_sub_type_cnt; i++)
-		if (el->material_sub_type[i].id > id) id = el->material_sub_type[i].id;
-	for (int i = 0; i < el->material_essence_cnt; i++)
-		if (el->material_essence[i].id > id) id = el->material_essence[i].id;
-	for (int i = 0; i < el->damagerune_sub_type_cnt; i++)
-		if (el->damagerune_sub_type[i].id > id) id = el->damagerune_sub_type[i].id;
-	for (int i = 0; i < el->damagerune_essence_cnt; i++)
-		if (el->damagerune_essence[i].id > id) id = el->damagerune_essence[i].id;
-	for (int i = 0; i < el->armorrune_sub_type_cnt; i++)
-		if (el->armorrune_sub_type[i].id > id) id = el->armorrune_sub_type[i].id;
-	for (int i = 0; i < el->armorrune_essence_cnt; i++)
-		if (el->armorrune_essence[i].id > id) id = el->armorrune_essence[i].id;
-	for (int i = 0; i < el->skilltome_sub_type_cnt; i++)
-		if (el->skilltome_sub_type[i].id > id) id = el->skilltome_sub_type[i].id;
-	for (int i = 0; i < el->skilltome_essence_cnt; i++)
-		if (el->skilltome_essence[i].id > id) id = el->skilltome_essence[i].id;
-	for (int i = 0; i < el->flysword_essence_cnt; i++)
-		if (el->flysword_essence[i].id > id) id = el->flysword_essence[i].id;
-	for (int i = 0; i < el->wingmanwing_essence_cnt; i++)
-		if (el->wingmanwing_essence[i].id > id) id = el->wingmanwing_essence[i].id;
-	for (int i = 0; i < el->townscroll_essence_cnt; i++)
-		if (el->townscroll_essence[i].id > id) id = el->townscroll_essence[i].id;
-	for (int i = 0; i < el->unionscroll_essence_cnt; i++)
-		if (el->unionscroll_essence[i].id > id) id = el->unionscroll_essence[i].id;
-	for (int i = 0; i < el->revivescroll_essence_cnt; i++)
-		if (el->revivescroll_essence[i].id > id) id = el->revivescroll_essence[i].id;
-	for (int i = 0; i < el->element_essence_cnt; i++)
-		if (el->element_essence[i].id > id) id = el->element_essence[i].id;
-	for (int i = 0; i < el->taskmatter_essence_cnt; i++)
-		if (el->taskmatter_essence[i].id > id) id = el->taskmatter_essence[i].id;
-	for (int i = 0; i < el->tossmatter_essence_cnt; i++)
-		if (el->tossmatter_essence[i].id > id) id = el->tossmatter_essence[i].id;
-	for (int i = 0; i < el->projectile_type_cnt; i++)
-		if (el->projectile_type[i].id > id) id = el->projectile_type[i].id;
-	for (int i = 0; i < el->projectile_essence_cnt; i++)
-		if (el->projectile_essence[i].id > id) id = el->projectile_essence[i].id;
-	for (int i = 0; i < el->quiver_sub_type_cnt; i++)
-		if (el->quiver_sub_type[i].id > id) id = el->quiver_sub_type[i].id;
-	for (int i = 0; i < el->quiver_essence_cnt; i++)
-		if (el->quiver_essence[i].id > id) id = el->quiver_essence[i].id;
-	for (int i = 0; i < el->stone_sub_type_cnt; i++)
-		if (el->stone_sub_type[i].id > id) id = el->stone_sub_type[i].id;
-	for (int i = 0; i < el->stone_essence_cnt; i++)
-		if (el->stone_essence[i].id > id) id = el->stone_essence[i].id;
-	for (int i = 0; i < el->monster_addon_cnt; i++)
-		if (el->monster_addon[i].id > id) id = el->monster_addon[i].id;
-	for (int i = 0; i < el->monster_type_cnt; i++)
-		if (el->monster_type[i].id > id) id = el->monster_type[i].id;
-	for (int i = 0; i < el->monster_essence_cnt; i++)
-		if (el->monster_essence[i].id > id) id = el->monster_essence[i].id;
-	for (int i = 0; i < el->npc_talk_service_cnt; i++)
-		if (el->npc_talk_service[i].id > id) id = el->npc_talk_service[i].id;
-	for (int i = 0; i < el->npc_sell_service_cnt; i++)
-		if (el->npc_sell_service[i].id > id) id = el->npc_sell_service[i].id;
-	for (int i = 0; i < el->npc_buy_service_cnt; i++)
-		if (el->npc_buy_service[i].id > id) id = el->npc_buy_service[i].id;
-	for (int i = 0; i < el->npc_repair_service_cnt; i++)
-		if (el->npc_repair_service[i].id > id) id = el->npc_repair_service[i].id;
-	for (int i = 0; i < el->npc_install_service_cnt; i++)
-		if (el->npc_install_service[i].id > id) id = el->npc_install_service[i].id;
-	for (int i = 0; i < el->npc_uninstall_service_cnt; i++)
-		if (el->npc_uninstall_service[i].id > id) id = el->npc_uninstall_service[i].id;
-	for (int i = 0; i < el->npc_task_in_service_cnt; i++)
-		if (el->npc_task_in_service[i].id > id) id = el->npc_task_in_service[i].id;
-	for (int i = 0; i < el->npc_task_out_service_cnt; i++)
-		if (el->npc_task_out_service[i].id > id) id = el->npc_task_out_service[i].id;
-	for (int i = 0; i < el->npc_task_matter_service_cnt; i++)
-		if (el->npc_task_matter_service[i].id > id) id = el->npc_task_matter_service[i].id;
-	for (int i = 0; i < el->npc_skill_service_cnt; i++)
-		if (el->npc_skill_service[i].id > id) id = el->npc_skill_service[i].id;
-	for (int i = 0; i < el->npc_heal_service_cnt; i++)
-		if (el->npc_heal_service[i].id > id) id = el->npc_heal_service[i].id;
-	for (int i = 0; i < el->npc_transmit_service_cnt; i++)
-		if (el->npc_transmit_service[i].id > id) id = el->npc_transmit_service[i].id;
-	for (int i = 0; i < el->npc_transport_service_cnt; i++)
-		if (el->npc_transport_service[i].id > id) id = el->npc_transport_service[i].id;
-	for (int i = 0; i < el->npc_proxy_service_cnt; i++)
-		if (el->npc_proxy_service[i].id > id) id = el->npc_proxy_service[i].id;
-	for (int i = 0; i < el->npc_storage_service_cnt; i++)
-		if (el->npc_storage_service[i].id > id) id = el->npc_storage_service[i].id;
-	for (int i = 0; i < el->npc_make_service_cnt; i++)
-		if (el->npc_make_service[i].id > id) id = el->npc_make_service[i].id;
-	for (int i = 0; i < el->npc_decompose_service_cnt; i++)
-		if (el->npc_decompose_service[i].id > id) id = el->npc_decompose_service[i].id;
-	for (int i = 0; i < el->npc_type_cnt; i++)
-		if (el->npc_type[i].id > id) id = el->npc_type[i].id;
-	for (int i = 0; i < el->npc_essence_cnt; i++)
-		if (el->npc_essence[i].id > id) id = el->npc_essence[i].id;
-	for (int i = 0; i < el->talk_proc_cnt; i++)
-		if (el->talk_proc[i].id > id) id = el->talk_proc[i].id;
-	for (int i = 0; i < el->face_texture_essence_cnt; i++)
-		if (el->face_texture_essence[i].id > id) id = el->face_texture_essence[i].id;
-	for (int i = 0; i < el->face_shape_essence_cnt; i++)
-		if (el->face_shape_essence[i].id > id) id = el->face_shape_essence[i].id;
-	for (int i = 0; i < el->face_emotion_type_cnt; i++)
-		if (el->face_emotion_type[i].id > id) id = el->face_emotion_type[i].id;
-	for (int i = 0; i < el->face_expression_essence_cnt; i++)
-		if (el->face_expression_essence[i].id > id) id = el->face_expression_essence[i].id;
-	for (int i = 0; i < el->face_hair_essence_cnt; i++)
-		if (el->face_hair_essence[i].id > id) id = el->face_hair_essence[i].id;
-	for (int i = 0; i < el->face_moustache_essence_cnt; i++)
-		if (el->face_moustache_essence[i].id > id) id = el->face_moustache_essence[i].id;
-	for (int i = 0; i < el->colorpicker_essence_cnt; i++)
-		if (el->colorpicker_essence[i].id > id) id = el->colorpicker_essence[i].id;
-	for (int i = 0; i < el->customizedata_essence_cnt; i++)
-		if (el->customizedata_essence[i].id > id) id = el->customizedata_essence[i].id;
-	for (int i = 0; i < el->recipe_major_type_cnt; i++)
-		if (el->recipe_major_type[i].id > id) id = el->recipe_major_type[i].id;
-	for (int i = 0; i < el->recipe_sub_type_cnt; i++)
-		if (el->recipe_sub_type[i].id > id) id = el->recipe_sub_type[i].id;
-	for (int i = 0; i < el->recipe_essence_cnt; i++)
-		if (el->recipe_essence[i].id > id) id = el->recipe_essence[i].id;
-	for (int i = 0; i < el->enemy_faction_config_cnt; i++)
-		if (el->enemy_faction_config[i].id > id) id = el->enemy_faction_config[i].id;
-	for (int i = 0; i < el->charracter_class_config_cnt; i++)
-		if (el->charracter_class_config[i].id > id) id = el->charracter_class_config[i].id;
-	for (int i = 0; i < el->param_adjust_config_cnt; i++)
-		if (el->param_adjust_config[i].id > id) id = el->param_adjust_config[i].id;
-	for (int i = 0; i < el->player_action_info_config_cnt; i++)
-		if (el->player_action_info_config[i].id > id) id = el->player_action_info_config[i].id;
-	for (int i = 0; i < el->taskdice_essence_cnt; i++)
-		if (el->taskdice_essence[i].id > id) id = el->taskdice_essence[i].id;
-	for (int i = 0; i < el->tasknormalmatter_essence_cnt; i++)
-		if (el->tasknormalmatter_essence[i].id > id) id = el->tasknormalmatter_essence[i].id;
-	for (int i = 0; i < el->face_faling_essence_cnt; i++)
-		if (el->face_faling_essence[i].id > id) id = el->face_faling_essence[i].id;
-	for (int i = 0; i < el->player_levelexp_config_cnt; i++)
-		if (el->player_levelexp_config[i].id > id) id = el->player_levelexp_config[i].id;
-	for (int i = 0; i < el->mine_type_cnt; i++)
-		if (el->mine_type[i].id > id) id = el->mine_type[i].id;
-	for (int i = 0; i < el->mine_essence_cnt; i++)
-		if (el->mine_essence[i].id > id) id = el->mine_essence[i].id;
-	for (int i = 0; i < el->npc_identify_service_cnt; i++)
-		if (el->npc_identify_service[i].id > id) id = el->npc_identify_service[i].id;
-	for (int i = 0; i < el->fashion_major_type_cnt; i++)
-		if (el->fashion_major_type[i].id > id) id = el->fashion_major_type[i].id;
-	for (int i = 0; i < el->fashion_sub_type_cnt; i++)
-		if (el->fashion_sub_type[i].id > id) id = el->fashion_sub_type[i].id;
-	for (int i = 0; i < el->fashion_essence_cnt; i++)
-		if (el->fashion_essence[i].id > id) id = el->fashion_essence[i].id;
-	for (int i = 0; i < el->faceticket_major_type_cnt; i++)
-		if (el->faceticket_major_type[i].id > id) id = el->faceticket_major_type[i].id;
-	for (int i = 0; i < el->faceticket_sub_type_cnt; i++)
-		if (el->faceticket_sub_type[i].id > id) id = el->faceticket_sub_type[i].id;
-	for (int i = 0; i < el->faceticket_essence_cnt; i++)
-		if (el->faceticket_essence[i].id > id) id = el->faceticket_essence[i].id;
-	for (int i = 0; i < el->facepill_major_type_cnt; i++)
-		if (el->facepill_major_type[i].id > id) id = el->facepill_major_type[i].id;
-	for (int i = 0; i < el->facepill_sub_type_cnt; i++)
-		if (el->facepill_sub_type[i].id > id) id = el->facepill_sub_type[i].id;
-	for (int i = 0; i < el->facepill_essence_cnt; i++)
-		if (el->facepill_essence[i].id > id) id = el->facepill_essence[i].id;
-	for (int i = 0; i < el->suite_essence_cnt; i++)
-		if (el->suite_essence[i].id > id) id = el->suite_essence[i].id;
-	for (int i = 0; i < el->gm_generator_type_cnt; i++)
-		if (el->gm_generator_type[i].id > id) id = el->gm_generator_type[i].id;
-	for (int i = 0; i < el->gm_generator_essence_cnt; i++)
-		if (el->gm_generator_essence[i].id > id) id = el->gm_generator_essence[i].id;
-	for (int i = 0; i < el->pet_type_cnt; i++)
-		if (el->pet_type[i].id > id) id = el->pet_type[i].id;
-	for (int i = 0; i < el->pet_essence_cnt; i++)
-		if (el->pet_essence[i].id > id) id = el->pet_essence[i].id;
-	for (int i = 0; i < el->pet_egg_essence_cnt; i++)
-		if (el->pet_egg_essence[i].id > id) id = el->pet_egg_essence[i].id;
-	for (int i = 0; i < el->pet_food_essence_cnt; i++)
-		if (el->pet_food_essence[i].id > id) id = el->pet_food_essence[i].id;
-	for (int i = 0; i < el->pet_faceticket_essence_cnt; i++)
-		if (el->pet_faceticket_essence[i].id > id) id = el->pet_faceticket_essence[i].id;
-	for (int i = 0; i < el->fireworks_essence_cnt; i++)
-		if (el->fireworks_essence[i].id > id) id = el->fireworks_essence[i].id;
-	for (int i = 0; i < el->war_tankcallin_essence_cnt; i++)
-		if (el->war_tankcallin_essence[i].id > id) id = el->war_tankcallin_essence[i].id;
-	for (int i = 0; i < el->npc_war_towerbuild_service_cnt; i++)
-		if (el->npc_war_towerbuild_service[i].id > id) id = el->npc_war_towerbuild_service[i].id;
-	for (int i = 0; i < el->player_secondlevel_config_cnt; i++)
-		if (el->player_secondlevel_config[i].id > id) id = el->player_secondlevel_config[i].id;
-	for (int i = 0; i < el->npc_resetprop_service_cnt; i++)
-		if (el->npc_resetprop_service[i].id > id) id = el->npc_resetprop_service[i].id;
-	for (int i = 0; i < el->npc_petname_service_cnt; i++)
-		if (el->npc_petname_service[i].id > id) id = el->npc_petname_service[i].id;
-	for (int i = 0; i < el->npc_petlearnskill_service_cnt; i++)
-		if (el->npc_petlearnskill_service[i].id > id) id = el->npc_petlearnskill_service[i].id;
-	for (int i = 0; i < el->npc_petforgetskill_service_cnt; i++)
-		if (el->npc_petforgetskill_service[i].id > id) id = el->npc_petforgetskill_service[i].id;
-	for (int i = 0; i < el->skillmatter_essence_cnt; i++)
-		if (el->skillmatter_essence[i].id > id) id = el->skillmatter_essence[i].id;
-	for (int i = 0; i < el->refine_ticket_essence_cnt; i++)
-		if (el->refine_ticket_essence[i].id > id) id = el->refine_ticket_essence[i].id;
-	for (int i = 0; i < el->destroying_essence_cnt; i++)
-		if (el->destroying_essence[i].id > id) id = el->destroying_essence[i].id;
-	for (int i = 0; i < el->npc_equipbind_service_cnt; i++)
-		if (el->npc_equipbind_service[i].id > id) id = el->npc_equipbind_service[i].id;
-	for (int i = 0; i < el->npc_equipdestroy_service_cnt; i++)
-		if (el->npc_equipdestroy_service[i].id > id) id = el->npc_equipdestroy_service[i].id;
-	for (int i = 0; i < el->npc_equipundestroy_service_cnt; i++)
-		if (el->npc_equipundestroy_service[i].id > id) id = el->npc_equipundestroy_service[i].id;
-	for (int i = 0; i < el->bible_essence_cnt; i++)
-		if (el->bible_essence[i].id > id) id = el->bible_essence[i].id;
-	for (int i = 0; i < el->speaker_essence_cnt; i++)
-		if (el->speaker_essence[i].id > id) id = el->speaker_essence[i].id;
-	for (int i = 0; i < el->autohp_essence_cnt; i++)
-		if (el->autohp_essence[i].id > id) id = el->autohp_essence[i].id;
-	for (int i = 0; i < el->automp_essence_cnt; i++)
-		if (el->automp_essence[i].id > id) id = el->automp_essence[i].id;
-	for (int i = 0; i < el->double_exp_essence_cnt; i++)
-		if (el->double_exp_essence[i].id > id) id = el->double_exp_essence[i].id;
-	for (int i = 0; i < el->transmitscroll_essence_cnt; i++)
-		if (el->transmitscroll_essence[i].id > id) id = el->transmitscroll_essence[i].id;
-	for (int i = 0; i < el->dye_ticket_essence_cnt; i++)
-		if (el->dye_ticket_essence[i].id > id) id = el->dye_ticket_essence[i].id;
-
-	return id;
 }

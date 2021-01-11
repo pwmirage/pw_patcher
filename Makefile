@@ -1,6 +1,6 @@
-OBJECTS = common.o pw_elements.o cjson.o
+OBJECTS = common.o pw_elements.o cjson.o idmap.o
 ALL_OBJECTS := $(OBJECTS) export.o import.o
-CFLAGS := -O0 -g -MD -MP -fno-strict-aliasing -Wall $(CFLAGS)
+CFLAGS := -O0 -g -MD -MP -fno-strict-aliasing -Wall -Wno-format-truncation $(CFLAGS)
 
 $(shell mkdir -p build &>/dev/null)
 

@@ -50,4 +50,9 @@ void deserialize(struct cjson *obj, struct serializer *slzr_table, void *data);
 #define LOG_INFO 1
 void pwlog(int type, const char *fmt, ...);
 
+struct pw_idmap;
+struct pw_idmap *pw_idmap_init(void);
+void *pw_idmap_get(struct pw_idmap *map, long long id);
+void pw_idmap_set(struct pw_idmap *map, long long id, void *data);
+
 #endif /* PW_COMMON_H */

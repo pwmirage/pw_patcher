@@ -13,6 +13,10 @@
 
 struct pw_elements;
 struct cjson;
+struct pw_idmap;
+
+extern uint32_t g_elements_last_id;
+extern struct pw_idmap *g_elements_map;
 
 int pw_elements_load(struct pw_elements *el, const char *filename);
 void pw_elements_serialize(struct pw_elements *elements);
