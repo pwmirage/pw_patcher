@@ -52,7 +52,7 @@ void pwlog(int type, const char *fmt, ...);
 
 struct pw_idmap;
 struct pw_idmap *pw_idmap_init(void);
-void *pw_idmap_get(struct pw_idmap *map, long long id);
-void pw_idmap_set(struct pw_idmap *map, long long id, void *data);
+void *pw_idmap_get(struct pw_idmap *map, long long id, void *type);
+void pw_idmap_set(struct pw_idmap *map, long long id, void *type, void *data);
 
 #endif /* PW_COMMON_H */

@@ -7,6 +7,7 @@
 
 struct pw_id_el {
 	long long id;
+	void *type;
 	void *data;
 	void *next;
 };
@@ -24,14 +25,14 @@ pw_idmap_init(void)
 }
 
 void *
-pw_idmap_get(struct pw_idmap *map, long long id)
+pw_idmap_get(struct pw_idmap *map, long long id, void *type)
 {
 	struct pw_id_el *el;
 
 	el = map->lists[id % PW_IDMAP_ARR_SIZE];
 
 	while (el) {
-		if (el->id == id) {
+		if (el->id == id && el->type == type) {
 			return el->data;
 		}
 
@@ -42,13 +43,13 @@ pw_idmap_get(struct pw_idmap *map, long long id)
 }
 
 void
-pw_idmap_set(struct pw_idmap *map, long long id, void *data)
+pw_idmap_set(struct pw_idmap *map, long long id, void *type, void *data)
 {
 	struct pw_id_el *el, *last_el;
 
 	el = map->lists[id % PW_IDMAP_ARR_SIZE];
 	while (el) {
-		if (el->id == id) {
+		if (el->id == id && el->type == type) {
 			break;
 		}
 
@@ -68,6 +69,7 @@ pw_idmap_set(struct pw_idmap *map, long long id, void *data)
 	}
 
 	el->id = id;
+	el->type = type;
 	el->data = data;
 
 	if (last_el) {

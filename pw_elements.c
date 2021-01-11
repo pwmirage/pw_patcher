@@ -1514,7 +1514,6 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 	int32_t table_size;
 	struct serializer *serializer;
 	const char *obj_type;
-	int32_t i;
 	int64_t id;
 	int rc;
 
@@ -1536,7 +1535,7 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 		return -1;
 	}
 
-	table_el = pw_idmap_get(g_elements_map, id);
+	table_el = pw_idmap_get(g_elements_map, id, table);
 	if (!table_el) {
 		/* FIXME append to &table (linked list somewhere?) */
 		return -1;
@@ -1564,7 +1563,7 @@ pw_elements_load_table(void **table, uint32_t el_size, FILE *fp)
 			g_elements_last_id = id;
 		}
 
-		pw_idmap_set(g_elements_map, id, el);
+		pw_idmap_set(g_elements_map, id, *table, el);
 		el += el_size;
 	}
 
