@@ -22,6 +22,22 @@ int pw_elements_load(struct pw_elements *el, const char *filename);
 void pw_elements_serialize(struct pw_elements *elements);
 int pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj);
 
+struct serializer;
+struct pw_elements_chain;
+struct pw_elements_table {
+	const char *name;
+	struct serializer *serializer;
+	size_t el_size;
+	struct pw_elements_chain *chain;
+};
+
+struct pw_elements_chain {
+	struct pw_elements_table_el *next;
+	size_t capacity;
+	size_t count;
+	char data[0];
+};
+
 struct pw_elements {
 	struct header {
 			int16_t version;
@@ -42,6 +58,7 @@ struct pw_elements {
 			char *unk2;
 	} control_block1;
 
+	int32_t talk_proc_cnt;
 	struct talk_proc {
 			int32_t id;
 			char16_t name[64];
@@ -60,7 +77,8 @@ struct pw_elements {
 							int32_t param;
 					} *choices;
 			} *questions;
-	} *talk_proc;
+	};
+	struct pw_elements_table *talk_proc;
 
 	int32_t equipment_addon_cnt;
 	struct equipment_addon {
@@ -70,17 +88,17 @@ struct pw_elements {
 		int32_t param1;
 		int32_t param2;
 		int32_t param3;
-	} *equipment_addon;
+	};
+	struct pw_elements_table *equipment_addon;
 
 	int32_t weapon_major_type_cnt;
-	int32_t weapon_major_type_ext_cnt;
 	struct weapon_major_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *weapon_major_type;
+	};
+	struct pw_elements_table *weapon_major_type;
 
 	int32_t weapon_sub_type_cnt;
-	int32_t weapon_sub_type_ext_cnt;
 	struct weapon_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -94,10 +112,10 @@ struct pw_elements {
 		float attack_speed;
 		float attack_short_range;
 		int32_t action_type;
-	} *weapon_sub_type;
+	};
+	struct pw_elements_table *weapon_sub_type;
 
 	int32_t weapon_essence_cnt;
-	int32_t weapon_essence_ext_cnt;
 	struct weapon_essence {
 		int32_t id;
 		int32_t id_major_type;
@@ -156,25 +174,25 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *weapon_essence;
+	};
+        struct pw_elements_table *weapon_essence;
 
 	int32_t armor_major_type_cnt;
-	int32_t armor_major_type_ext_cnt;
 	struct armor_major_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *armor_major_type;
+	};
+        struct pw_elements_table *armor_major_type;
 
 	int32_t armor_sub_type_cnt;
-	int32_t armor_sub_type_ext_cnt;
 	struct armor_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t equip_mask;
-	} *armor_sub_type;
+	};
+        struct pw_elements_table *armor_sub_type;
 
 	int32_t armor_essence_cnt;
-	int32_t armor_essence_ext_cnt;
 	struct armor_essence {
 		int32_t id;
 		int32_t id_major_type;
@@ -231,25 +249,25 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *armor_essence;
+	};
+        struct pw_elements_table *armor_essence;
 
 	int32_t decoration_major_type_cnt;
-	int32_t decoration_major_type_ext_cnt;
 	struct decoration_major_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *decoration_major_type;
+	};
+        struct pw_elements_table *decoration_major_type;
 
 	int32_t decoration_sub_type_cnt;
-	int32_t decoration_sub_type_ext_cnt;
 	struct decoration_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t equip_mask;
-	} *decoration_sub_type;
+	};
+        struct pw_elements_table *decoration_sub_type;
 
 	int32_t decoration_essence_cnt;
-	int32_t decoration_essence_ext_cnt;
 	struct decoration_essence {
 		int32_t id;
 		int32_t id_major_type;
@@ -303,24 +321,24 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *decoration_essence;
+	};
+        struct pw_elements_table *decoration_essence;
 
 	int32_t medicine_major_type_cnt;
-	int32_t medicine_major_type_ext_cnt;
 	struct medicine_major_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *medicine_major_type;
+	};
+        struct pw_elements_table *medicine_major_type;
 
 	int32_t medicine_sub_type_cnt;
-	int32_t medicine_sub_type_ext_cnt;
 	struct medicine_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *medicine_sub_type;
+	};
+        struct pw_elements_table *medicine_sub_type;
 
 	int32_t medicine_essence_cnt;
-	int32_t medicine_essence_ext_cnt;
 	struct medicine_essence {
 		int32_t id;
 		int32_t id_major_type;
@@ -339,24 +357,24 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *medicine_essence;
+	};
+        struct pw_elements_table *medicine_essence;
 
 	int32_t material_major_type_cnt;
-	int32_t material_major_type_ext_cnt;
 	struct material_major_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *material_major_type;
+	};
+        struct pw_elements_table *material_major_type;
 
 	int32_t material_sub_type_cnt;
-	int32_t material_sub_type_ext_cnt;
 	struct material_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *material_sub_type;
+	};
+        struct pw_elements_table *material_sub_type;
 
 	int32_t material_essence_cnt;
-	int32_t material_essence_ext_cnt;
 	struct material_essence {
 		int32_t id;
 		int32_t id_major_type;
@@ -373,17 +391,17 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *material_essence;
+	};
+        struct pw_elements_table *material_essence;
 
 	int32_t damagerune_sub_type_cnt;
-	int32_t damagerune_sub_type_ext_cnt;
 	struct damagerune_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *damagerune_sub_type;
+	};
+        struct pw_elements_table *damagerune_sub_type;
 
 	int32_t damagerune_essence_cnt;
-	int32_t damagerune_essence_ext_cnt;
 	struct damagerune_essence {
 		int32_t id;
 		int32_t id_sub_type;
@@ -399,17 +417,17 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *damagerune_essence;
+	};
+        struct pw_elements_table *damagerune_essence;
 
 	int32_t armorrune_sub_type_cnt;
-	int32_t armorrune_sub_type_ext_cnt;
 	struct armorrune_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *armorrune_sub_type;
+	};
+	struct pw_elements_table *armorrune_sub_type;
 
 	int32_t armorrune_essence_cnt;
-	int32_t armorrune_essence_ext_cnt;
 	struct armorrune_essence {
 		int32_t id;
 		int32_t id_sub_type;
@@ -428,17 +446,17 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *armorrune_essence;
+	};
+        struct pw_elements_table *armorrune_essence;
 
 	int32_t skilltome_sub_type_cnt;
-	int32_t skilltome_sub_type_ext_cnt;
 	struct skilltome_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *skilltome_sub_type;
+	};
+        struct pw_elements_table *skilltome_sub_type;
 
 	int32_t skilltome_essence_cnt;
-	int32_t skilltome_essence_ext_cnt;
 	struct skilltome_essence {
 		int32_t id;
 		int32_t id_sub_type;
@@ -450,10 +468,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *skilltome_essence;
+	};
+        struct pw_elements_table *skilltome_essence;
 
 	int32_t flysword_essence_cnt;
-	int32_t flysword_essence_ext_cnt;
 	struct flysword_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -476,10 +494,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *flysword_essence;
+	};
+        struct pw_elements_table *flysword_essence;
 
 	int32_t wingmanwing_essence_cnt;
-	int32_t wingmanwing_essence_ext_cnt;
 	struct wingmanwing_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -495,10 +513,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *wingmanwing_essence;
+	};
+        struct pw_elements_table *wingmanwing_essence;
 
 	int32_t townscroll_essence_cnt;
-	int32_t townscroll_essence_ext_cnt;
 	struct townscroll_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -510,10 +528,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *townscroll_essence;
+	};
+        struct pw_elements_table *townscroll_essence;
 
 	int32_t unionscroll_essence_cnt;
-	int32_t unionscroll_essence_ext_cnt;
 	struct unionscroll_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -525,10 +543,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *unionscroll_essence;
+	};
+        struct pw_elements_table *unionscroll_essence;
 
 	int32_t revivescroll_essence_cnt;
-	int32_t revivescroll_essence_ext_cnt;
 	struct revivescroll_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -541,10 +559,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *revivescroll_essence;
+	};
+        struct pw_elements_table *revivescroll_essence;
 
 	int32_t element_essence_cnt;
-	int32_t element_essence_ext_cnt;
 	struct element_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -556,10 +574,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *element_essence;
+	};
+        struct pw_elements_table *element_essence;
 
 	int32_t taskmatter_essence_cnt;
-	int32_t taskmatter_essence_ext_cnt;
 	struct taskmatter_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -567,10 +585,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *taskmatter_essence;
+	};
+        struct pw_elements_table *taskmatter_essence;
 
 	int32_t tossmatter_essence_cnt;
-	int32_t tossmatter_essence_ext_cnt;
 	struct tossmatter_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -593,17 +611,17 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *tossmatter_essence;
+	};
+        struct pw_elements_table *tossmatter_essence;
 
 	int32_t projectile_type_cnt;
-	int32_t projectile_type_ext_cnt;
 	struct projectile_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *projectile_type;
+	};
+        struct pw_elements_table *projectile_type;
 
 	int32_t projectile_essence_cnt;
-	int32_t projectile_essence_ext_cnt;
 	struct projectile_essence {
 		int32_t id;
 		int32_t type;
@@ -627,17 +645,17 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *projectile_essence;
+	};
+        struct pw_elements_table *projectile_essence;
 
 	int32_t quiver_sub_type_cnt;
-	int32_t quiver_sub_type_ext_cnt;
 	struct quiver_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *quiver_sub_type;
+	};
+        struct pw_elements_table *quiver_sub_type;
 
 	int32_t quiver_essence_cnt;
-	int32_t quiver_essence_ext_cnt;
 	struct quiver_essence {
 		int32_t id;
 		int32_t id_sub_type;
@@ -647,17 +665,17 @@ struct pw_elements {
 		int32_t id_projectile;
 		int32_t num_min;
 		int32_t num_max;
-	} *quiver_essence;
+	};
+        struct pw_elements_table *quiver_essence;
 
 	int32_t stone_sub_type_cnt;
-	int32_t stone_sub_type_ext_cnt;
 	struct stone_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *stone_sub_type;
+	};
+        struct pw_elements_table *stone_sub_type;
 
 	int32_t stone_essence_cnt;
-	int32_t stone_essence_ext_cnt;
 	struct stone_essence {
 		int32_t id;
 		int32_t id_sub_type;
@@ -677,10 +695,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *stone_essence;
+	};
+        struct pw_elements_table *stone_essence;
 
 	int32_t monster_addon_cnt;
-	int32_t monster_addon_ext_cnt;
 	struct monster_addon {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -688,10 +706,10 @@ struct pw_elements {
 		int32_t param1;
 		int32_t param2;
 		int32_t param3;
-	} *monster_addon;
+	};
+        struct pw_elements_table *monster_addon;
 
 	int32_t monster_type_cnt;
-	int32_t monster_type_ext_cnt;
 	struct monster_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -727,10 +745,10 @@ struct pw_elements {
 		float addons_15_probability_addon;
 		int32_t addons_16_id_addon;
 		float addons_16_probability_addon;
-	} *monster_type;
+	};
+        struct pw_elements_table *monster_type;
 
 	int32_t monster_essence_cnt;
-	int32_t monster_essence_ext_cnt;
 	struct monster_essence {
 		int32_t id;
 		int32_t id_type;
@@ -811,18 +829,18 @@ struct pw_elements {
 			int32_t id;
 			float prob;
 		} drop_matter[32];
-	} *monster_essence;
+	};
+        struct pw_elements_table *monster_essence;
 
 	int32_t npc_talk_service_cnt;
-	int32_t npc_talk_service_ext_cnt;
 	struct npc_talk_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t id_dialog;
-	} *npc_talk_service;
+	};
+        struct pw_elements_table *npc_talk_service;
 
 	int32_t npc_sell_service_cnt;
-	int32_t npc_sell_service_ext_cnt;
 	struct npc_sell_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -831,60 +849,60 @@ struct pw_elements {
 			int32_t id_goods[32];
 		} pages[8];
 		int32_t id_dialog;
-	} *npc_sell_service;
+	};
+        struct pw_elements_table *npc_sell_service;
 
 	int32_t npc_buy_service_cnt;
-	int32_t npc_buy_service_ext_cnt;
 	struct npc_buy_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t id_dialog;
-	} *npc_buy_service;
+	};
+        struct pw_elements_table *npc_buy_service;
 
 	int32_t npc_repair_service_cnt;
-	int32_t npc_repair_service_ext_cnt;
 	struct npc_repair_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t id_dialog;
-	} *npc_repair_service;
+	};
+        struct pw_elements_table *npc_repair_service;
 
 	int32_t npc_install_service_cnt;
-	int32_t npc_install_service_ext_cnt;
 	struct npc_install_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t _unused1[32];
 		int32_t _unused2;
-	} *npc_install_service;
+	};
+	struct pw_elements_table *npc_install_service;
 
 	int32_t npc_uninstall_service_cnt;
-	int32_t npc_uninstall_service_ext_cnt;
 	struct npc_uninstall_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t _unused1[32];
 		int32_t _unused2;
-	} *npc_uninstall_service;
+	};
+        struct pw_elements_table *npc_uninstall_service;
 
 	int32_t npc_task_in_service_cnt;
-	int32_t npc_task_in_service_ext_cnt;
 	struct npc_task_in_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t task_id[32];
-	} *npc_task_in_service;
+	};
+        struct pw_elements_table *npc_task_in_service;
 
 	int32_t npc_task_out_service_cnt;
-	int32_t npc_task_out_service_ext_cnt;
 	struct npc_task_out_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t task_id[32];
-	} *npc_task_out_service;
+	};
+        struct pw_elements_table *npc_task_out_service;
 
 	int32_t npc_task_matter_service_cnt;
-	int32_t npc_task_matter_service_ext_cnt;
 	struct npc_task_matter_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -895,27 +913,27 @@ struct pw_elements {
 				int32_t num;
 			} item[4];
 		} task[16];
-	} *npc_task_matter_service;
+	};
+        struct pw_elements_table *npc_task_matter_service;
 
 	int32_t npc_skill_service_cnt;
-	int32_t npc_skill_service_ext_cnt;
 	struct npc_skill_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t skill_id[128];
 		int32_t id_dialog;
-	} *npc_skill_service;
+	};
+        struct pw_elements_table *npc_skill_service;
 
 	int32_t npc_heal_service_cnt;
-	int32_t npc_heal_service_ext_cnt;
 	struct npc_heal_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t id_dialog;
-	} *npc_heal_service;
+	};
+        struct pw_elements_table *npc_heal_service;
 
 	int32_t npc_transmit_service_cnt;
-	int32_t npc_transmit_service_ext_cnt;
 	struct npc_transmit_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -926,10 +944,10 @@ struct pw_elements {
 			int32_t required_level;
 		} target[32];
 		int32_t id_dialog;
-	} *npc_transmit_service;
+	};
+        struct pw_elements_table *npc_transmit_service;
 
 	int32_t npc_transport_service_cnt;
-	int32_t npc_transport_service_ext_cnt;
 	struct npc_transport_service { /* unused */
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -938,25 +956,25 @@ struct pw_elements {
 			int32_t fee;
 		} route[32];
 		int32_t id_dialog;
-	} *npc_transport_service;
+	};
+        struct pw_elements_table *npc_transport_service;
 
 	int32_t npc_proxy_service_cnt;
-	int32_t npc_proxy_service_ext_cnt;
 	struct npc_proxy_service { /* unused */
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t id_dialog;
-	} *npc_proxy_service;
+	};
+        struct pw_elements_table *npc_proxy_service;
 
 	int32_t npc_storage_service_cnt;
-	int32_t npc_storage_service_ext_cnt;
 	struct npc_storage_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *npc_storage_service;
+	};
+        struct pw_elements_table *npc_storage_service;
 
 	int32_t npc_make_service_cnt;
-	int32_t npc_make_service_ext_cnt;
 	struct npc_make_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -966,25 +984,25 @@ struct pw_elements {
 			char16_t page_title[16 / sizeof(char16_t)];
 			int32_t item_id[32];
 		} pages[8];
-	} *npc_make_service;
+	};
+        struct pw_elements_table *npc_make_service;
 
 	int32_t npc_decompose_service_cnt;
-	int32_t npc_decompose_service_ext_cnt;
 	struct npc_decompose_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t id_decompose_skill;
-	} *npc_decompose_service;
+	};
+        struct pw_elements_table *npc_decompose_service;
 
 	int32_t npc_type_cnt;
-	int32_t npc_type_ext_cnt;
 	struct npc_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *npc_type;
+	};
+        struct pw_elements_table *npc_type;
 
 	int32_t npc_essence_cnt;
-	int32_t npc_essence_ext_cnt;
 	struct npc_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1025,12 +1043,10 @@ struct pw_elements {
 		int32_t id_equipundestroy_service;
 		int32_t combined_services;
 		int32_t id_mine;
-	} *npc_essence;
+	};
+        struct pw_elements_table *npc_essence;
 
-	int32_t talk_proc_cnt;
-	int32_t talk_proc_ext_cnt;
 	int32_t face_texture_essence_cnt;
-	int32_t face_texture_essence_ext_cnt;
 	struct face_texture_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1043,10 +1059,10 @@ struct pw_elements {
 		int32_t visualize_id;
 		int32_t user_data;
 		int32_t facepill_only;
-	} *face_texture_essence;
+	};
+        struct pw_elements_table *face_texture_essence;
 
 	int32_t face_shape_essence_cnt;
-	int32_t face_shape_essence_ext_cnt;
 	struct face_shape_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1058,18 +1074,18 @@ struct pw_elements {
 		int32_t visualize_id;
 		int32_t user_data;
 		int32_t facepill_only;
-	} *face_shape_essence;
+	};
+        struct pw_elements_table *face_shape_essence;
 
 	int32_t face_emotion_type_cnt;
-	int32_t face_emotion_type_ext_cnt;
 	struct face_emotion_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		char file_icon[128 / sizeof(char)];
-	} *face_emotion_type;
+	};
+        struct pw_elements_table *face_emotion_type;
 
 	int32_t face_expression_essence_cnt;
-	int32_t face_expression_essence_ext_cnt;
 	struct face_expression_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1078,10 +1094,10 @@ struct pw_elements {
 		int32_t character_combo_id;
 		int32_t gender_id;
 		int32_t emotion_id;
-	} *face_expression_essence;
+	};
+        struct pw_elements_table *face_expression_essence;
 
 	int32_t face_hair_essence_cnt;
-	int32_t face_hair_essence_ext_cnt;
 	struct face_hair_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1092,10 +1108,10 @@ struct pw_elements {
 		int32_t gender_id;
 		int32_t visualize_id;
 		int32_t facepill_only;
-	} *face_hair_essence;
+	};
+        struct pw_elements_table *face_hair_essence;
 
 	int32_t face_moustache_essence_cnt;
-	int32_t face_moustache_essence_ext_cnt;
 	struct face_moustache_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1105,10 +1121,10 @@ struct pw_elements {
 		int32_t gender_id;
 		int32_t visualize_id;
 		int32_t facepill_only;
-	} *face_moustache_essence;
+	};
+        struct pw_elements_table *face_moustache_essence;
 
 	int32_t colorpicker_essence_cnt;
-	int32_t colorpicker_essence_ext_cnt;
 	struct colorpicker_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1116,34 +1132,34 @@ struct pw_elements {
 		int32_t color_part_id;
 		int32_t character_combo_id;
 		int32_t gender_id;
-	} *colorpicker_essence;
+	};
+        struct pw_elements_table *colorpicker_essence;
 
 	int32_t customizedata_essence_cnt;
-	int32_t customizedata_essence_ext_cnt;
 	struct customizedata_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		char file_data[128 / sizeof(char)];
 		int32_t character_combo_id;
 		int32_t gender_id;
-	} *customizedata_essence;
+	};
+        struct pw_elements_table *customizedata_essence;
 
 	int32_t recipe_major_type_cnt;
-	int32_t recipe_major_type_ext_cnt;
 	struct recipe_major_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *recipe_major_type;
+	};
+        struct pw_elements_table *recipe_major_type;
 
 	int32_t recipe_sub_type_cnt;
-	int32_t recipe_sub_type_ext_cnt;
 	struct recipe_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *recipe_sub_type;
+	};
+        struct pw_elements_table *recipe_sub_type;
 
 	int32_t recipe_essence_cnt;
-	int32_t recipe_essence_ext_cnt;
 	struct recipe_essence {
 		int32_t id;
 		int32_t id_major_type;
@@ -1167,18 +1183,18 @@ struct pw_elements {
 			int32_t id;
 			int32_t num;
 		} mats[32];
-	} *recipe_essence;
+	};
+        struct pw_elements_table *recipe_essence;
 
 	int32_t enemy_faction_config_cnt;
-	int32_t enemy_faction_config_ext_cnt;
 	struct enemy_faction_config {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t enemy_faction[32];
-	} *enemy_faction_config;
+	};
+        struct pw_elements_table *enemy_faction_config;
 
 	int32_t charracter_class_config_cnt;
-	int32_t charracter_class_config_ext_cnt;
 	struct charracter_class_config {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1205,10 +1221,10 @@ struct pw_elements {
 		float lvlup_defense;
 		float lvlup_magicdefence;
 		int32_t angro_increase;
-	} *charracter_class_config;
+	};
+        struct pw_elements_table *charracter_class_config;
 
 	int32_t param_adjust_config_cnt;
-	int32_t param_adjust_config_ext_cnt;
 	struct param_adjust_config {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1348,10 +1364,10 @@ struct pw_elements {
 		float team_profession_adjust_8_adjust_sp;
 		float team_profession_adjust_9_adjust_exp;
 		float team_profession_adjust_9_adjust_sp;
-	} *param_adjust_config;
+	};
+        struct pw_elements_table *param_adjust_config;
 
 	int32_t player_action_info_config_cnt;
-	int32_t player_action_info_config_ext_cnt;
 	struct player_action_info_config {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1369,10 +1385,10 @@ struct pw_elements {
 		char action_weapon_suffix_10_suffix[32 / sizeof(char)];
 		char action_weapon_suffix_11_suffix[32 / sizeof(char)];
 		int32_t hide_weapon;
-	} *player_action_info_config;
+	};
+        struct pw_elements_table *player_action_info_config;
 
 	int32_t taskdice_essence_cnt;
-	int32_t taskdice_essence_ext_cnt;
 	struct taskdice_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1386,10 +1402,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *taskdice_essence;
+	};
+        struct pw_elements_table *taskdice_essence;
 
 	int32_t tasknormalmatter_essence_cnt;
-	int32_t tasknormalmatter_essence_ext_cnt;
 	struct tasknormalmatter_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1400,10 +1416,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *tasknormalmatter_essence;
+	};
+        struct pw_elements_table *tasknormalmatter_essence;
 
 	int32_t face_faling_essence_cnt;
-	int32_t face_faling_essence_ext_cnt;
 	struct face_faling_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1413,25 +1429,25 @@ struct pw_elements {
 		int32_t gender_id;
 		int32_t visualize_id;
 		int32_t facepill_only;
-	} *face_faling_essence;
+	};
+        struct pw_elements_table *face_faling_essence;
 
 	int32_t player_levelexp_config_cnt;
-	int32_t player_levelexp_config_ext_cnt;
 	struct player_levelexp_config {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t exp[150];
-	} *player_levelexp_config;
+	};
+        struct pw_elements_table *player_levelexp_config;
 
 	int32_t mine_type_cnt;
-	int32_t mine_type_ext_cnt;
 	struct mine_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *mine_type;
+	};
+        struct pw_elements_table *mine_type;
 
 	int32_t mine_essence_cnt;
-	int32_t mine_essence_ext_cnt;
 	struct mine_essence {
 		int32_t id;
 		int32_t id_type;
@@ -1465,33 +1481,33 @@ struct pw_elements {
 		float aggro_radius;
 		int32_t aggro_num;
 		int32_t permanent;
-	} *mine_essence;
+	};
+        struct pw_elements_table *mine_essence;
 
 	int32_t npc_identify_service_cnt;
-	int32_t npc_identify_service_ext_cnt;
 	struct npc_identify_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t fee;
-	} *npc_identify_service;
+	};
+        struct pw_elements_table *npc_identify_service;
 
 	int32_t fashion_major_type_cnt;
-	int32_t fashion_major_type_ext_cnt;
 	struct fashion_major_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *fashion_major_type;
+	};
+        struct pw_elements_table *fashion_major_type;
 
 	int32_t fashion_sub_type_cnt;
-	int32_t fashion_sub_type_ext_cnt;
 	struct fashion_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t equip_fashion_mask;
-	} *fashion_sub_type;
+	};
+        struct pw_elements_table *fashion_sub_type;
 
 	int32_t fashion_essence_cnt;
-	int32_t fashion_essence_ext_cnt;
 	struct fashion_essence {
 		int32_t id;
 		int32_t id_major_type;
@@ -1510,24 +1526,24 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *fashion_essence;
+	};
+        struct pw_elements_table *fashion_essence;
 
 	int32_t faceticket_major_type_cnt;
-	int32_t faceticket_major_type_ext_cnt;
 	struct faceticket_major_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *faceticket_major_type;
+	};
+        struct pw_elements_table *faceticket_major_type;
 
 	int32_t faceticket_sub_type_cnt;
-	int32_t faceticket_sub_type_ext_cnt;
 	struct faceticket_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *faceticket_sub_type;
+	};
+        struct pw_elements_table *faceticket_sub_type;
 
 	int32_t faceticket_essence_cnt;
-	int32_t faceticket_essence_ext_cnt;
 	struct faceticket_essence {
 		int32_t id;
 		int32_t id_major_type;
@@ -1543,24 +1559,24 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *faceticket_essence;
+	};
+        struct pw_elements_table *faceticket_essence;
 
 	int32_t facepill_major_type_cnt;
-	int32_t facepill_major_type_ext_cnt;
 	struct facepill_major_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *facepill_major_type;
+	};
+        struct pw_elements_table *facepill_major_type;
 
 	int32_t facepill_sub_type_cnt;
-	int32_t facepill_sub_type_ext_cnt;
 	struct facepill_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *facepill_sub_type;
+	};
+        struct pw_elements_table *facepill_sub_type;
 
 	int32_t facepill_essence_cnt;
-	int32_t facepill_essence_ext_cnt;
 	struct facepill_essence {
 		int32_t id;
 		int32_t id_major_type;
@@ -1592,10 +1608,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *facepill_essence;
+	};
+        struct pw_elements_table *facepill_essence;
 
 	int32_t suite_essence_cnt;
-	int32_t suite_essence_ext_cnt;
 	struct suite_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1624,17 +1640,17 @@ struct pw_elements {
 		int32_t addons_10_id;
 		int32_t addons_11_id;
 		char file_gfx[128 / sizeof(char)];
-	} *suite_essence;
+	};
+        struct pw_elements_table *suite_essence;
 
 	int32_t gm_generator_type_cnt;
-	int32_t gm_generator_type_ext_cnt;
 	struct gm_generator_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *gm_generator_type;
+	};
+        struct pw_elements_table *gm_generator_type;
 
 	int32_t gm_generator_essence_cnt;
-	int32_t gm_generator_essence_ext_cnt;
 	struct gm_generator_essence {
 		int32_t id;
 		int32_t id_type;
@@ -1645,17 +1661,17 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *gm_generator_essence;
+	};
+        struct pw_elements_table *gm_generator_essence;
 
 	int32_t pet_type_cnt;
-	int32_t pet_type_ext_cnt;
 	struct pet_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-	} *pet_type;
+	};
+        struct pw_elements_table *pet_type;
 
 	int32_t pet_essence_cnt;
-	int32_t pet_essence_ext_cnt;
 	struct pet_essence {
 		int32_t id;
 		int32_t id_type;
@@ -1700,10 +1716,10 @@ struct pw_elements {
 		int32_t food_mask;
 		int32_t inhabit_type;
 		int32_t stand_mode;
-	} *pet_essence;
+	};
+        struct pw_elements_table *pet_essence;
 
 	int32_t pet_egg_essence_cnt;
-	int32_t pet_egg_essence_ext_cnt;
 	struct pet_egg_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1725,10 +1741,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *pet_egg_essence;
+	};
+        struct pw_elements_table *pet_egg_essence;
 
 	int32_t pet_food_essence_cnt;
-	int32_t pet_food_essence_ext_cnt;
 	struct pet_food_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1743,10 +1759,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *pet_food_essence;
+	};
+        struct pw_elements_table *pet_food_essence;
 
 	int32_t pet_faceticket_essence_cnt;
-	int32_t pet_faceticket_essence_ext_cnt;
 	struct pet_faceticket_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1757,10 +1773,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *pet_faceticket_essence;
+	};
+        struct pw_elements_table *pet_faceticket_essence;
 
 	int32_t fireworks_essence_cnt;
-	int32_t fireworks_essence_ext_cnt;
 	struct fireworks_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1774,10 +1790,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *fireworks_essence;
+	};
+        struct pw_elements_table *fireworks_essence;
 
 	int32_t war_tankcallin_essence_cnt;
-	int32_t war_tankcallin_essence_ext_cnt;
 	struct war_tankcallin_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1788,10 +1804,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *war_tankcallin_essence;
+	};
+        struct pw_elements_table *war_tankcallin_essence;
 
 	int32_t npc_war_towerbuild_service_cnt;
-	int32_t npc_war_towerbuild_service_ext_cnt;
 	struct npc_war_towerbuild_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1815,273 +1831,18 @@ struct pw_elements {
 		int32_t build_info_4_id_object_need;
 		int32_t build_info_4_time_use;
 		int32_t build_info_4_fee;
-	} *npc_war_towerbuild_service;
+	};
+        struct pw_elements_table *npc_war_towerbuild_service;
 
 	int32_t player_secondlevel_config_cnt;
-	int32_t player_secondlevel_config_ext_cnt;
 	struct player_secondlevel_config {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-		float exp_lost_1;
-		float exp_lost_2;
-		float exp_lost_3;
-		float exp_lost_4;
-		float exp_lost_5;
-		float exp_lost_6;
-		float exp_lost_7;
-		float exp_lost_8;
-		float exp_lost_9;
-		float exp_lost_10;
-		float exp_lost_11;
-		float exp_lost_12;
-		float exp_lost_13;
-		float exp_lost_14;
-		float exp_lost_15;
-		float exp_lost_16;
-		float exp_lost_17;
-		float exp_lost_18;
-		float exp_lost_19;
-		float exp_lost_20;
-		float exp_lost_21;
-		float exp_lost_22;
-		float exp_lost_23;
-		float exp_lost_24;
-		float exp_lost_25;
-		float exp_lost_26;
-		float exp_lost_27;
-		float exp_lost_28;
-		float exp_lost_29;
-		float exp_lost_30;
-		float exp_lost_31;
-		float exp_lost_32;
-		float exp_lost_33;
-		float exp_lost_34;
-		float exp_lost_35;
-		float exp_lost_36;
-		float exp_lost_37;
-		float exp_lost_38;
-		float exp_lost_39;
-		float exp_lost_40;
-		float exp_lost_41;
-		float exp_lost_42;
-		float exp_lost_43;
-		float exp_lost_44;
-		float exp_lost_45;
-		float exp_lost_46;
-		float exp_lost_47;
-		float exp_lost_48;
-		float exp_lost_49;
-		float exp_lost_50;
-		float exp_lost_51;
-		float exp_lost_52;
-		float exp_lost_53;
-		float exp_lost_54;
-		float exp_lost_55;
-		float exp_lost_56;
-		float exp_lost_57;
-		float exp_lost_58;
-		float exp_lost_59;
-		float exp_lost_60;
-		float exp_lost_61;
-		float exp_lost_62;
-		float exp_lost_63;
-		float exp_lost_64;
-		float exp_lost_65;
-		float exp_lost_66;
-		float exp_lost_67;
-		float exp_lost_68;
-		float exp_lost_69;
-		float exp_lost_70;
-		float exp_lost_71;
-		float exp_lost_72;
-		float exp_lost_73;
-		float exp_lost_74;
-		float exp_lost_75;
-		float exp_lost_76;
-		float exp_lost_77;
-		float exp_lost_78;
-		float exp_lost_79;
-		float exp_lost_80;
-		float exp_lost_81;
-		float exp_lost_82;
-		float exp_lost_83;
-		float exp_lost_84;
-		float exp_lost_85;
-		float exp_lost_86;
-		float exp_lost_87;
-		float exp_lost_88;
-		float exp_lost_89;
-		float exp_lost_90;
-		float exp_lost_91;
-		float exp_lost_92;
-		float exp_lost_93;
-		float exp_lost_94;
-		float exp_lost_95;
-		float exp_lost_96;
-		float exp_lost_97;
-		float exp_lost_98;
-		float exp_lost_99;
-		float exp_lost_100;
-		float exp_lost_101;
-		float exp_lost_102;
-		float exp_lost_103;
-		float exp_lost_104;
-		float exp_lost_105;
-		float exp_lost_106;
-		float exp_lost_107;
-		float exp_lost_108;
-		float exp_lost_109;
-		float exp_lost_110;
-		float exp_lost_111;
-		float exp_lost_112;
-		float exp_lost_113;
-		float exp_lost_114;
-		float exp_lost_115;
-		float exp_lost_116;
-		float exp_lost_117;
-		float exp_lost_118;
-		float exp_lost_119;
-		float exp_lost_120;
-		float exp_lost_121;
-		float exp_lost_122;
-		float exp_lost_123;
-		float exp_lost_124;
-		float exp_lost_125;
-		float exp_lost_126;
-		float exp_lost_127;
-		float exp_lost_128;
-		float exp_lost_129;
-		float exp_lost_130;
-		float exp_lost_131;
-		float exp_lost_132;
-		float exp_lost_133;
-		float exp_lost_134;
-		float exp_lost_135;
-		float exp_lost_136;
-		float exp_lost_137;
-		float exp_lost_138;
-		float exp_lost_139;
-		float exp_lost_140;
-		float exp_lost_141;
-		float exp_lost_142;
-		float exp_lost_143;
-		float exp_lost_144;
-		float exp_lost_145;
-		float exp_lost_146;
-		float exp_lost_147;
-		float exp_lost_148;
-		float exp_lost_149;
-		float exp_lost_150;
-		float exp_lost_151;
-		float exp_lost_152;
-		float exp_lost_153;
-		float exp_lost_154;
-		float exp_lost_155;
-		float exp_lost_156;
-		float exp_lost_157;
-		float exp_lost_158;
-		float exp_lost_159;
-		float exp_lost_160;
-		float exp_lost_161;
-		float exp_lost_162;
-		float exp_lost_163;
-		float exp_lost_164;
-		float exp_lost_165;
-		float exp_lost_166;
-		float exp_lost_167;
-		float exp_lost_168;
-		float exp_lost_169;
-		float exp_lost_170;
-		float exp_lost_171;
-		float exp_lost_172;
-		float exp_lost_173;
-		float exp_lost_174;
-		float exp_lost_175;
-		float exp_lost_176;
-		float exp_lost_177;
-		float exp_lost_178;
-		float exp_lost_179;
-		float exp_lost_180;
-		float exp_lost_181;
-		float exp_lost_182;
-		float exp_lost_183;
-		float exp_lost_184;
-		float exp_lost_185;
-		float exp_lost_186;
-		float exp_lost_187;
-		float exp_lost_188;
-		float exp_lost_189;
-		float exp_lost_190;
-		float exp_lost_191;
-		float exp_lost_192;
-		float exp_lost_193;
-		float exp_lost_194;
-		float exp_lost_195;
-		float exp_lost_196;
-		float exp_lost_197;
-		float exp_lost_198;
-		float exp_lost_199;
-		float exp_lost_200;
-		float exp_lost_201;
-		float exp_lost_202;
-		float exp_lost_203;
-		float exp_lost_204;
-		float exp_lost_205;
-		float exp_lost_206;
-		float exp_lost_207;
-		float exp_lost_208;
-		float exp_lost_209;
-		float exp_lost_210;
-		float exp_lost_211;
-		float exp_lost_212;
-		float exp_lost_213;
-		float exp_lost_214;
-		float exp_lost_215;
-		float exp_lost_216;
-		float exp_lost_217;
-		float exp_lost_218;
-		float exp_lost_219;
-		float exp_lost_220;
-		float exp_lost_221;
-		float exp_lost_222;
-		float exp_lost_223;
-		float exp_lost_224;
-		float exp_lost_225;
-		float exp_lost_226;
-		float exp_lost_227;
-		float exp_lost_228;
-		float exp_lost_229;
-		float exp_lost_230;
-		float exp_lost_231;
-		float exp_lost_232;
-		float exp_lost_233;
-		float exp_lost_234;
-		float exp_lost_235;
-		float exp_lost_236;
-		float exp_lost_237;
-		float exp_lost_238;
-		float exp_lost_239;
-		float exp_lost_240;
-		float exp_lost_241;
-		float exp_lost_242;
-		float exp_lost_243;
-		float exp_lost_244;
-		float exp_lost_245;
-		float exp_lost_246;
-		float exp_lost_247;
-		float exp_lost_248;
-		float exp_lost_249;
-		float exp_lost_250;
-		float exp_lost_251;
-		float exp_lost_252;
-		float exp_lost_253;
-		float exp_lost_254;
-		float exp_lost_255;
-		float exp_lost_256;
-	} *player_secondlevel_config;
+		float exp_lost[256];
+	};
+        struct pw_elements_table *player_secondlevel_config;
 
 	int32_t npc_resetprop_service_cnt;
-	int32_t npc_resetprop_service_ext_cnt;
 	struct npc_resetprop_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -2160,164 +1921,37 @@ struct pw_elements {
 		int32_t prop_entry_15_agility_delta;
 		int32_t prop_entry_15_vital_delta;
 		int32_t prop_entry_15_energy_delta;
-	} *npc_resetprop_service;
+	};
+        struct pw_elements_table *npc_resetprop_service;
 
 	int32_t npc_petname_service_cnt;
-	int32_t npc_petname_service_ext_cnt;
 	struct npc_petname_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t id_object_need;
 		int32_t price;
-	} *npc_petname_service;
+	};
+        struct pw_elements_table *npc_petname_service;
 
 	int32_t npc_petlearnskill_service_cnt;
-	int32_t npc_petlearnskill_service_ext_cnt;
 	struct npc_petlearnskill_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-		int32_t id_skills_1;
-		int32_t id_skills_2;
-		int32_t id_skills_3;
-		int32_t id_skills_4;
-		int32_t id_skills_5;
-		int32_t id_skills_6;
-		int32_t id_skills_7;
-		int32_t id_skills_8;
-		int32_t id_skills_9;
-		int32_t id_skills_10;
-		int32_t id_skills_11;
-		int32_t id_skills_12;
-		int32_t id_skills_13;
-		int32_t id_skills_14;
-		int32_t id_skills_15;
-		int32_t id_skills_16;
-		int32_t id_skills_17;
-		int32_t id_skills_18;
-		int32_t id_skills_19;
-		int32_t id_skills_20;
-		int32_t id_skills_21;
-		int32_t id_skills_22;
-		int32_t id_skills_23;
-		int32_t id_skills_24;
-		int32_t id_skills_25;
-		int32_t id_skills_26;
-		int32_t id_skills_27;
-		int32_t id_skills_28;
-		int32_t id_skills_29;
-		int32_t id_skills_30;
-		int32_t id_skills_31;
-		int32_t id_skills_32;
-		int32_t id_skills_33;
-		int32_t id_skills_34;
-		int32_t id_skills_35;
-		int32_t id_skills_36;
-		int32_t id_skills_37;
-		int32_t id_skills_38;
-		int32_t id_skills_39;
-		int32_t id_skills_40;
-		int32_t id_skills_41;
-		int32_t id_skills_42;
-		int32_t id_skills_43;
-		int32_t id_skills_44;
-		int32_t id_skills_45;
-		int32_t id_skills_46;
-		int32_t id_skills_47;
-		int32_t id_skills_48;
-		int32_t id_skills_49;
-		int32_t id_skills_50;
-		int32_t id_skills_51;
-		int32_t id_skills_52;
-		int32_t id_skills_53;
-		int32_t id_skills_54;
-		int32_t id_skills_55;
-		int32_t id_skills_56;
-		int32_t id_skills_57;
-		int32_t id_skills_58;
-		int32_t id_skills_59;
-		int32_t id_skills_60;
-		int32_t id_skills_61;
-		int32_t id_skills_62;
-		int32_t id_skills_63;
-		int32_t id_skills_64;
-		int32_t id_skills_65;
-		int32_t id_skills_66;
-		int32_t id_skills_67;
-		int32_t id_skills_68;
-		int32_t id_skills_69;
-		int32_t id_skills_70;
-		int32_t id_skills_71;
-		int32_t id_skills_72;
-		int32_t id_skills_73;
-		int32_t id_skills_74;
-		int32_t id_skills_75;
-		int32_t id_skills_76;
-		int32_t id_skills_77;
-		int32_t id_skills_78;
-		int32_t id_skills_79;
-		int32_t id_skills_80;
-		int32_t id_skills_81;
-		int32_t id_skills_82;
-		int32_t id_skills_83;
-		int32_t id_skills_84;
-		int32_t id_skills_85;
-		int32_t id_skills_86;
-		int32_t id_skills_87;
-		int32_t id_skills_88;
-		int32_t id_skills_89;
-		int32_t id_skills_90;
-		int32_t id_skills_91;
-		int32_t id_skills_92;
-		int32_t id_skills_93;
-		int32_t id_skills_94;
-		int32_t id_skills_95;
-		int32_t id_skills_96;
-		int32_t id_skills_97;
-		int32_t id_skills_98;
-		int32_t id_skills_99;
-		int32_t id_skills_100;
-		int32_t id_skills_101;
-		int32_t id_skills_102;
-		int32_t id_skills_103;
-		int32_t id_skills_104;
-		int32_t id_skills_105;
-		int32_t id_skills_106;
-		int32_t id_skills_107;
-		int32_t id_skills_108;
-		int32_t id_skills_109;
-		int32_t id_skills_110;
-		int32_t id_skills_111;
-		int32_t id_skills_112;
-		int32_t id_skills_113;
-		int32_t id_skills_114;
-		int32_t id_skills_115;
-		int32_t id_skills_116;
-		int32_t id_skills_117;
-		int32_t id_skills_118;
-		int32_t id_skills_119;
-		int32_t id_skills_120;
-		int32_t id_skills_121;
-		int32_t id_skills_122;
-		int32_t id_skills_123;
-		int32_t id_skills_124;
-		int32_t id_skills_125;
-		int32_t id_skills_126;
-		int32_t id_skills_127;
-		int32_t id_skills_128;
+		int32_t id_skills[128];
 		int32_t id_dialog;
-	} *npc_petlearnskill_service;
+	};
+        struct pw_elements_table *npc_petlearnskill_service;
 
 	int32_t npc_petforgetskill_service_cnt;
-	int32_t npc_petforgetskill_service_ext_cnt;
 	struct npc_petforgetskill_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t id_object_need;
 		int32_t price;
-	} *npc_petforgetskill_service;
+	};
+        struct pw_elements_table *npc_petforgetskill_service;
 
 	int32_t skillmatter_essence_cnt;
-	int32_t skillmatter_essence_ext_cnt;
 	struct skillmatter_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -2331,10 +1965,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *skillmatter_essence;
+	};
+        struct pw_elements_table *skillmatter_essence;
 
 	int32_t refine_ticket_essence_cnt;
-	int32_t refine_ticket_essence_ext_cnt;
 	struct refine_ticket_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -2361,10 +1995,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *refine_ticket_essence;
+	};
+        struct pw_elements_table *refine_ticket_essence;
 
 	int32_t destroying_essence_cnt;
-	int32_t destroying_essence_ext_cnt;
 	struct destroying_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -2375,37 +2009,37 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *destroying_essence;
+	};
+        struct pw_elements_table *destroying_essence;
 
 	int32_t npc_equipbind_service_cnt;
-	int32_t npc_equipbind_service_ext_cnt;
 	struct npc_equipbind_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t id_object_need;
 		int32_t price;
-	} *npc_equipbind_service;
+	};
+        struct pw_elements_table *npc_equipbind_service;
 
 	int32_t npc_equipdestroy_service_cnt;
-	int32_t npc_equipdestroy_service_ext_cnt;
 	struct npc_equipdestroy_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t id_object_need;
 		int32_t price;
-	} *npc_equipdestroy_service;
+	};
+        struct pw_elements_table *npc_equipdestroy_service;
 
 	int32_t npc_equipundestroy_service_cnt;
-	int32_t npc_equipundestroy_service_ext_cnt;
 	struct npc_equipundestroy_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t id_object_need;
 		int32_t price;
-	} *npc_equipundestroy_service;
+	};
+        struct pw_elements_table *npc_equipundestroy_service;
 
 	int32_t bible_essence_cnt;
-	int32_t bible_essence_ext_cnt;
 	struct bible_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -2426,10 +2060,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *bible_essence;
+	};
+        struct pw_elements_table *bible_essence;
 
 	int32_t speaker_essence_cnt;
-	int32_t speaker_essence_ext_cnt;
 	struct speaker_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -2441,10 +2075,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *speaker_essence;
+	};
+        struct pw_elements_table *speaker_essence;
 
 	int32_t autohp_essence_cnt;
-	int32_t autohp_essence_ext_cnt;
 	struct autohp_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -2458,10 +2092,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *autohp_essence;
+	};
+        struct pw_elements_table *autohp_essence;
 
 	int32_t automp_essence_cnt;
-	int32_t automp_essence_ext_cnt;
 	struct automp_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -2475,10 +2109,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *automp_essence;
+	};
+        struct pw_elements_table *automp_essence;
 
 	int32_t double_exp_essence_cnt;
-	int32_t double_exp_essence_ext_cnt;
 	struct double_exp_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -2490,10 +2124,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *double_exp_essence;
+	};
+        struct pw_elements_table *double_exp_essence;
 
 	int32_t transmitscroll_essence_cnt;
-	int32_t transmitscroll_essence_ext_cnt;
 	struct transmitscroll_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -2504,10 +2138,10 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *transmitscroll_essence;
+	};
+        struct pw_elements_table *transmitscroll_essence;
 
 	int32_t dye_ticket_essence_cnt;
-	int32_t dye_ticket_essence_ext_cnt;
 	struct dye_ticket_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -2524,7 +2158,11 @@ struct pw_elements {
 		int32_t pile_num_max;
 		int32_t has_guid;
 		int32_t proc_type;
-	} *dye_ticket_essence;
+	};
+        struct pw_elements_table *dye_ticket_essence;
+
+	struct pw_elements_table *tables[256];
+	size_t tables_count;
 };
 
 #endif /* PW_ELEMENTS_H */

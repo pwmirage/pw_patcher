@@ -25,7 +25,7 @@
 #include "cjson_ext.h"
 #include "pw_npc.h"
 
-struct pw_elements *g_elements;
+static struct pw_elements *g_elements;
 
 static void
 print_obj(struct cjson *obj, int depth)

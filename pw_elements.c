@@ -1354,6 +1354,66 @@ static struct serializer suite_essence_serializer[] = {
 	{ "", TYPE_END },
 };
 
+static struct serializer damagerune_sub_type_serializer[] = { { "", TYPE_END } };
+static struct serializer armorrune_sub_type_serializer[] = { { "", TYPE_END } };
+static struct serializer skilltome_sub_type_serializer[] = { { "", TYPE_END } };
+static struct serializer unionscroll_essence_serializer[] = { { "", TYPE_END } };
+static struct serializer monster_addon_serializer[] = { { "", TYPE_END } };
+static struct serializer monster_type_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_talk_service_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_buy_service_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_repair_service_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_install_service_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_uninstall_service_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_task_in_service_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_task_out_service_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_task_matter_service_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_skill_service_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_heal_service_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_transmit_service_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_transport_service_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_proxy_service_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_storage_service_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_decompose_service_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_type_serializer[] = { { "", TYPE_END } };
+static struct serializer face_texture_essence_serializer[] = { { "", TYPE_END } };
+static struct serializer face_shape_essence_serializer[] = { { "", TYPE_END } };
+static struct serializer face_emotion_type_serializer[] = { { "", TYPE_END } };
+static struct serializer face_expression_essence_serializer[] = { { "", TYPE_END } };
+static struct serializer face_hair_essence_serializer[] = { { "", TYPE_END } };
+static struct serializer face_moustache_essence_serializer[] = { { "", TYPE_END } };
+static struct serializer colorpicker_essence_serializer[] = { { "", TYPE_END } };
+static struct serializer customizedata_essence_serializer[] = { { "", TYPE_END } };
+static struct serializer recipe_major_type_serializer[] = { { "", TYPE_END } };
+static struct serializer recipe_sub_type_serializer[] = { { "", TYPE_END } };
+static struct serializer enemy_faction_config_serializer[] = { { "", TYPE_END } };
+static struct serializer charracter_class_config_serializer[] = { { "", TYPE_END } };
+static struct serializer param_adjust_config_serializer[] = { { "", TYPE_END } };
+static struct serializer player_action_info_config_serializer[] = { { "", TYPE_END } };
+static struct serializer face_faling_essence_serializer[] = { { "", TYPE_END } };
+static struct serializer player_levelexp_config_serializer[] = { { "", TYPE_END } };
+static struct serializer mine_type_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_identify_service_serializer[] = { { "", TYPE_END } };
+static struct serializer fashion_major_type_serializer[] = { { "", TYPE_END } };
+static struct serializer fashion_sub_type_serializer[] = { { "", TYPE_END } };
+static struct serializer faceticket_major_type_serializer[] = { { "", TYPE_END } };
+static struct serializer faceticket_sub_type_serializer[] = { { "", TYPE_END } };
+static struct serializer facepill_major_type_serializer[] = { { "", TYPE_END } };
+static struct serializer facepill_sub_type_serializer[] = { { "", TYPE_END } };
+static struct serializer gm_generator_type_serializer[] = { { "", TYPE_END } };
+static struct serializer pet_type_serializer[] = { { "", TYPE_END } };
+static struct serializer pet_essence_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_war_towerbuild_service_serializer[] = { { "", TYPE_END } };
+static struct serializer player_secondlevel_config_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_resetprop_service_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_petname_service_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_petlearnskill_service_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_petforgetskill_service_serializer[] = { { "", TYPE_END } };
+static struct serializer destroying_essence_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_equipbind_service_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_equipdestroy_service_serializer[] = { { "", TYPE_END } };
+static struct serializer npc_equipundestroy_service_serializer[] = { { "", TYPE_END } };
+
 #define EXPORT_TABLE(elements, table, filename) \
 ({ \
 	FILE *fp = fopen(filename, "wb"); \
@@ -1464,14 +1524,11 @@ pw_elements_serialize(struct pw_elements *elements)
 }
 
 static int
-pw_elements_get_table(struct pw_elements *elements, const char *name, void **table, size_t *tbl_el_size, int32_t *tbl_size, struct serializer **serializer)
+pw_elements_get_table(struct pw_elements *elements, const char *name, struct pw_elements_table **table)
 {
 
 #define MAP(tbl_name, table_id) \
 	if (strcmp(tbl_name, name) == 0) { \
-		*serializer = table_id ## _serializer; \
-		*tbl_size = (elements)->table_id ## _cnt; \
-		*tbl_el_size = sizeof(*(elements)->table_id); \
 		*table = (elements)->table_id; \
 		return 0; \
 	}
@@ -1509,10 +1566,8 @@ pw_elements_get_table(struct pw_elements *elements, const char *name, void **tab
 int
 pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 {
-	void *table, *table_el;
-	size_t table_el_size;
-	int32_t table_size;
-	struct serializer *serializer;
+	struct pw_elements_table *table;
+	void **table_el;
 	const char *obj_type;
 	int64_t id;
 	int rc;
@@ -1529,7 +1584,8 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 		return -1;
 	}
 
-	rc = pw_elements_get_table(elements, obj_type, &table, &table_el_size, &table_size, &serializer);
+
+	rc = pw_elements_get_table(elements, obj_type, &table);
 	if (rc) {
 		pwlog(LOG_ERROR, "pw_elements_get_table() failed: %d\n", rc);
 		return -1;
@@ -1540,22 +1596,37 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 		/* FIXME append to &table (linked list somewhere?) */
 		return -1;
 	}
-
-	deserialize(obj, serializer, table_el);
+	deserialize(obj, table->serializer, table_el);
 	return 0;
 }
 
-static int32_t
-pw_elements_load_table(void **table, uint32_t el_size, FILE *fp)
+static void
+pw_elements_load_table(struct pw_elements *elements, struct pw_elements_table **table_p, const char *name, uint32_t el_size, struct serializer *serializer, FILE *fp)
 {
+	struct pw_elements_table *table;
+	struct pw_elements_chain *chain;
 	int32_t i, count;
 	void *el;
 
-	fread(&count, 1, sizeof(count), fp);
-	*table = calloc(count, el_size);
-	fread(*table, 1, count * el_size, fp);
+	*table_p = table = calloc(1, sizeof(*table));
+	if (!table) {
+		pwlog(LOG_ERROR, "pw_elements_load_table: calloc() failed\n");
+		return;
+	}
 
-	el = *table;
+	table->el_size = el_size;
+	table->serializer = serializer;
+
+	fread(&count, 1, sizeof(count), fp);
+	table->chain = chain = calloc(1, sizeof(struct pw_elements_chain) + count * el_size);
+	if (!chain) {
+		pwlog(LOG_ERROR, "pw_elements_load_table: calloc() failed\n");
+		return;
+	}
+	chain->count = chain->capacity = count;
+	fread(chain->data, 1, count * el_size, fp);
+
+	el = chain->data;
 	for (i = 0; i < count; i++) {
 		unsigned id = *(uint32_t *)el;
 
@@ -1563,32 +1634,11 @@ pw_elements_load_table(void **table, uint32_t el_size, FILE *fp)
 			g_elements_last_id = id;
 		}
 
-		pw_idmap_set(g_elements_map, id, *table, el);
+		pw_idmap_set(g_elements_map, id, table, el);
 		el += el_size;
 	}
 
-	return count;
-}
-
-static void
-pw_elements_save_table(void *table, uint32_t el_size, uint32_t el_count, FILE *fp)
-{
-	size_t count_off = ftell(fp);
-	uint32_t count = 0;
-
-	fwrite(&count, sizeof(count), 1, fp);
-
-	for (uint32_t i = 0; i < el_count; i++) {
-		void *el = table + i * el_size;
-		if (*(uint32_t *)el == 0) continue;
-		fwrite(el, el_size, 1, fp);
-		count++;
-	}
-
-	size_t end_off = ftell(fp);
-	fseek(fp, count_off, SEEK_SET);
-	fwrite(&count, 1, sizeof(count), fp);
-	fseek(fp, end_off, SEEK_SET);
+	elements->tables[elements->tables_count++] = table;
 }
 
 static void
@@ -1615,51 +1665,21 @@ pw_elements_read_talk_proc(struct talk_proc *talk, FILE *fp)
 }
 
 static int32_t
-pw_elements_load_talk_proc(struct talk_proc **table, FILE *fp)
+pw_elements_load_talk_proc(FILE *fp)
 {
-		int32_t count;
+	void *table;
+	int32_t count;
 
-		fread(&count, 1, sizeof(count), fp);
-		*table = calloc(count, sizeof(struct talk_proc));
+	fread(&count, 1, sizeof(count), fp);
+	table = calloc(count, sizeof(struct talk_proc));
 
-		for (int i = 0; i < count; ++i) {
-				struct talk_proc *talk = &(*table)[i];
+	for (int i = 0; i < count; ++i) {
+		struct talk_proc *talk = table + i * sizeof(struct talk_proc);
 
 		pw_elements_read_talk_proc(talk, fp);
-		}
-
-		return count;
-}
-
-static void
-pw_elements_write_talk_proc(struct talk_proc *talk, FILE *fp)
-{
-	fwrite(&talk->id, 1, sizeof(talk->id), fp);
-	fwrite(&talk->name, 1, sizeof(talk->name), fp);
-
-	fwrite(&talk->questions_cnt, 1, sizeof(talk->questions_cnt), fp);
-	for (int q = 0; q < talk->questions_cnt; ++q) {
-		struct question *question = &talk->questions[q];
-		fwrite(&question->id, 1, sizeof(question->id), fp);
-		fwrite(&question->control, 1, sizeof(question->control), fp);
-
-		fwrite(&question->text_size, 1, sizeof(question->text_size), fp);
-		fwrite(question->text, 1, question->text_size * sizeof(*question->text), fp);
-
-		fwrite(&question->choices_cnt, 1, sizeof(question->choices_cnt), fp);
-		fwrite(question->choices, 1, question->choices_cnt * sizeof(*question->choices), fp);
 	}
-}
 
-static void
-pw_elements_save_talk_proc(struct talk_proc *table, uint32_t count, FILE *fp)
-{
-		fwrite(&count, 1, sizeof(count), fp);
-		for (int i = 0; i < count; ++i) {
-				struct talk_proc *talk = &table[i];
-
-		pw_elements_write_talk_proc(talk, fp);
-	}
+	return count;
 }
 
 static void
@@ -1725,127 +1745,132 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 		return 1;
 	}
 
-	el->equipment_addon_cnt = pw_elements_load_table((void **)&el->equipment_addon, sizeof(struct equipment_addon), fp);
-	el->weapon_major_type_cnt = pw_elements_load_table((void **)&el->weapon_major_type, sizeof(struct weapon_major_type), fp);
-	el->weapon_sub_type_cnt = pw_elements_load_table((void **)&el->weapon_sub_type, sizeof(struct weapon_sub_type), fp);
-	el->weapon_essence_cnt = pw_elements_load_table((void **)&el->weapon_essence, sizeof(struct weapon_essence), fp);
-	el->armor_major_type_cnt = pw_elements_load_table((void **)&el->armor_major_type, sizeof(struct armor_major_type), fp);
-	el->armor_sub_type_cnt = pw_elements_load_table((void **)&el->armor_sub_type, sizeof(struct armor_sub_type), fp);
-	el->armor_essence_cnt = pw_elements_load_table((void **)&el->armor_essence, sizeof(struct armor_essence), fp);
-	el->decoration_major_type_cnt = pw_elements_load_table((void **)&el->decoration_major_type, sizeof(struct decoration_major_type), fp);
-	el->decoration_sub_type_cnt = pw_elements_load_table((void **)&el->decoration_sub_type, sizeof(struct decoration_sub_type), fp);
-	el->decoration_essence_cnt = pw_elements_load_table((void **)&el->decoration_essence, sizeof(struct decoration_essence), fp);
-	el->medicine_major_type_cnt = pw_elements_load_table((void **)&el->medicine_major_type, sizeof(struct medicine_major_type), fp);
-	el->medicine_sub_type_cnt = pw_elements_load_table((void **)&el->medicine_sub_type, sizeof(struct medicine_sub_type), fp);
-	el->medicine_essence_cnt = pw_elements_load_table((void **)&el->medicine_essence, sizeof(struct medicine_essence), fp);
-	el->material_major_type_cnt = pw_elements_load_table((void **)&el->material_major_type, sizeof(struct material_major_type), fp);
-	el->material_sub_type_cnt = pw_elements_load_table((void **)&el->material_sub_type, sizeof(struct material_sub_type), fp);
-	el->material_essence_cnt = pw_elements_load_table((void **)&el->material_essence, sizeof(struct material_essence), fp);
-	el->damagerune_sub_type_cnt = pw_elements_load_table((void **)&el->damagerune_sub_type, sizeof(struct damagerune_sub_type), fp);
-	el->damagerune_essence_cnt = pw_elements_load_table((void **)&el->damagerune_essence, sizeof(struct damagerune_essence), fp);
-	el->armorrune_sub_type_cnt = pw_elements_load_table((void **)&el->armorrune_sub_type, sizeof(struct armorrune_sub_type), fp);
-	el->armorrune_essence_cnt = pw_elements_load_table((void **)&el->armorrune_essence, sizeof(struct armorrune_essence), fp);
+#define LOAD_ARR(arr_name) \
+	pw_elements_load_table(el, &el->arr_name, # arr_name, sizeof(struct arr_name), arr_name ## _serializer, fp)
+
+	LOAD_ARR(equipment_addon);
+	LOAD_ARR(weapon_major_type);
+	LOAD_ARR(weapon_sub_type);
+	LOAD_ARR(weapon_essence);
+	LOAD_ARR(armor_major_type);
+	LOAD_ARR(armor_sub_type);
+	LOAD_ARR(armor_essence);
+	LOAD_ARR(decoration_major_type);
+	LOAD_ARR(decoration_sub_type);
+	LOAD_ARR(decoration_essence);
+	LOAD_ARR(medicine_major_type);
+	LOAD_ARR(medicine_sub_type);
+	LOAD_ARR(medicine_essence);
+	LOAD_ARR(material_major_type);
+	LOAD_ARR(material_sub_type);
+	LOAD_ARR(material_essence);
+	LOAD_ARR(damagerune_sub_type);
+	LOAD_ARR(damagerune_essence);
+	LOAD_ARR(armorrune_sub_type);
+	LOAD_ARR(armorrune_essence);
 	load_control_block_0(&el->control_block0, fp);
-	el->skilltome_sub_type_cnt = pw_elements_load_table((void **)&el->skilltome_sub_type, sizeof(struct skilltome_sub_type), fp);
-	el->skilltome_essence_cnt = pw_elements_load_table((void **)&el->skilltome_essence, sizeof(struct skilltome_essence), fp);
-	el->flysword_essence_cnt = pw_elements_load_table((void **)&el->flysword_essence, sizeof(struct flysword_essence), fp);
-	el->wingmanwing_essence_cnt = pw_elements_load_table((void **)&el->wingmanwing_essence, sizeof(struct wingmanwing_essence), fp);
-	el->townscroll_essence_cnt = pw_elements_load_table((void **)&el->townscroll_essence, sizeof(struct townscroll_essence), fp);
-	el->unionscroll_essence_cnt = pw_elements_load_table((void **)&el->unionscroll_essence, sizeof(struct unionscroll_essence), fp);
-	el->revivescroll_essence_cnt = pw_elements_load_table((void **)&el->revivescroll_essence, sizeof(struct revivescroll_essence), fp);
-	el->element_essence_cnt = pw_elements_load_table((void **)&el->element_essence, sizeof(struct element_essence), fp);
-	el->taskmatter_essence_cnt = pw_elements_load_table((void **)&el->taskmatter_essence, sizeof(struct taskmatter_essence), fp);
-	el->tossmatter_essence_cnt = pw_elements_load_table((void **)&el->tossmatter_essence, sizeof(struct tossmatter_essence), fp);
-	el->projectile_type_cnt = pw_elements_load_table((void **)&el->projectile_type, sizeof(struct projectile_type), fp);
-	el->projectile_essence_cnt = pw_elements_load_table((void **)&el->projectile_essence, sizeof(struct projectile_essence), fp);
-	el->quiver_sub_type_cnt = pw_elements_load_table((void **)&el->quiver_sub_type, sizeof(struct quiver_sub_type), fp);
-	el->quiver_essence_cnt = pw_elements_load_table((void **)&el->quiver_essence, sizeof(struct quiver_essence), fp);
-	el->stone_sub_type_cnt = pw_elements_load_table((void **)&el->stone_sub_type, sizeof(struct stone_sub_type), fp);
-	el->stone_essence_cnt = pw_elements_load_table((void **)&el->stone_essence, sizeof(struct stone_essence), fp);
-	el->monster_addon_cnt = pw_elements_load_table((void **)&el->monster_addon, sizeof(struct monster_addon), fp);
-	el->monster_type_cnt = pw_elements_load_table((void **)&el->monster_type, sizeof(struct monster_type), fp);
-	el->monster_essence_cnt = pw_elements_load_table((void **)&el->monster_essence, sizeof(struct monster_essence), fp);
-	el->npc_talk_service_cnt = pw_elements_load_table((void **)&el->npc_talk_service, sizeof(struct npc_talk_service), fp);
-	el->npc_sell_service_cnt = pw_elements_load_table((void **)&el->npc_sell_service, sizeof(struct npc_sell_service), fp);
-	el->npc_buy_service_cnt = pw_elements_load_table((void **)&el->npc_buy_service, sizeof(struct npc_buy_service), fp);
-	el->npc_repair_service_cnt = pw_elements_load_table((void **)&el->npc_repair_service, sizeof(struct npc_repair_service), fp);
-	el->npc_install_service_cnt = pw_elements_load_table((void **)&el->npc_install_service, sizeof(struct npc_install_service), fp);
-	el->npc_uninstall_service_cnt = pw_elements_load_table((void **)&el->npc_uninstall_service, sizeof(struct npc_uninstall_service), fp);
-	el->npc_task_in_service_cnt = pw_elements_load_table((void **)&el->npc_task_in_service, sizeof(struct npc_task_in_service), fp);
-	el->npc_task_out_service_cnt = pw_elements_load_table((void **)&el->npc_task_out_service, sizeof(struct npc_task_out_service), fp);
-	el->npc_task_matter_service_cnt = pw_elements_load_table((void **)&el->npc_task_matter_service, sizeof(struct npc_task_matter_service), fp);
-	el->npc_skill_service_cnt = pw_elements_load_table((void **)&el->npc_skill_service, sizeof(struct npc_skill_service), fp);
-	el->npc_heal_service_cnt = pw_elements_load_table((void **)&el->npc_heal_service, sizeof(struct npc_heal_service), fp);
-	el->npc_transmit_service_cnt = pw_elements_load_table((void **)&el->npc_transmit_service, sizeof(struct npc_transmit_service), fp);
-	el->npc_transport_service_cnt = pw_elements_load_table((void **)&el->npc_transport_service, sizeof(struct npc_transport_service), fp);
-	el->npc_proxy_service_cnt = pw_elements_load_table((void **)&el->npc_proxy_service, sizeof(struct npc_proxy_service), fp);
-	el->npc_storage_service_cnt = pw_elements_load_table((void **)&el->npc_storage_service, sizeof(struct npc_storage_service), fp);
-	el->npc_make_service_cnt = pw_elements_load_table((void **)&el->npc_make_service, sizeof(struct npc_make_service), fp);
-	el->npc_decompose_service_cnt = pw_elements_load_table((void **)&el->npc_decompose_service, sizeof(struct npc_decompose_service), fp);
-	el->npc_type_cnt = pw_elements_load_table((void **)&el->npc_type, sizeof(struct npc_type), fp);
-	el->npc_essence_cnt = pw_elements_load_table((void **)&el->npc_essence, sizeof(struct npc_essence), fp);
-	el->talk_proc_cnt = pw_elements_load_talk_proc(&el->talk_proc, fp);
-	el->face_texture_essence_cnt = pw_elements_load_table((void **)&el->face_texture_essence, sizeof(struct face_texture_essence), fp);
-	el->face_shape_essence_cnt = pw_elements_load_table((void **)&el->face_shape_essence, sizeof(struct face_shape_essence), fp);
-	el->face_emotion_type_cnt = pw_elements_load_table((void **)&el->face_emotion_type, sizeof(struct face_emotion_type), fp);
-	el->face_expression_essence_cnt = pw_elements_load_table((void **)&el->face_expression_essence, sizeof(struct face_expression_essence), fp);
-	el->face_hair_essence_cnt = pw_elements_load_table((void **)&el->face_hair_essence, sizeof(struct face_hair_essence), fp);
-	el->face_moustache_essence_cnt = pw_elements_load_table((void **)&el->face_moustache_essence, sizeof(struct face_moustache_essence), fp);
-	el->colorpicker_essence_cnt = pw_elements_load_table((void **)&el->colorpicker_essence, sizeof(struct colorpicker_essence), fp);
-	el->customizedata_essence_cnt = pw_elements_load_table((void **)&el->customizedata_essence, sizeof(struct customizedata_essence), fp);
-	el->recipe_major_type_cnt = pw_elements_load_table((void **)&el->recipe_major_type, sizeof(struct recipe_major_type), fp);
-	el->recipe_sub_type_cnt = pw_elements_load_table((void **)&el->recipe_sub_type, sizeof(struct recipe_sub_type), fp);
-	el->recipe_essence_cnt = pw_elements_load_table((void **)&el->recipe_essence, sizeof(struct recipe_essence), fp);
-	el->enemy_faction_config_cnt = pw_elements_load_table((void **)&el->enemy_faction_config, sizeof(struct enemy_faction_config), fp);
-	el->charracter_class_config_cnt = pw_elements_load_table((void **)&el->charracter_class_config, sizeof(struct charracter_class_config), fp);
-	el->param_adjust_config_cnt = pw_elements_load_table((void **)&el->param_adjust_config, sizeof(struct param_adjust_config), fp);
-	el->player_action_info_config_cnt = pw_elements_load_table((void **)&el->player_action_info_config, sizeof(struct player_action_info_config), fp);
-	el->taskdice_essence_cnt = pw_elements_load_table((void **)&el->taskdice_essence, sizeof(struct taskdice_essence), fp);
-	el->tasknormalmatter_essence_cnt = pw_elements_load_table((void **)&el->tasknormalmatter_essence, sizeof(struct tasknormalmatter_essence), fp);
-	el->face_faling_essence_cnt = pw_elements_load_table((void **)&el->face_faling_essence, sizeof(struct face_faling_essence), fp);
-	el->player_levelexp_config_cnt = pw_elements_load_table((void **)&el->player_levelexp_config, sizeof(struct player_levelexp_config), fp);
-	el->mine_type_cnt = pw_elements_load_table((void **)&el->mine_type, sizeof(struct mine_type), fp);
-	el->mine_essence_cnt = pw_elements_load_table((void **)&el->mine_essence, sizeof(struct mine_essence), fp);
-	el->npc_identify_service_cnt = pw_elements_load_table((void **)&el->npc_identify_service, sizeof(struct npc_identify_service), fp);
-	el->fashion_major_type_cnt = pw_elements_load_table((void **)&el->fashion_major_type, sizeof(struct fashion_major_type), fp);
-	el->fashion_sub_type_cnt = pw_elements_load_table((void **)&el->fashion_sub_type, sizeof(struct fashion_sub_type), fp);
-	el->fashion_essence_cnt = pw_elements_load_table((void **)&el->fashion_essence, sizeof(struct fashion_essence), fp);
-	el->faceticket_major_type_cnt = pw_elements_load_table((void **)&el->faceticket_major_type, sizeof(struct faceticket_major_type), fp);
-	el->faceticket_sub_type_cnt = pw_elements_load_table((void **)&el->faceticket_sub_type, sizeof(struct faceticket_sub_type), fp);
-	el->faceticket_essence_cnt = pw_elements_load_table((void **)&el->faceticket_essence, sizeof(struct faceticket_essence), fp);
-	el->facepill_major_type_cnt = pw_elements_load_table((void **)&el->facepill_major_type, sizeof(struct facepill_major_type), fp);
-	el->facepill_sub_type_cnt = pw_elements_load_table((void **)&el->facepill_sub_type, sizeof(struct facepill_sub_type), fp);
-	el->facepill_essence_cnt = pw_elements_load_table((void **)&el->facepill_essence, sizeof(struct facepill_essence), fp);
-	el->suite_essence_cnt = pw_elements_load_table((void **)&el->suite_essence, sizeof(struct suite_essence), fp);
-	el->gm_generator_type_cnt = pw_elements_load_table((void **)&el->gm_generator_type, sizeof(struct gm_generator_type), fp);
-	el->gm_generator_essence_cnt = pw_elements_load_table((void **)&el->gm_generator_essence, sizeof(struct gm_generator_essence), fp);
-	el->pet_type_cnt = pw_elements_load_table((void **)&el->pet_type, sizeof(struct pet_type), fp);
-	el->pet_essence_cnt = pw_elements_load_table((void **)&el->pet_essence, sizeof(struct pet_essence), fp);
-	el->pet_egg_essence_cnt = pw_elements_load_table((void **)&el->pet_egg_essence, sizeof(struct pet_egg_essence), fp);
-	el->pet_food_essence_cnt = pw_elements_load_table((void **)&el->pet_food_essence, sizeof(struct pet_food_essence), fp);
-	el->pet_faceticket_essence_cnt = pw_elements_load_table((void **)&el->pet_faceticket_essence, sizeof(struct pet_faceticket_essence), fp);
-	el->fireworks_essence_cnt = pw_elements_load_table((void **)&el->fireworks_essence, sizeof(struct fireworks_essence), fp);
-	el->war_tankcallin_essence_cnt = pw_elements_load_table((void **)&el->war_tankcallin_essence, sizeof(struct war_tankcallin_essence), fp);
+	LOAD_ARR(skilltome_sub_type);
+	LOAD_ARR(skilltome_essence);
+	LOAD_ARR(flysword_essence);
+	LOAD_ARR(wingmanwing_essence);
+	LOAD_ARR(townscroll_essence);
+	LOAD_ARR(unionscroll_essence);
+	LOAD_ARR(revivescroll_essence);
+	LOAD_ARR(element_essence);
+	LOAD_ARR(taskmatter_essence);
+	LOAD_ARR(tossmatter_essence);
+	LOAD_ARR(projectile_type);
+	LOAD_ARR(projectile_essence);
+	LOAD_ARR(quiver_sub_type);
+	LOAD_ARR(quiver_essence);
+	LOAD_ARR(stone_sub_type);
+	LOAD_ARR(stone_essence);
+	LOAD_ARR(monster_addon);
+	LOAD_ARR(monster_type);
+	LOAD_ARR(monster_essence);
+	LOAD_ARR(npc_talk_service);
+	LOAD_ARR(npc_sell_service);
+	LOAD_ARR(npc_buy_service);
+	LOAD_ARR(npc_repair_service);
+	LOAD_ARR(npc_install_service);
+	LOAD_ARR(npc_uninstall_service);
+	LOAD_ARR(npc_task_in_service);
+	LOAD_ARR(npc_task_out_service);
+	LOAD_ARR(npc_task_matter_service);
+	LOAD_ARR(npc_skill_service);
+	LOAD_ARR(npc_heal_service);
+	LOAD_ARR(npc_transmit_service);
+	LOAD_ARR(npc_transport_service);
+	LOAD_ARR(npc_proxy_service);
+	LOAD_ARR(npc_storage_service);
+	LOAD_ARR(npc_make_service);
+	LOAD_ARR(npc_decompose_service);
+	LOAD_ARR(npc_type);
+	LOAD_ARR(npc_essence);
+	pw_elements_load_talk_proc(fp);
+	LOAD_ARR(face_texture_essence);
+	LOAD_ARR(face_shape_essence);
+	LOAD_ARR(face_emotion_type);
+	LOAD_ARR(face_expression_essence);
+	LOAD_ARR(face_hair_essence);
+	LOAD_ARR(face_moustache_essence);
+	LOAD_ARR(colorpicker_essence);
+	LOAD_ARR(customizedata_essence);
+	LOAD_ARR(recipe_major_type);
+	LOAD_ARR(recipe_sub_type);
+	LOAD_ARR(recipe_essence);
+	LOAD_ARR(enemy_faction_config);
+	LOAD_ARR(charracter_class_config);
+	LOAD_ARR(param_adjust_config);
+	LOAD_ARR(player_action_info_config);
+	LOAD_ARR(taskdice_essence);
+	LOAD_ARR(tasknormalmatter_essence);
+	LOAD_ARR(face_faling_essence);
+	LOAD_ARR(player_levelexp_config);
+	LOAD_ARR(mine_type);
+	LOAD_ARR(mine_essence);
+	LOAD_ARR(npc_identify_service);
+	LOAD_ARR(fashion_major_type);
+	LOAD_ARR(fashion_sub_type);
+	LOAD_ARR(fashion_essence);
+	LOAD_ARR(faceticket_major_type);
+	LOAD_ARR(faceticket_sub_type);
+	LOAD_ARR(faceticket_essence);
+	LOAD_ARR(facepill_major_type);
+	LOAD_ARR(facepill_sub_type);
+	LOAD_ARR(facepill_essence);
+	LOAD_ARR(suite_essence);
+	LOAD_ARR(gm_generator_type);
+	LOAD_ARR(gm_generator_essence);
+	LOAD_ARR(pet_type);
+	LOAD_ARR(pet_essence);
+	LOAD_ARR(pet_egg_essence);
+	LOAD_ARR(pet_food_essence);
+	LOAD_ARR(pet_faceticket_essence);
+	LOAD_ARR(fireworks_essence);
+	LOAD_ARR(war_tankcallin_essence);
 	load_control_block_1(&el->control_block1, fp);
-	el->npc_war_towerbuild_service_cnt = pw_elements_load_table((void **)&el->npc_war_towerbuild_service, sizeof(struct npc_war_towerbuild_service), fp);
-	el->player_secondlevel_config_cnt = pw_elements_load_table((void **)&el->player_secondlevel_config, sizeof(struct player_secondlevel_config), fp);
-	el->npc_resetprop_service_cnt = pw_elements_load_table((void **)&el->npc_resetprop_service, sizeof(struct npc_resetprop_service), fp);
-	el->npc_petname_service_cnt = pw_elements_load_table((void **)&el->npc_petname_service, sizeof(struct npc_petname_service), fp);
-	el->npc_petlearnskill_service_cnt = pw_elements_load_table((void **)&el->npc_petlearnskill_service, sizeof(struct npc_petlearnskill_service), fp);
-	el->npc_petforgetskill_service_cnt = pw_elements_load_table((void **)&el->npc_petforgetskill_service, sizeof(struct npc_petforgetskill_service), fp);
-	el->skillmatter_essence_cnt = pw_elements_load_table((void **)&el->skillmatter_essence, sizeof(struct skillmatter_essence), fp);
-	el->refine_ticket_essence_cnt = pw_elements_load_table((void **)&el->refine_ticket_essence, sizeof(struct refine_ticket_essence), fp);
-	el->destroying_essence_cnt = pw_elements_load_table((void **)&el->destroying_essence, sizeof(struct destroying_essence), fp);
-	el->npc_equipbind_service_cnt = pw_elements_load_table((void **)&el->npc_equipbind_service, sizeof(struct npc_equipbind_service), fp);
-	el->npc_equipdestroy_service_cnt = pw_elements_load_table((void **)&el->npc_equipdestroy_service, sizeof(struct npc_equipdestroy_service), fp);
-	el->npc_equipundestroy_service_cnt = pw_elements_load_table((void **)&el->npc_equipundestroy_service, sizeof(struct npc_equipundestroy_service), fp);
-	el->bible_essence_cnt = pw_elements_load_table((void **)&el->bible_essence, sizeof(struct bible_essence), fp);
-	el->speaker_essence_cnt = pw_elements_load_table((void **)&el->speaker_essence, sizeof(struct speaker_essence), fp);
-	el->autohp_essence_cnt = pw_elements_load_table((void **)&el->autohp_essence, sizeof(struct autohp_essence), fp);
-	el->automp_essence_cnt = pw_elements_load_table((void **)&el->automp_essence, sizeof(struct automp_essence), fp);
-	el->double_exp_essence_cnt = pw_elements_load_table((void **)&el->double_exp_essence, sizeof(struct double_exp_essence), fp);
-	el->transmitscroll_essence_cnt = pw_elements_load_table((void **)&el->transmitscroll_essence, sizeof(struct transmitscroll_essence), fp);
-	el->dye_ticket_essence_cnt = pw_elements_load_table((void **)&el->dye_ticket_essence, sizeof(struct dye_ticket_essence), fp);
+	LOAD_ARR(npc_war_towerbuild_service);
+	LOAD_ARR(player_secondlevel_config);
+	LOAD_ARR(npc_resetprop_service);
+	LOAD_ARR(npc_petname_service);
+	LOAD_ARR(npc_petlearnskill_service);
+	LOAD_ARR(npc_petforgetskill_service);
+	LOAD_ARR(skillmatter_essence);
+	LOAD_ARR(refine_ticket_essence);
+	LOAD_ARR(destroying_essence);
+	LOAD_ARR(npc_equipbind_service);
+	LOAD_ARR(npc_equipdestroy_service);
+	LOAD_ARR(npc_equipundestroy_service);
+	LOAD_ARR(bible_essence);
+	LOAD_ARR(speaker_essence);
+	LOAD_ARR(autohp_essence);
+	LOAD_ARR(automp_essence);
+	LOAD_ARR(double_exp_essence);
+	LOAD_ARR(transmitscroll_essence);
+	LOAD_ARR(dye_ticket_essence);
+
+#undef LOAD_ARR
 
 	fclose(fp);
 
@@ -1855,327 +1880,3 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 	return rc;
 }
 
-int
-pw_elements_save(struct pw_elements *el, const char *filename)
-{
-	FILE *fp = fopen(filename, "wb");
-	if (fp == NULL) {
-		fprintf(stderr, "cant open %s\n", filename);
-		return 1;
-	}
-
-	fwrite(&el->hdr, 1, sizeof(el->hdr), fp);
-
-	pw_elements_save_table((void *)el->equipment_addon, sizeof(struct equipment_addon), el->equipment_addon_cnt, fp);
-	pw_elements_save_table((void *)el->weapon_major_type, sizeof(struct weapon_major_type), el->weapon_major_type_cnt, fp);
-	pw_elements_save_table((void *)el->weapon_sub_type, sizeof(struct weapon_sub_type), el->weapon_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->weapon_essence, sizeof(struct weapon_essence), el->weapon_essence_cnt, fp);
-	pw_elements_save_table((void *)el->armor_major_type, sizeof(struct armor_major_type), el->armor_major_type_cnt, fp);
-	pw_elements_save_table((void *)el->armor_sub_type, sizeof(struct armor_sub_type), el->armor_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->armor_essence, sizeof(struct armor_essence), el->armor_essence_cnt, fp);
-	pw_elements_save_table((void *)el->decoration_major_type, sizeof(struct decoration_major_type), el->decoration_major_type_cnt, fp);
-	pw_elements_save_table((void *)el->decoration_sub_type, sizeof(struct decoration_sub_type), el->decoration_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->decoration_essence, sizeof(struct decoration_essence), el->decoration_essence_cnt, fp);
-	pw_elements_save_table((void *)el->medicine_major_type, sizeof(struct medicine_major_type), el->medicine_major_type_cnt, fp);
-	pw_elements_save_table((void *)el->medicine_sub_type, sizeof(struct medicine_sub_type), el->medicine_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->medicine_essence, sizeof(struct medicine_essence), el->medicine_essence_cnt, fp);
-	pw_elements_save_table((void *)el->material_major_type, sizeof(struct material_major_type), el->material_major_type_cnt, fp);
-	pw_elements_save_table((void *)el->material_sub_type, sizeof(struct material_sub_type), el->material_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->material_essence, sizeof(struct material_essence), el->material_essence_cnt, fp);
-	pw_elements_save_table((void *)el->damagerune_sub_type, sizeof(struct damagerune_sub_type), el->damagerune_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->damagerune_essence, sizeof(struct damagerune_essence), el->damagerune_essence_cnt, fp);
-	pw_elements_save_table((void *)el->armorrune_sub_type, sizeof(struct armorrune_sub_type), el->armorrune_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->armorrune_essence, sizeof(struct armorrune_essence), el->armorrune_essence_cnt, fp);
-	save_control_block_0(&el->control_block0, fp);
-	pw_elements_save_table((void *)el->skilltome_sub_type, sizeof(struct skilltome_sub_type), el->skilltome_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->skilltome_essence, sizeof(struct skilltome_essence), el->skilltome_essence_cnt, fp);
-	pw_elements_save_table((void *)el->flysword_essence, sizeof(struct flysword_essence), el->flysword_essence_cnt, fp);
-	pw_elements_save_table((void *)el->wingmanwing_essence, sizeof(struct wingmanwing_essence), el->wingmanwing_essence_cnt, fp);
-	pw_elements_save_table((void *)el->townscroll_essence, sizeof(struct townscroll_essence), el->townscroll_essence_cnt, fp);
-	pw_elements_save_table((void *)el->unionscroll_essence, sizeof(struct unionscroll_essence), el->unionscroll_essence_cnt, fp);
-	pw_elements_save_table((void *)el->revivescroll_essence, sizeof(struct revivescroll_essence), el->revivescroll_essence_cnt, fp);
-	pw_elements_save_table((void *)el->element_essence, sizeof(struct element_essence), el->element_essence_cnt, fp);
-	pw_elements_save_table((void *)el->taskmatter_essence, sizeof(struct taskmatter_essence), el->taskmatter_essence_cnt, fp);
-	pw_elements_save_table((void *)el->tossmatter_essence, sizeof(struct tossmatter_essence), el->tossmatter_essence_cnt, fp);
-	pw_elements_save_table((void *)el->projectile_type, sizeof(struct projectile_type), el->projectile_type_cnt, fp);
-	pw_elements_save_table((void *)el->projectile_essence, sizeof(struct projectile_essence), el->projectile_essence_cnt, fp);
-	pw_elements_save_table((void *)el->quiver_sub_type, sizeof(struct quiver_sub_type), el->quiver_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->quiver_essence, sizeof(struct quiver_essence), el->quiver_essence_cnt, fp);
-	pw_elements_save_table((void *)el->stone_sub_type, sizeof(struct stone_sub_type), el->stone_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->stone_essence, sizeof(struct stone_essence), el->stone_essence_cnt, fp);
-	pw_elements_save_table((void *)el->monster_addon, sizeof(struct monster_addon), el->monster_addon_cnt, fp);
-	pw_elements_save_table((void *)el->monster_type, sizeof(struct monster_type), el->monster_type_cnt, fp);
-	pw_elements_save_table((void *)el->monster_essence, sizeof(struct monster_essence), el->monster_essence_cnt, fp);
-	pw_elements_save_table((void *)el->npc_talk_service, sizeof(struct npc_talk_service), el->npc_talk_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_sell_service, sizeof(struct npc_sell_service), el->npc_sell_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_buy_service, sizeof(struct npc_buy_service), el->npc_buy_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_repair_service, sizeof(struct npc_repair_service), el->npc_repair_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_install_service, sizeof(struct npc_install_service), el->npc_install_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_uninstall_service, sizeof(struct npc_uninstall_service), el->npc_uninstall_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_task_in_service, sizeof(struct npc_task_in_service), el->npc_task_in_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_task_out_service, sizeof(struct npc_task_out_service), el->npc_task_out_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_task_matter_service, sizeof(struct npc_task_matter_service), el->npc_task_matter_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_skill_service, sizeof(struct npc_skill_service), el->npc_skill_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_heal_service, sizeof(struct npc_heal_service), el->npc_heal_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_transmit_service, sizeof(struct npc_transmit_service), el->npc_transmit_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_transport_service, sizeof(struct npc_transport_service), el->npc_transport_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_proxy_service, sizeof(struct npc_proxy_service), el->npc_proxy_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_storage_service, sizeof(struct npc_storage_service), el->npc_storage_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_make_service, sizeof(struct npc_make_service), el->npc_make_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_decompose_service, sizeof(struct npc_decompose_service), el->npc_decompose_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_type, sizeof(struct npc_type), el->npc_type_cnt, fp);
-	pw_elements_save_table((void *)el->npc_essence, sizeof(struct npc_essence), el->npc_essence_cnt, fp);
-	pw_elements_save_talk_proc(el->talk_proc, el->talk_proc_cnt, fp);
-	pw_elements_save_table((void *)el->face_texture_essence, sizeof(struct face_texture_essence), el->face_texture_essence_cnt, fp);
-	pw_elements_save_table((void *)el->face_shape_essence, sizeof(struct face_shape_essence), el->face_shape_essence_cnt, fp);
-	pw_elements_save_table((void *)el->face_emotion_type, sizeof(struct face_emotion_type), el->face_emotion_type_cnt, fp);
-	pw_elements_save_table((void *)el->face_expression_essence, sizeof(struct face_expression_essence), el->face_expression_essence_cnt, fp);
-	pw_elements_save_table((void *)el->face_hair_essence, sizeof(struct face_hair_essence), el->face_hair_essence_cnt, fp);
-	pw_elements_save_table((void *)el->face_moustache_essence, sizeof(struct face_moustache_essence), el->face_moustache_essence_cnt, fp);
-	pw_elements_save_table((void *)el->colorpicker_essence, sizeof(struct colorpicker_essence), el->colorpicker_essence_cnt, fp);
-	pw_elements_save_table((void *)el->customizedata_essence, sizeof(struct customizedata_essence), el->customizedata_essence_cnt, fp);
-	pw_elements_save_table((void *)el->recipe_major_type, sizeof(struct recipe_major_type), el->recipe_major_type_cnt, fp);
-	pw_elements_save_table((void *)el->recipe_sub_type, sizeof(struct recipe_sub_type), el->recipe_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->recipe_essence, sizeof(struct recipe_essence), el->recipe_essence_cnt, fp);
-	pw_elements_save_table((void *)el->enemy_faction_config, sizeof(struct enemy_faction_config), el->enemy_faction_config_cnt, fp);
-	pw_elements_save_table((void *)el->charracter_class_config, sizeof(struct charracter_class_config), el->charracter_class_config_cnt, fp);
-	pw_elements_save_table((void *)el->param_adjust_config, sizeof(struct param_adjust_config), el->param_adjust_config_cnt, fp);
-	pw_elements_save_table((void *)el->player_action_info_config, sizeof(struct player_action_info_config), el->player_action_info_config_cnt, fp);
-	pw_elements_save_table((void *)el->taskdice_essence, sizeof(struct taskdice_essence), el->taskdice_essence_cnt, fp);
-	pw_elements_save_table((void *)el->tasknormalmatter_essence, sizeof(struct tasknormalmatter_essence), el->tasknormalmatter_essence_cnt, fp);
-	pw_elements_save_table((void *)el->face_faling_essence, sizeof(struct face_faling_essence), el->face_faling_essence_cnt, fp);
-	pw_elements_save_table((void *)el->player_levelexp_config, sizeof(struct player_levelexp_config), el->player_levelexp_config_cnt, fp);
-	pw_elements_save_table((void *)el->mine_type, sizeof(struct mine_type), el->mine_type_cnt, fp);
-	pw_elements_save_table((void *)el->mine_essence, sizeof(struct mine_essence), el->mine_essence_cnt, fp);
-	pw_elements_save_table((void *)el->npc_identify_service, sizeof(struct npc_identify_service), el->npc_identify_service_cnt, fp);
-	pw_elements_save_table((void *)el->fashion_major_type, sizeof(struct fashion_major_type), el->fashion_major_type_cnt, fp);
-	pw_elements_save_table((void *)el->fashion_sub_type, sizeof(struct fashion_sub_type), el->fashion_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->fashion_essence, sizeof(struct fashion_essence), el->fashion_essence_cnt, fp);
-	pw_elements_save_table((void *)el->faceticket_major_type, sizeof(struct faceticket_major_type), el->faceticket_major_type_cnt, fp);
-	pw_elements_save_table((void *)el->faceticket_sub_type, sizeof(struct faceticket_sub_type), el->faceticket_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->faceticket_essence, sizeof(struct faceticket_essence), el->faceticket_essence_cnt, fp);
-	pw_elements_save_table((void *)el->facepill_major_type, sizeof(struct facepill_major_type), el->facepill_major_type_cnt, fp);
-	pw_elements_save_table((void *)el->facepill_sub_type, sizeof(struct facepill_sub_type), el->facepill_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->facepill_essence, sizeof(struct facepill_essence), el->facepill_essence_cnt, fp);
-	pw_elements_save_table((void *)el->suite_essence, sizeof(struct suite_essence), el->suite_essence_cnt, fp);
-	pw_elements_save_table((void *)el->gm_generator_type, sizeof(struct gm_generator_type), el->gm_generator_type_cnt, fp);
-	pw_elements_save_table((void *)el->gm_generator_essence, sizeof(struct gm_generator_essence), el->gm_generator_essence_cnt, fp);
-	pw_elements_save_table((void *)el->pet_type, sizeof(struct pet_type), el->pet_type_cnt, fp);
-	pw_elements_save_table((void *)el->pet_essence, sizeof(struct pet_essence), el->pet_essence_cnt, fp);
-	pw_elements_save_table((void *)el->pet_egg_essence, sizeof(struct pet_egg_essence), el->pet_egg_essence_cnt, fp);
-	pw_elements_save_table((void *)el->pet_food_essence, sizeof(struct pet_food_essence), el->pet_food_essence_cnt, fp);
-	pw_elements_save_table((void *)el->pet_faceticket_essence, sizeof(struct pet_faceticket_essence), el->pet_faceticket_essence_cnt, fp);
-	pw_elements_save_table((void *)el->fireworks_essence, sizeof(struct fireworks_essence), el->fireworks_essence_cnt, fp);
-	pw_elements_save_table((void *)el->war_tankcallin_essence, sizeof(struct war_tankcallin_essence), el->war_tankcallin_essence_cnt, fp);
-	save_control_block_1(&el->control_block1, fp);
-	pw_elements_save_table((void *)el->npc_war_towerbuild_service, sizeof(struct npc_war_towerbuild_service), el->npc_war_towerbuild_service_cnt, fp);
-	pw_elements_save_table((void *)el->player_secondlevel_config, sizeof(struct player_secondlevel_config), el->player_secondlevel_config_cnt, fp);
-	pw_elements_save_table((void *)el->npc_resetprop_service, sizeof(struct npc_resetprop_service), el->npc_resetprop_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_petname_service, sizeof(struct npc_petname_service), el->npc_petname_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_petlearnskill_service, sizeof(struct npc_petlearnskill_service), el->npc_petlearnskill_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_petforgetskill_service, sizeof(struct npc_petforgetskill_service), el->npc_petforgetskill_service_cnt, fp);
-	pw_elements_save_table((void *)el->skillmatter_essence, sizeof(struct skillmatter_essence), el->skillmatter_essence_cnt, fp);
-	pw_elements_save_table((void *)el->refine_ticket_essence, sizeof(struct refine_ticket_essence), el->refine_ticket_essence_cnt, fp);
-	pw_elements_save_table((void *)el->destroying_essence, sizeof(struct destroying_essence), el->destroying_essence_cnt, fp);
-	pw_elements_save_table((void *)el->npc_equipbind_service, sizeof(struct npc_equipbind_service), el->npc_equipbind_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_equipdestroy_service, sizeof(struct npc_equipdestroy_service), el->npc_equipdestroy_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_equipundestroy_service, sizeof(struct npc_equipundestroy_service), el->npc_equipundestroy_service_cnt, fp);
-	pw_elements_save_table((void *)el->bible_essence, sizeof(struct bible_essence), el->bible_essence_cnt, fp);
-	pw_elements_save_table((void *)el->speaker_essence, sizeof(struct speaker_essence), el->speaker_essence_cnt, fp);
-	pw_elements_save_table((void *)el->autohp_essence, sizeof(struct autohp_essence), el->autohp_essence_cnt, fp);
-	pw_elements_save_table((void *)el->automp_essence, sizeof(struct automp_essence), el->automp_essence_cnt, fp);
-	pw_elements_save_table((void *)el->double_exp_essence, sizeof(struct double_exp_essence), el->double_exp_essence_cnt, fp);
-	pw_elements_save_table((void *)el->transmitscroll_essence, sizeof(struct transmitscroll_essence), el->transmitscroll_essence_cnt, fp);
-	pw_elements_save_table((void *)el->dye_ticket_essence, sizeof(struct dye_ticket_essence), el->dye_ticket_essence_cnt, fp);
-
-	fclose(fp);
-	return 0;
-}
-
-int
-pw_elements_save_srv(struct pw_elements *el, const char *filename)
-{
-	FILE* fp = fopen(filename, "wb");
-	if (fp == NULL) {
-		fprintf(stderr, "cant open %s\n", filename);
-		return 1;
-	}
-
-	struct header {
-			int16_t version;
-			int16_t signature;
-			int32_t unk1;
-	} hdr;
-
-	hdr.version = 10;
-	hdr.signature = 12288;
-	hdr.unk1 = 1196736793;
-	fwrite(&hdr, 1, sizeof(hdr), fp);
-
-	struct control_block0_10 {
-			int32_t unk1;
-			int32_t size;
-			char *unk2;
-			int32_t unk3;
-	} cb0;
-	cb0.unk1 = 2876672477;
-	cb0.size = 7;
-	cb0.unk2 = "\xdd\x89\x76\xab\x07\x00\x00\x00\xe7\x3f\xdc\x84\xe2\x27\xc0";
-	cb0.unk3 = 1196736793;
-
-	struct control_block1_10 {
-			int32_t unk1;
-			int32_t size;
-			char *unk2;
-	} cb1;
-	cb1.unk1 = 3996477343;
-	cb1.size = 121;
-	cb1.unk2 = "\x21\xe6\x88\xdc\x32\xb3\x2c\x13\x98\x86\x8f\xbe\xcc\x54\x59\x4d\x3c\xed\x38\xad\x51\xc2\x04\x4c\x13\x67\x57\x58\xe2\x4c\x80\x56\x25\xe2\x8c\x9d\x13\xfa\x18\x07\xb4\x82\xda\xd2\x69\xc1\xd4\xe4\xed\x18\x85\x70\xe5\xc6\x1c\x40\x0f\x6b\x47\x30\xc2\x8c\xa0\x46\x21\xc6\x94\x91\x6f\x3a\x00\x17\xa8\x96\xc6\xba\x1c\x6c\x71\xf9\x34\xfd\x34\xad\x29\xda\x1c\x40\xd3\x63\x57\x08\xfa\x50\x88\x4e\x3d\xc2\x98\x59\x16\x9f\x1d\x22\xd9\x87\xaf\x66\x08\x50\x5d\x41\x30\xed\x40\xa1\x5d\xd2\x04\x8c\xd3";
-
-	pw_elements_save_table((void *)el->equipment_addon, sizeof(struct equipment_addon), el->equipment_addon_cnt, fp);
-	pw_elements_save_table((void *)el->weapon_major_type, sizeof(struct weapon_major_type), el->weapon_major_type_cnt, fp);
-	pw_elements_save_table((void *)el->weapon_sub_type, sizeof(struct weapon_sub_type), el->weapon_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->weapon_essence, sizeof(struct weapon_essence), el->weapon_essence_cnt, fp);
-	pw_elements_save_table((void *)el->armor_major_type, sizeof(struct armor_major_type), el->armor_major_type_cnt, fp);
-	pw_elements_save_table((void *)el->armor_sub_type, sizeof(struct armor_sub_type), el->armor_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->armor_essence, sizeof(struct armor_essence), el->armor_essence_cnt, fp);
-	pw_elements_save_table((void *)el->decoration_major_type, sizeof(struct decoration_major_type), el->decoration_major_type_cnt, fp);
-	pw_elements_save_table((void *)el->decoration_sub_type, sizeof(struct decoration_sub_type), el->decoration_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->decoration_essence, sizeof(struct decoration_essence), el->decoration_essence_cnt, fp);
-	pw_elements_save_table((void *)el->medicine_major_type, sizeof(struct medicine_major_type), el->medicine_major_type_cnt, fp);
-	pw_elements_save_table((void *)el->medicine_sub_type, sizeof(struct medicine_sub_type), el->medicine_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->medicine_essence, sizeof(struct medicine_essence), el->medicine_essence_cnt, fp);
-	pw_elements_save_table((void *)el->material_major_type, sizeof(struct material_major_type), el->material_major_type_cnt, fp);
-	pw_elements_save_table((void *)el->material_sub_type, sizeof(struct material_sub_type), el->material_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->material_essence, sizeof(struct material_essence), el->material_essence_cnt, fp);
-	pw_elements_save_table((void *)el->damagerune_sub_type, sizeof(struct damagerune_sub_type), el->damagerune_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->damagerune_essence, sizeof(struct damagerune_essence), el->damagerune_essence_cnt, fp);
-	pw_elements_save_table((void *)el->armorrune_sub_type, sizeof(struct armorrune_sub_type), el->armorrune_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->armorrune_essence, sizeof(struct armorrune_essence), el->armorrune_essence_cnt, fp);
-	save_control_block_0((struct control_block0 *)&cb0, fp);
-	pw_elements_save_table((void *)el->skilltome_sub_type, sizeof(struct skilltome_sub_type), el->skilltome_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->skilltome_essence, sizeof(struct skilltome_essence), el->skilltome_essence_cnt, fp);
-	pw_elements_save_table((void *)el->flysword_essence, sizeof(struct flysword_essence), el->flysword_essence_cnt, fp);
-	pw_elements_save_table((void *)el->wingmanwing_essence, sizeof(struct wingmanwing_essence), el->wingmanwing_essence_cnt, fp);
-	pw_elements_save_table((void *)el->townscroll_essence, sizeof(struct townscroll_essence), el->townscroll_essence_cnt, fp);
-	pw_elements_save_table((void *)el->unionscroll_essence, sizeof(struct unionscroll_essence), el->unionscroll_essence_cnt, fp);
-	pw_elements_save_table((void *)el->revivescroll_essence, sizeof(struct revivescroll_essence), el->revivescroll_essence_cnt, fp);
-	pw_elements_save_table((void *)el->element_essence, sizeof(struct element_essence), el->element_essence_cnt, fp);
-	pw_elements_save_table((void *)el->taskmatter_essence, sizeof(struct taskmatter_essence), el->taskmatter_essence_cnt, fp);
-	pw_elements_save_table((void *)el->tossmatter_essence, sizeof(struct tossmatter_essence), el->tossmatter_essence_cnt, fp);
-	pw_elements_save_table((void *)el->projectile_type, sizeof(struct projectile_type), el->projectile_type_cnt, fp);
-	pw_elements_save_table((void *)el->projectile_essence, sizeof(struct projectile_essence), el->projectile_essence_cnt, fp);
-	pw_elements_save_table((void *)el->quiver_sub_type, sizeof(struct quiver_sub_type), el->quiver_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->quiver_essence, sizeof(struct quiver_essence), el->quiver_essence_cnt, fp);
-	pw_elements_save_table((void *)el->stone_sub_type, sizeof(struct stone_sub_type), el->stone_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->stone_essence, sizeof(struct stone_essence), el->stone_essence_cnt, fp);
-	pw_elements_save_table((void *)el->monster_addon, sizeof(struct monster_addon), el->monster_addon_cnt, fp);
-	pw_elements_save_table((void *)el->monster_type, sizeof(struct monster_type), el->monster_type_cnt, fp);
-	pw_elements_save_table((void *)el->monster_essence, sizeof(struct monster_essence), el->monster_essence_cnt, fp);
-	pw_elements_save_table((void *)el->npc_talk_service, sizeof(struct npc_talk_service), el->npc_talk_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_sell_service, sizeof(struct npc_sell_service), el->npc_sell_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_buy_service, sizeof(struct npc_buy_service), el->npc_buy_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_repair_service, sizeof(struct npc_repair_service), el->npc_repair_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_install_service, sizeof(struct npc_install_service), el->npc_install_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_uninstall_service, sizeof(struct npc_uninstall_service), el->npc_uninstall_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_task_in_service, sizeof(struct npc_task_in_service), el->npc_task_in_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_task_out_service, sizeof(struct npc_task_out_service), el->npc_task_out_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_task_matter_service, sizeof(struct npc_task_matter_service), el->npc_task_matter_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_skill_service, sizeof(struct npc_skill_service), el->npc_skill_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_heal_service, sizeof(struct npc_heal_service), el->npc_heal_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_transmit_service, sizeof(struct npc_transmit_service), el->npc_transmit_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_transport_service, sizeof(struct npc_transport_service), el->npc_transport_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_proxy_service, sizeof(struct npc_proxy_service), el->npc_proxy_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_storage_service, sizeof(struct npc_storage_service), el->npc_storage_service_cnt, fp);
-
-	/* patched npc_make_service */
-	fwrite(&el->npc_make_service_cnt, 1, sizeof(el->npc_make_service_cnt), fp);
-	for (unsigned i = 0; i < el->npc_make_service_cnt; i++) {
-		struct npc_make_service *s = &el->npc_make_service[i];
-		const size_t offset = offsetof(struct npc_make_service, produce_type);
-		const size_t skip = 4;
-		
-		fwrite(s, 1, offset, fp);
-		fwrite((char *)s + offset + skip, 1, sizeof(*s) - offset - skip, fp);
-	}
-
-	pw_elements_save_table((void *)el->npc_decompose_service, sizeof(struct npc_decompose_service), el->npc_decompose_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_type, sizeof(struct npc_type), el->npc_type_cnt, fp);
-	pw_elements_save_table((void *)el->npc_essence, sizeof(struct npc_essence), el->npc_essence_cnt, fp);
-	pw_elements_save_talk_proc(el->talk_proc, el->talk_proc_cnt, fp);
-	pw_elements_save_table((void *)el->face_texture_essence, sizeof(struct face_texture_essence), el->face_texture_essence_cnt, fp);
-	pw_elements_save_table((void *)el->face_shape_essence, sizeof(struct face_shape_essence), el->face_shape_essence_cnt, fp);
-	pw_elements_save_table((void *)el->face_emotion_type, sizeof(struct face_emotion_type), el->face_emotion_type_cnt, fp);
-	pw_elements_save_table((void *)el->face_expression_essence, sizeof(struct face_expression_essence), el->face_expression_essence_cnt, fp);
-	pw_elements_save_table((void *)el->face_hair_essence, sizeof(struct face_hair_essence), el->face_hair_essence_cnt, fp);
-	pw_elements_save_table((void *)el->face_moustache_essence, sizeof(struct face_moustache_essence), el->face_moustache_essence_cnt, fp);
-	pw_elements_save_table((void *)el->colorpicker_essence, sizeof(struct colorpicker_essence), el->colorpicker_essence_cnt, fp);
-	pw_elements_save_table((void *)el->customizedata_essence, sizeof(struct customizedata_essence), el->customizedata_essence_cnt, fp);
-	pw_elements_save_table((void *)el->recipe_major_type, sizeof(struct recipe_major_type), el->recipe_major_type_cnt, fp);
-	pw_elements_save_table((void *)el->recipe_sub_type, sizeof(struct recipe_sub_type), el->recipe_sub_type_cnt, fp);
-
-	/* patched recipe_essence */
-	fwrite(&el->recipe_essence_cnt, 1, sizeof(el->recipe_essence_cnt), fp);
-	for (unsigned i = 0; i < el->recipe_essence_cnt; i++) {
-		struct recipe_essence *s = &el->recipe_essence[i];
-		const size_t offset = offsetof(struct recipe_essence, bind_type);
-		const size_t skip = 4;
-		
-		fwrite(s, 1, offset, fp);
-		fwrite((char *)s + offset + skip, 1, sizeof(*s) - offset - skip, fp);
-	}
-
-	pw_elements_save_table((void *)el->enemy_faction_config, sizeof(struct enemy_faction_config), el->enemy_faction_config_cnt, fp);
-	pw_elements_save_table((void *)el->charracter_class_config, sizeof(struct charracter_class_config), el->charracter_class_config_cnt, fp);
-	pw_elements_save_table((void *)el->param_adjust_config, sizeof(struct param_adjust_config), el->param_adjust_config_cnt, fp);
-	pw_elements_save_table((void *)el->player_action_info_config, sizeof(struct player_action_info_config), el->player_action_info_config_cnt, fp);
-	pw_elements_save_table((void *)el->taskdice_essence, sizeof(struct taskdice_essence), el->taskdice_essence_cnt, fp);
-	pw_elements_save_table((void *)el->tasknormalmatter_essence, sizeof(struct tasknormalmatter_essence), el->tasknormalmatter_essence_cnt, fp);
-	pw_elements_save_table((void *)el->face_faling_essence, sizeof(struct face_faling_essence), el->face_faling_essence_cnt, fp);
-	pw_elements_save_table((void *)el->player_levelexp_config, sizeof(struct player_levelexp_config), el->player_levelexp_config_cnt, fp);
-	pw_elements_save_table((void *)el->mine_type, sizeof(struct mine_type), el->mine_type_cnt, fp);
-	pw_elements_save_table((void *)el->mine_essence, sizeof(struct mine_essence), el->mine_essence_cnt, fp);
-	pw_elements_save_table((void *)el->npc_identify_service, sizeof(struct npc_identify_service), el->npc_identify_service_cnt, fp);
-	pw_elements_save_table((void *)el->fashion_major_type, sizeof(struct fashion_major_type), el->fashion_major_type_cnt, fp);
-	pw_elements_save_table((void *)el->fashion_sub_type, sizeof(struct fashion_sub_type), el->fashion_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->fashion_essence, sizeof(struct fashion_essence), el->fashion_essence_cnt, fp);
-	pw_elements_save_table((void *)el->faceticket_major_type, sizeof(struct faceticket_major_type), el->faceticket_major_type_cnt, fp);
-	pw_elements_save_table((void *)el->faceticket_sub_type, sizeof(struct faceticket_sub_type), el->faceticket_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->faceticket_essence, sizeof(struct faceticket_essence), el->faceticket_essence_cnt, fp);
-	pw_elements_save_table((void *)el->facepill_major_type, sizeof(struct facepill_major_type), el->facepill_major_type_cnt, fp);
-	pw_elements_save_table((void *)el->facepill_sub_type, sizeof(struct facepill_sub_type), el->facepill_sub_type_cnt, fp);
-	pw_elements_save_table((void *)el->facepill_essence, sizeof(struct facepill_essence), el->facepill_essence_cnt, fp);
-	pw_elements_save_table((void *)el->suite_essence, sizeof(struct suite_essence), el->suite_essence_cnt, fp);
-	pw_elements_save_table((void *)el->gm_generator_type, sizeof(struct gm_generator_type), el->gm_generator_type_cnt, fp);
-	pw_elements_save_table((void *)el->gm_generator_essence, sizeof(struct gm_generator_essence), el->gm_generator_essence_cnt, fp);
-	pw_elements_save_table((void *)el->pet_type, sizeof(struct pet_type), el->pet_type_cnt, fp);
-	pw_elements_save_table((void *)el->pet_essence, sizeof(struct pet_essence), el->pet_essence_cnt, fp);
-	pw_elements_save_table((void *)el->pet_egg_essence, sizeof(struct pet_egg_essence), el->pet_egg_essence_cnt, fp);
-	pw_elements_save_table((void *)el->pet_food_essence, sizeof(struct pet_food_essence), el->pet_food_essence_cnt, fp);
-	pw_elements_save_table((void *)el->pet_faceticket_essence, sizeof(struct pet_faceticket_essence), el->pet_faceticket_essence_cnt, fp);
-	pw_elements_save_table((void *)el->fireworks_essence, sizeof(struct fireworks_essence), el->fireworks_essence_cnt, fp);
-	pw_elements_save_table((void *)el->war_tankcallin_essence, sizeof(struct war_tankcallin_essence), el->war_tankcallin_essence_cnt, fp);
-	save_control_block_1((struct control_block1 *)&cb1, fp);
-	pw_elements_save_table((void *)el->npc_war_towerbuild_service, sizeof(struct npc_war_towerbuild_service), el->npc_war_towerbuild_service_cnt, fp);
-	pw_elements_save_table((void *)el->player_secondlevel_config, sizeof(struct player_secondlevel_config), el->player_secondlevel_config_cnt, fp);
-	pw_elements_save_table((void *)el->npc_resetprop_service, sizeof(struct npc_resetprop_service), el->npc_resetprop_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_petname_service, sizeof(struct npc_petname_service), el->npc_petname_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_petlearnskill_service, sizeof(struct npc_petlearnskill_service), el->npc_petlearnskill_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_petforgetskill_service, sizeof(struct npc_petforgetskill_service), el->npc_petforgetskill_service_cnt, fp);
-	pw_elements_save_table((void *)el->skillmatter_essence, sizeof(struct skillmatter_essence), el->skillmatter_essence_cnt, fp);
-	pw_elements_save_table((void *)el->refine_ticket_essence, sizeof(struct refine_ticket_essence), el->refine_ticket_essence_cnt, fp);
-	pw_elements_save_table((void *)el->destroying_essence, sizeof(struct destroying_essence), el->destroying_essence_cnt, fp);
-	pw_elements_save_table((void *)el->npc_equipbind_service, sizeof(struct npc_equipbind_service), el->npc_equipbind_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_equipdestroy_service, sizeof(struct npc_equipdestroy_service), el->npc_equipdestroy_service_cnt, fp);
-	pw_elements_save_table((void *)el->npc_equipundestroy_service, sizeof(struct npc_equipundestroy_service), el->npc_equipundestroy_service_cnt, fp);
-	pw_elements_save_table((void *)el->bible_essence, sizeof(struct bible_essence), el->bible_essence_cnt, fp);
-	pw_elements_save_table((void *)el->speaker_essence, sizeof(struct speaker_essence), el->speaker_essence_cnt, fp);
-	pw_elements_save_table((void *)el->autohp_essence, sizeof(struct autohp_essence), el->autohp_essence_cnt, fp);
-	pw_elements_save_table((void *)el->automp_essence, sizeof(struct automp_essence), el->automp_essence_cnt, fp);
-	pw_elements_save_table((void *)el->double_exp_essence, sizeof(struct double_exp_essence), el->double_exp_essence_cnt, fp);
-	pw_elements_save_table((void *)el->transmitscroll_essence, sizeof(struct transmitscroll_essence), el->transmitscroll_essence_cnt, fp);
-	pw_elements_save_table((void *)el->dye_ticket_essence, sizeof(struct dye_ticket_essence), el->dye_ticket_essence_cnt, fp);
-
-	fclose(fp);
-	return 0;
-}
