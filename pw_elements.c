@@ -27,7 +27,7 @@ add_element(struct pw_elements_table *table)
 	struct pw_elements_chain *chain = table->chain_last;
 
 	if (chain->count < chain->capacity) {
-		return chain->data[chain->count++ * table->el_size];
+		return &chain->data[chain->count++ * table->el_size];
 	}
 
 	size_t table_count = 16;
@@ -221,7 +221,7 @@ static struct serializer equipment_addon_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct serializer mine_essence_serializer[] = {
+static struct serializer mines_serializer[] = {
 	{ "id", INT32 },
 	{ "id_type", INT32 },
 	{ "name", WSTRING(32) },
@@ -257,7 +257,7 @@ static struct serializer mine_essence_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct serializer monster_essence_serializer[] = {
+static struct serializer monsters_serializer[] = {
 	{ "id", INT32 },
 	{ "id_type", INT32 },
 	{ "name", WSTRING(32) },
@@ -343,7 +343,7 @@ static struct serializer monster_essence_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct serializer recipe_essence_serializer[] = {
+static struct serializer recipes_serializer[] = {
 	{ "id", INT32 },
 	{ "major_type", INT32 },
 	{ "minor_type", INT32 },
@@ -369,7 +369,7 @@ static struct serializer recipe_essence_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct serializer npc_sell_service_serializer[] = {
+static struct serializer npc_sells_serializer[] = {
 	{ "id", INT32 },
 	{ "name", WSTRING(32) },
 	{ "pages", ARRAY_START(8) },
@@ -382,7 +382,7 @@ static struct serializer npc_sell_service_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct serializer npc_essence_serializer[] = {
+static struct serializer npcs_serializer[] = {
 	{ "id", INT32 },
 	{ "name", WSTRING(32) },
 	{ "id_type", INT32 },
@@ -425,7 +425,7 @@ static struct serializer npc_essence_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct serializer npc_make_service_serializer[] = {
+static struct serializer npc_crafts_serializer[] = {
 	{ "id", INT32 },
 	{ "name", WSTRING(32) },
 	{ "make_skill_id", INT32 },
@@ -439,13 +439,13 @@ static struct serializer npc_make_service_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct serializer weapon_major_type_serializer[] = {
+static struct serializer weapon_major_types_serializer[] = {
 	{ "id", INT32 },
 	{ "name", WSTRING(32) },
 	{ "", TYPE_END },
 };
 
-static struct serializer weapon_sub_type_serializer[] = {
+static struct serializer weapon_minor_types_serializer[] = {
 	{ "id", INT32 },
 	{ "name", WSTRING(32) },
 	{ "file_hitgfx", STRING(128) },
@@ -529,13 +529,13 @@ static struct serializer weapon_essence_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct serializer armor_major_type_serializer[] = {
+static struct serializer armor_major_types_serializer[] = {
 	{ "id", INT32 },
 	{ "name", WSTRING(32) },
 	{ "", TYPE_END },
 };
 
-static struct serializer armor_sub_type_serializer[] = {
+static struct serializer armor_minor_types_serializer[] = {
 	{ "id", INT32 },
 	{ "name", WSTRING(32) },
 	{ "equip_mask", INT32 },
@@ -608,13 +608,13 @@ static struct serializer armor_essence_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct serializer decoration_major_type_serializer[] = {
+static struct serializer decoration_major_types_serializer[] = {
 	{ "id", INT32 },
 	{ "name", WSTRING(32) },
 	{ "", TYPE_END },
 };
 
-static struct serializer decoration_sub_type_serializer[] = {
+static struct serializer decoration_minor_types_serializer[] = {
 	{ "id", INT32 },
 	{ "name", WSTRING(32) },
 	{ "equip_mask", INT32 },
@@ -680,13 +680,13 @@ static struct serializer decoration_essence_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct serializer medicine_major_type_serializer[] = {
+static struct serializer medicine_major_types_serializer[] = {
 	{ "id", INT32 },
 	{ "name", WSTRING(32) },
 	{ "", TYPE_END },
 };
 
-static struct serializer medicine_sub_type_serializer[] = {
+static struct serializer medicine_minor_types_serializer[] = {
 	{ "id", INT32 },
 	{ "name", WSTRING(32) },
 	{ "", TYPE_END },
@@ -930,7 +930,7 @@ static struct serializer tossmatter_essence_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct serializer projectile_type_serializer[] = {
+static struct serializer projectile_types_serializer[] = {
 	{ "id", INT32 },
 	{ "name", WSTRING(32) },
 	{ "", TYPE_END },
@@ -939,7 +939,7 @@ static struct serializer projectile_type_serializer[] = {
 static struct serializer projectile_essence_serializer[] = {
 	{ "id", CUSTOM, serialize_item_id_fn },
 	{ "type", CONST_INT(16) },
-	{ "projectile_type", INT32 },
+	{ "projectile_types", INT32 },
 	{ "name", WSTRING(32) },
 	{ "file_model", STRING(128) },
 	{ "file_matter", STRING(128) },
@@ -981,7 +981,7 @@ static struct serializer quiver_essence_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct serializer stone_sub_type_serializer[] = {
+static struct serializer stone_types_serializer[] = {
 	{ "id", INT32 },
 	{ "name", WSTRING(32) },
 	{ "", TYPE_END },
@@ -1358,7 +1358,7 @@ static struct serializer dye_ticket_essence_serializer[] = {
 	{ "", TYPE_END },
 };
 
-static struct serializer suite_essence_serializer[] = {
+static struct serializer armor_sets_serializer[] = {
 	{ "id", INT32 },
 	{ "name", WSTRING(32) },
 	{ "max_equips", INT32 },
@@ -1450,30 +1450,30 @@ static struct serializer npc_equipundestroy_service_serializer[] = { { "", TYPE_
 void
 pw_elements_serialize(struct pw_elements *elements)
 {
-	EXPORT_TABLE(elements, mine_essence, "mines.json");
-	EXPORT_TABLE(elements, monster_essence, "monsters.json");
-	EXPORT_TABLE(elements, recipe_essence, "recipes.json");
-	EXPORT_TABLE(elements, npc_essence, "npcs.json");
-	EXPORT_TABLE(elements, npc_sell_service, "npc_sells.json");
-	EXPORT_TABLE(elements, npc_make_service, "npc_crafts.json");
+	EXPORT_TABLE(elements, mines, "mines.json");
+	EXPORT_TABLE(elements, monsters, "monsters.json");
+	EXPORT_TABLE(elements, recipes, "recipes.json");
+	EXPORT_TABLE(elements, npcs, "npcs.json");
+	EXPORT_TABLE(elements, npc_sells, "npc_sells.json");
+	EXPORT_TABLE(elements, npc_crafts, "npc_crafts.json");
 
-	EXPORT_TABLE(elements, weapon_major_type, "weapon_major_types.json");
-	EXPORT_TABLE(elements, weapon_sub_type, "weapon_minor_types.json");
-	EXPORT_TABLE(elements, armor_major_type, "armor_major_types.json");
-	EXPORT_TABLE(elements, armor_sub_type, "armor_minor_types.json");
-	EXPORT_TABLE(elements, decoration_major_type, "decoration_major_types.json");
-	EXPORT_TABLE(elements, decoration_sub_type, "decoration_minor_types.json");
+	EXPORT_TABLE(elements, weapon_major_types, "weapon_major_typess.json");
+	EXPORT_TABLE(elements, weapon_minor_types, "weapon_minor_types.json");
+	EXPORT_TABLE(elements, armor_major_types, "armor_major_typess.json");
+	EXPORT_TABLE(elements, armor_minor_types, "armor_minor_types.json");
+	EXPORT_TABLE(elements, decoration_major_types, "decoration_major_typess.json");
+	EXPORT_TABLE(elements, decoration_minor_types, "decoration_minor_types.json");
 
-	EXPORT_TABLE(elements, medicine_major_type, "medicine_major_types.json");
-	EXPORT_TABLE(elements, medicine_sub_type, "medicine_minor_types.json");
+	EXPORT_TABLE(elements, medicine_major_types, "medicine_major_typess.json");
+	EXPORT_TABLE(elements, medicine_minor_types, "medicine_minor_types.json");
 	EXPORT_TABLE(elements, material_major_type, "material_major_types.json");
 	EXPORT_TABLE(elements, material_sub_type, "material_minor_types.json");
 
-	EXPORT_TABLE(elements, projectile_type, "projectile_types.json");
-	EXPORT_TABLE(elements, quiver_sub_type, "quiver_types.json");
-	EXPORT_TABLE(elements, stone_sub_type, "stone_types.json");
+	EXPORT_TABLE(elements, projectile_types, "projectile_typess.json");
+	EXPORT_TABLE(elements, quiver_sub_type, "quiver_typess.json");
+	EXPORT_TABLE(elements, stone_types, "stone_types.json");
 
-	EXPORT_TABLE(elements, suite_essence, "armor_sets.json");
+	EXPORT_TABLE(elements, armor_sets, "armor_sets.json");
 	EXPORT_TABLE(elements, equipment_addon, "equipment_addon.json");
 
 	FILE *fp = fopen("items.json", "wb");
@@ -1570,7 +1570,7 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 	}
 
 	if (i == elements->tables_count) {
-		pwlog(LOG_ERROR, "pw_elements_get_table() failed: %d\n", rc);
+		pwlog(LOG_ERROR, "pw_elements_get_table() failed\n");
 		return -1;
 	}
 
@@ -1733,27 +1733,24 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 		return 1;
 	}
 
-#define LOAD_ARR_NAMED(arr_name, arr_json_name) \
-	pw_elements_load_table(el, &el->arr_name, arr_json_name, sizeof(struct arr_name), arr_name ## _serializer, fp)
-
 #define LOAD_ARR(arr_name) \
-	LOAD_ARR_NAMED(arr_name, #arr_name)
+	pw_elements_load_table(el, &el->arr_name, #arr_name, sizeof(struct arr_name), arr_name ## _serializer, fp)
 
 	LOAD_ARR(equipment_addon);
-	LOAD_ARR_NAMED(weapon_major_type, "weapon_major_types");
-	LOAD_ARR_NAMED(weapon_sub_type, "weapon_minor_types");
+	LOAD_ARR(weapon_major_types);
+	LOAD_ARR(weapon_minor_types);
 	LOAD_ARR(weapon_essence);
-	LOAD_ARR_NAMED(armor_major_type, "armor_major_types");
-	LOAD_ARR_NAMED(armor_sub_type, "armor_minor_types");
+	LOAD_ARR(armor_major_types);
+	LOAD_ARR(armor_minor_types);
 	LOAD_ARR(armor_essence);
-	LOAD_ARR_NAMED(decoration_major_type, "decoration_major_types");
-	LOAD_ARR_NAMED(decoration_sub_type, "decoration_minor_types");
+	LOAD_ARR(decoration_major_types);
+	LOAD_ARR(decoration_minor_types);
 	LOAD_ARR(decoration_essence);
-	LOAD_ARR_NAMED(medicine_major_type, "medicine_major_types");
-	LOAD_ARR_NAMED(medicine_sub_type, "medicine_minor_types");
+	LOAD_ARR(medicine_major_types);
+	LOAD_ARR(medicine_minor_types);
 	LOAD_ARR(medicine_essence);
-	LOAD_ARR_NAMED(material_major_type, "material_major_types");
-	LOAD_ARR_NAMED(material_sub_type, "material_minor_types");
+	LOAD_ARR(material_major_type);
+	LOAD_ARR(material_sub_type);
 	LOAD_ARR(material_essence);
 	LOAD_ARR(damagerune_sub_type);
 	LOAD_ARR(damagerune_essence);
@@ -1770,17 +1767,17 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 	LOAD_ARR(element_essence);
 	LOAD_ARR(taskmatter_essence);
 	LOAD_ARR(tossmatter_essence);
-	LOAD_ARR_NAMED(projectile_type, "projectile_types");
+	LOAD_ARR(projectile_types);
 	LOAD_ARR(projectile_essence);
-	LOAD_ARR_NAMED(quiver_sub_type, "quiver_types");
+	LOAD_ARR(quiver_sub_type);
 	LOAD_ARR(quiver_essence);
-	LOAD_ARR_NAMED(stone_sub_type, "stone_types");
+	LOAD_ARR(stone_types);
 	LOAD_ARR(stone_essence);
 	LOAD_ARR(monster_addon);
 	LOAD_ARR(monster_type);
-	LOAD_ARR_NAMED(monster_essence, "monsters");
+	LOAD_ARR(monsters);
 	LOAD_ARR(npc_talk_service);
-	LOAD_ARR_NAMED(npc_sell_service, "npc_sells");
+	LOAD_ARR(npc_sells);
 	LOAD_ARR(npc_buy_service);
 	LOAD_ARR(npc_repair_service);
 	LOAD_ARR(npc_install_service);
@@ -1794,10 +1791,10 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 	LOAD_ARR(npc_transport_service);
 	LOAD_ARR(npc_proxy_service);
 	LOAD_ARR(npc_storage_service);
-	LOAD_ARR_NAMED(npc_make_service, "npc_crafts");
+	LOAD_ARR(npc_crafts);
 	LOAD_ARR(npc_decompose_service);
 	LOAD_ARR(npc_type);
-	LOAD_ARR_NAMED(npc_essence, "npcs");
+	LOAD_ARR(npcs);
 	pw_elements_load_talk_proc(fp);
 	LOAD_ARR(face_texture_essence);
 	LOAD_ARR(face_shape_essence);
@@ -1809,7 +1806,7 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 	LOAD_ARR(customizedata_essence);
 	LOAD_ARR(recipe_major_type);
 	LOAD_ARR(recipe_sub_type);
-	LOAD_ARR_NAMED(recipe_essence, "recipes");
+	LOAD_ARR(recipes);
 	LOAD_ARR(enemy_faction_config);
 	LOAD_ARR(charracter_class_config);
 	LOAD_ARR(param_adjust_config);
@@ -1819,7 +1816,7 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 	LOAD_ARR(face_faling_essence);
 	LOAD_ARR(player_levelexp_config);
 	LOAD_ARR(mine_type);
-	LOAD_ARR_NAMED(mine_essence, "mines");
+	LOAD_ARR(mines);
 	LOAD_ARR(npc_identify_service);
 	LOAD_ARR(fashion_major_type);
 	LOAD_ARR(fashion_sub_type);
@@ -1830,7 +1827,7 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 	LOAD_ARR(facepill_major_type);
 	LOAD_ARR(facepill_sub_type);
 	LOAD_ARR(facepill_essence);
-	LOAD_ARR_NAMED(suite_essence, "armor_sets");
+	LOAD_ARR(armor_sets);
 	LOAD_ARR(gm_generator_type);
 	LOAD_ARR(gm_generator_essence);
 	LOAD_ARR(pet_type);
@@ -1862,7 +1859,6 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 	LOAD_ARR(dye_ticket_essence);
 
 #undef LOAD_ARR
-#undef LOAD_ARR_NAMED
 
 	fclose(fp);
 

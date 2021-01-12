@@ -92,15 +92,15 @@ struct pw_elements {
 	};
 	struct pw_elements_table *equipment_addon;
 
-	int32_t weapon_major_type_cnt;
-	struct weapon_major_type {
+	int32_t weapon_major_types_cnt;
+	struct weapon_major_types {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
-	struct pw_elements_table *weapon_major_type;
+	struct pw_elements_table *weapon_major_types;
 
-	int32_t weapon_sub_type_cnt;
-	struct weapon_sub_type {
+	int32_t weapon_minor_types_cnt;
+	struct weapon_minor_types {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		char file_hitgfx[128 / sizeof(char)];
@@ -114,7 +114,7 @@ struct pw_elements {
 		float attack_short_range;
 		int32_t action_type;
 	};
-	struct pw_elements_table *weapon_sub_type;
+	struct pw_elements_table *weapon_minor_types;
 
 	int32_t weapon_essence_cnt;
 	struct weapon_essence {
@@ -178,20 +178,20 @@ struct pw_elements {
 	};
         struct pw_elements_table *weapon_essence;
 
-	int32_t armor_major_type_cnt;
-	struct armor_major_type {
+	int32_t armor_major_types_cnt;
+	struct armor_major_types {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
-        struct pw_elements_table *armor_major_type;
+        struct pw_elements_table *armor_major_types;
 
-	int32_t armor_sub_type_cnt;
-	struct armor_sub_type {
+	int32_t armor_minor_types_cnt;
+	struct armor_minor_types {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t equip_mask;
 	};
-        struct pw_elements_table *armor_sub_type;
+        struct pw_elements_table *armor_minor_types;
 
 	int32_t armor_essence_cnt;
 	struct armor_essence {
@@ -253,20 +253,20 @@ struct pw_elements {
 	};
         struct pw_elements_table *armor_essence;
 
-	int32_t decoration_major_type_cnt;
-	struct decoration_major_type {
+	int32_t decoration_major_types_cnt;
+	struct decoration_major_types {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
-        struct pw_elements_table *decoration_major_type;
+        struct pw_elements_table *decoration_major_types;
 
-	int32_t decoration_sub_type_cnt;
-	struct decoration_sub_type {
+	int32_t decoration_minor_types_cnt;
+	struct decoration_minor_types {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t equip_mask;
 	};
-        struct pw_elements_table *decoration_sub_type;
+        struct pw_elements_table *decoration_minor_types;
 
 	int32_t decoration_essence_cnt;
 	struct decoration_essence {
@@ -325,19 +325,19 @@ struct pw_elements {
 	};
         struct pw_elements_table *decoration_essence;
 
-	int32_t medicine_major_type_cnt;
-	struct medicine_major_type {
+	int32_t medicine_major_types_cnt;
+	struct medicine_major_types {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
-        struct pw_elements_table *medicine_major_type;
+        struct pw_elements_table *medicine_major_types;
 
-	int32_t medicine_sub_type_cnt;
-	struct medicine_sub_type {
+	int32_t medicine_minor_types_cnt;
+	struct medicine_minor_types {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
-        struct pw_elements_table *medicine_sub_type;
+        struct pw_elements_table *medicine_minor_types;
 
 	int32_t medicine_essence_cnt;
 	struct medicine_essence {
@@ -615,12 +615,12 @@ struct pw_elements {
 	};
         struct pw_elements_table *tossmatter_essence;
 
-	int32_t projectile_type_cnt;
-	struct projectile_type {
+	int32_t projectile_types_cnt;
+	struct projectile_types {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
-        struct pw_elements_table *projectile_type;
+        struct pw_elements_table *projectile_types;
 
 	int32_t projectile_essence_cnt;
 	struct projectile_essence {
@@ -669,12 +669,12 @@ struct pw_elements {
 	};
         struct pw_elements_table *quiver_essence;
 
-	int32_t stone_sub_type_cnt;
-	struct stone_sub_type {
+	int32_t stone_types_cnt;
+	struct stone_types {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
-        struct pw_elements_table *stone_sub_type;
+        struct pw_elements_table *stone_types;
 
 	int32_t stone_essence_cnt;
 	struct stone_essence {
@@ -749,8 +749,8 @@ struct pw_elements {
 	};
         struct pw_elements_table *monster_type;
 
-	int32_t monster_essence_cnt;
-	struct monster_essence {
+	int32_t monsters_cnt;
+	struct monsters {
 		int32_t id;
 		int32_t id_type;
 		char16_t name[64 / sizeof(char16_t)];
@@ -831,7 +831,7 @@ struct pw_elements {
 			float prob;
 		} drop_matter[32];
 	};
-        struct pw_elements_table *monster_essence;
+        struct pw_elements_table *monsters;
 
 	int32_t npc_talk_service_cnt;
 	struct npc_talk_service {
@@ -841,17 +841,17 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_talk_service;
 
-	int32_t npc_sell_service_cnt;
-	struct npc_sell_service {
+	int32_t npc_sells_cnt;
+	struct npc_sells {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
-		struct npc_sell_service_page {
+		struct npc_sells_page {
 			char16_t page_title[16 / sizeof(char16_t)];
 			int32_t id_goods[32];
 		} pages[8];
 		int32_t id_dialog;
 	};
-        struct pw_elements_table *npc_sell_service;
+        struct pw_elements_table *npc_sells;
 
 	int32_t npc_buy_service_cnt;
 	struct npc_buy_service {
@@ -975,18 +975,18 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_storage_service;
 
-	int32_t npc_make_service_cnt;
-	struct npc_make_service {
+	int32_t npc_crafts_cnt;
+	struct npc_crafts {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t id_make_skill;
 		int32_t produce_type;
-		struct npc_make_service_page {
+		struct npc_crafts_page {
 			char16_t page_title[16 / sizeof(char16_t)];
 			int32_t item_id[32];
 		} pages[8];
 	};
-        struct pw_elements_table *npc_make_service;
+        struct pw_elements_table *npc_crafts;
 
 	int32_t npc_decompose_service_cnt;
 	struct npc_decompose_service {
@@ -1003,8 +1003,8 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_type;
 
-	int32_t npc_essence_cnt;
-	struct npc_essence {
+	int32_t npcs_cnt;
+	struct npcs {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t id_type;
@@ -1045,7 +1045,7 @@ struct pw_elements {
 		int32_t combined_services;
 		int32_t id_mine;
 	};
-        struct pw_elements_table *npc_essence;
+        struct pw_elements_table *npcs;
 
 	int32_t face_texture_essence_cnt;
 	struct face_texture_essence {
@@ -1160,8 +1160,8 @@ struct pw_elements {
 	};
         struct pw_elements_table *recipe_sub_type;
 
-	int32_t recipe_essence_cnt;
-	struct recipe_essence {
+	int32_t recipes_cnt;
+	struct recipes {
 		int32_t id;
 		int32_t id_major_type;
 		int32_t id_sub_type;
@@ -1170,7 +1170,7 @@ struct pw_elements {
 		int32_t skill_id;
 		int32_t skill_level;
 		int32_t bind_type;
-		struct recipe_essence_target {
+		struct recipes_target {
 			int32_t id;
 			float prob;
 		} targets[4];
@@ -1180,12 +1180,12 @@ struct pw_elements {
 		float duration;
 		int32_t xp;
 		int32_t sp;
-		struct recipe_essence_material {
+		struct recipes_material {
 			int32_t id;
 			int32_t num;
 		} mats[32];
 	};
-        struct pw_elements_table *recipe_essence;
+        struct pw_elements_table *recipes;
 
 	int32_t enemy_faction_config_cnt;
 	struct enemy_faction_config {
@@ -1448,8 +1448,8 @@ struct pw_elements {
 	};
         struct pw_elements_table *mine_type;
 
-	int32_t mine_essence_cnt;
-	struct mine_essence {
+	int32_t mines_cnt;
+	struct mines {
 		int32_t id;
 		int32_t id_type;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1483,7 +1483,7 @@ struct pw_elements {
 		int32_t aggro_num;
 		int32_t permanent;
 	};
-        struct pw_elements_table *mine_essence;
+        struct pw_elements_table *mines;
 
 	int32_t npc_identify_service_cnt;
 	struct npc_identify_service {
@@ -1612,8 +1612,8 @@ struct pw_elements {
 	};
         struct pw_elements_table *facepill_essence;
 
-	int32_t suite_essence_cnt;
-	struct suite_essence {
+	int32_t armor_sets_cnt;
+	struct armor_sets {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 		int32_t max_equips;
@@ -1642,7 +1642,7 @@ struct pw_elements {
 		int32_t addons_11_id;
 		char file_gfx[128 / sizeof(char)];
 	};
-        struct pw_elements_table *suite_essence;
+        struct pw_elements_table *armor_sets;
 
 	int32_t gm_generator_type_cnt;
 	struct gm_generator_type {
