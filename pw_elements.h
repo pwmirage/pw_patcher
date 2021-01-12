@@ -29,6 +29,7 @@ struct pw_elements_table {
 	struct serializer *serializer;
 	size_t el_size;
 	struct pw_elements_chain *chain;
+	struct pw_elements_chain *chain_last;
 };
 
 struct pw_elements_chain {

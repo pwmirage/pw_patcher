@@ -21,6 +21,24 @@ static char *g_item_descs[65536] = {};
 uint32_t g_elements_last_id;
 struct pw_idmap *g_elements_map;
 
+static void *
+add_element(struct pw_elements_table *table)
+{
+	struct pw_elements_chain *chain = table->chain_last;
+
+	if (chain->count < chain->capacity) {
+		return chain->data[chain->count++ * table->el_size];
+	}
+
+	size_t table_count = 16;
+	chain->next = table->chain_last = calloc(1, sizeof(struct pw_elements_chain) + table_count * table->el_size);
+	chain = table->chain_last;
+	chain->capacity = table_count;
+	chain->count = 1;
+
+	return chain->data;
+}
+
 static int
 load_icons(void)
 {
@@ -1523,46 +1541,6 @@ pw_elements_serialize(struct pw_elements *elements)
 	truncate("items.json", sz);
 }
 
-static int
-pw_elements_get_table(struct pw_elements *elements, const char *name, struct pw_elements_table **table)
-{
-
-#define MAP(tbl_name, table_id) \
-	if (strcmp(tbl_name, name) == 0) { \
-		*table = (elements)->table_id; \
-		return 0; \
-	}
-
-	MAP("mines", mine_essence);
-	MAP("monsters", monster_essence);
-	MAP("recipes", recipe_essence);
-	MAP("npcs", npc_essence);
-	MAP("npc_sells", npc_sell_service);
-	MAP("npc_crafts", npc_make_service);
-
-	MAP("weapon_major_types", weapon_major_type);
-	MAP("weapon_minor_types", weapon_sub_type);
-	MAP("armor_major_types", armor_major_type);
-	MAP("armor_minor_types", armor_sub_type);
-	MAP("decoration_major_types", decoration_major_type);
-	MAP("decoration_minor_types", decoration_sub_type);
-
-	MAP("medicine_major_types", medicine_major_type);
-	MAP("medicine_minor_types", medicine_sub_type);
-	MAP("material_major_types", material_major_type);
-	MAP("material_minor_types", material_sub_type);
-
-	MAP("projectile_types", projectile_type);
-	MAP("quiver_types", quiver_sub_type);
-	MAP("stone_types", stone_sub_type);
-
-	MAP("armor_sets", suite_essence);
-	MAP("equipment_addon", equipment_addon);
-
-#undef MAP
-	return -1;
-}
-
 int
 pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 {
@@ -1570,7 +1548,7 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 	void **table_el;
 	const char *obj_type;
 	int64_t id;
-	int rc;
+	int i, rc;
 
 	obj_type = JSs(obj, "_db", "type");
 	if (!obj_type) {
@@ -1584,16 +1562,25 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 		return -1;
 	}
 
+	for (i = 0; i < elements->tables_count; i++) {
+		table = elements->tables[i];
+		if (strcmp(table->name, obj_type) == 0) {
+			break;
+		}
+	}
 
-	rc = pw_elements_get_table(elements, obj_type, &table);
-	if (rc) {
+	if (i == elements->tables_count) {
 		pwlog(LOG_ERROR, "pw_elements_get_table() failed: %d\n", rc);
 		return -1;
 	}
 
 	table_el = pw_idmap_get(g_elements_map, id, table);
 	if (!table_el) {
-		/* FIXME append to &table (linked list somewhere?) */
+		uint32_t el_id = g_elements_last_id++;
+
+		table_el = add_element(table);
+		*(uint32_t *)table_el = el_id;
+		pw_idmap_set(g_elements_map, id, table, table_el);
 		return -1;
 	}
 	deserialize(obj, table->serializer, table_el);
@@ -1615,10 +1602,11 @@ pw_elements_load_table(struct pw_elements *elements, struct pw_elements_table **
 	}
 
 	table->el_size = el_size;
+	table->name = name;
 	table->serializer = serializer;
 
 	fread(&count, 1, sizeof(count), fp);
-	table->chain = chain = calloc(1, sizeof(struct pw_elements_chain) + count * el_size);
+	table->chain = table->chain_last = chain = calloc(1, sizeof(struct pw_elements_chain) + count * el_size);
 	if (!chain) {
 		pwlog(LOG_ERROR, "pw_elements_load_table: calloc() failed\n");
 		return;
@@ -1745,24 +1733,27 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 		return 1;
 	}
 
+#define LOAD_ARR_NAMED(arr_name, arr_json_name) \
+	pw_elements_load_table(el, &el->arr_name, arr_json_name, sizeof(struct arr_name), arr_name ## _serializer, fp)
+
 #define LOAD_ARR(arr_name) \
-	pw_elements_load_table(el, &el->arr_name, # arr_name, sizeof(struct arr_name), arr_name ## _serializer, fp)
+	LOAD_ARR_NAMED(arr_name, #arr_name)
 
 	LOAD_ARR(equipment_addon);
-	LOAD_ARR(weapon_major_type);
-	LOAD_ARR(weapon_sub_type);
+	LOAD_ARR_NAMED(weapon_major_type, "weapon_major_types");
+	LOAD_ARR_NAMED(weapon_sub_type, "weapon_minor_types");
 	LOAD_ARR(weapon_essence);
-	LOAD_ARR(armor_major_type);
-	LOAD_ARR(armor_sub_type);
+	LOAD_ARR_NAMED(armor_major_type, "armor_major_types");
+	LOAD_ARR_NAMED(armor_sub_type, "armor_minor_types");
 	LOAD_ARR(armor_essence);
-	LOAD_ARR(decoration_major_type);
-	LOAD_ARR(decoration_sub_type);
+	LOAD_ARR_NAMED(decoration_major_type, "decoration_major_types");
+	LOAD_ARR_NAMED(decoration_sub_type, "decoration_minor_types");
 	LOAD_ARR(decoration_essence);
-	LOAD_ARR(medicine_major_type);
-	LOAD_ARR(medicine_sub_type);
+	LOAD_ARR_NAMED(medicine_major_type, "medicine_major_types");
+	LOAD_ARR_NAMED(medicine_sub_type, "medicine_minor_types");
 	LOAD_ARR(medicine_essence);
-	LOAD_ARR(material_major_type);
-	LOAD_ARR(material_sub_type);
+	LOAD_ARR_NAMED(material_major_type, "material_major_types");
+	LOAD_ARR_NAMED(material_sub_type, "material_minor_types");
 	LOAD_ARR(material_essence);
 	LOAD_ARR(damagerune_sub_type);
 	LOAD_ARR(damagerune_essence);
@@ -1779,17 +1770,17 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 	LOAD_ARR(element_essence);
 	LOAD_ARR(taskmatter_essence);
 	LOAD_ARR(tossmatter_essence);
-	LOAD_ARR(projectile_type);
+	LOAD_ARR_NAMED(projectile_type, "projectile_types");
 	LOAD_ARR(projectile_essence);
-	LOAD_ARR(quiver_sub_type);
+	LOAD_ARR_NAMED(quiver_sub_type, "quiver_types");
 	LOAD_ARR(quiver_essence);
-	LOAD_ARR(stone_sub_type);
+	LOAD_ARR_NAMED(stone_sub_type, "stone_types");
 	LOAD_ARR(stone_essence);
 	LOAD_ARR(monster_addon);
 	LOAD_ARR(monster_type);
-	LOAD_ARR(monster_essence);
+	LOAD_ARR_NAMED(monster_essence, "monsters");
 	LOAD_ARR(npc_talk_service);
-	LOAD_ARR(npc_sell_service);
+	LOAD_ARR_NAMED(npc_sell_service, "npc_sells");
 	LOAD_ARR(npc_buy_service);
 	LOAD_ARR(npc_repair_service);
 	LOAD_ARR(npc_install_service);
@@ -1803,10 +1794,10 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 	LOAD_ARR(npc_transport_service);
 	LOAD_ARR(npc_proxy_service);
 	LOAD_ARR(npc_storage_service);
-	LOAD_ARR(npc_make_service);
+	LOAD_ARR_NAMED(npc_make_service, "npc_crafts");
 	LOAD_ARR(npc_decompose_service);
 	LOAD_ARR(npc_type);
-	LOAD_ARR(npc_essence);
+	LOAD_ARR_NAMED(npc_essence, "npcs");
 	pw_elements_load_talk_proc(fp);
 	LOAD_ARR(face_texture_essence);
 	LOAD_ARR(face_shape_essence);
@@ -1818,7 +1809,7 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 	LOAD_ARR(customizedata_essence);
 	LOAD_ARR(recipe_major_type);
 	LOAD_ARR(recipe_sub_type);
-	LOAD_ARR(recipe_essence);
+	LOAD_ARR_NAMED(recipe_essence, "recipes");
 	LOAD_ARR(enemy_faction_config);
 	LOAD_ARR(charracter_class_config);
 	LOAD_ARR(param_adjust_config);
@@ -1828,7 +1819,7 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 	LOAD_ARR(face_faling_essence);
 	LOAD_ARR(player_levelexp_config);
 	LOAD_ARR(mine_type);
-	LOAD_ARR(mine_essence);
+	LOAD_ARR_NAMED(mine_essence, "mines");
 	LOAD_ARR(npc_identify_service);
 	LOAD_ARR(fashion_major_type);
 	LOAD_ARR(fashion_sub_type);
@@ -1839,7 +1830,7 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 	LOAD_ARR(facepill_major_type);
 	LOAD_ARR(facepill_sub_type);
 	LOAD_ARR(facepill_essence);
-	LOAD_ARR(suite_essence);
+	LOAD_ARR_NAMED(suite_essence, "armor_sets");
 	LOAD_ARR(gm_generator_type);
 	LOAD_ARR(gm_generator_essence);
 	LOAD_ARR(pet_type);
@@ -1871,6 +1862,7 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 	LOAD_ARR(dye_ticket_essence);
 
 #undef LOAD_ARR
+#undef LOAD_ARR_NAMED
 
 	fclose(fp);
 
