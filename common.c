@@ -448,7 +448,7 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 					json = json->parent;
 				}
 				buf[strlen(buf) - 2] = 0;
-				pwlog(LOG_INFO, "patching \"%s\" (prev:%d, new:%d)\n", buf, *(uint32_t *)data, json_f->i);
+				PWLOG(LOG_INFO, "patching \"%s\" (prev:%d, new:%d)\n", buf, *(uint32_t *)data, json_f->i);
 
 				/* don't override IDs */
 				*(uint32_t *)data = json_f->i;
@@ -549,7 +549,7 @@ deserialize(struct cjson *obj, struct serializer *slzr_table, void *data)
 }
 
 void
-pwlog(int type, const char *fmt, ...)
+pwlog(int type, const char *filename, unsigned lineno, const char *fnname, const char *fmt, ...)
 {
 	va_list args;
 	const char *type_str;
@@ -565,9 +565,9 @@ pwlog(int type, const char *fmt, ...)
 			return;
 	}
 	
+	fprintf(stderr, "%s:%u %s(): %s: ", filename, lineno, fnname, type_str);
 
 	va_start(args, fmt);
-	fprintf(stderr, "%s: ", type_str);
 	vfprintf(stderr, fmt, args);
 	va_end(args);
 }

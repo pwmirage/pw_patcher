@@ -49,7 +49,7 @@ load_icons(void)
 	char *tmp = calloc(1, len);
 
 	if (fp == NULL) {
-		fprintf(stderr, "Can't open iconlist_ivtrm.txt\n");
+		PWLOG(LOG_ERROR, "Can't open iconlist_ivtrm.txt\n");
 		return -1;
 	}
 
@@ -64,7 +64,7 @@ load_icons(void)
 		i++;
 	}
 
-	fprintf(stderr, "Parsed %u icons\n", i);
+	PWLOG(LOG_INFO, "Parsed %u icons\n", i);
 	fclose(fp);
 	return 0;
 }
@@ -78,7 +78,7 @@ load_colors(void)
 	char *line= calloc(1, len);
 
 	if (fp == NULL) {
-		fprintf(stderr, "Can't open item_color.txt\n");
+		PWLOG(LOG_ERROR, "Can't open item_color.txt\n");
 		return -1;
 	}
 
@@ -97,7 +97,7 @@ load_colors(void)
 		i++;
 	}
 
-	fprintf(stderr, "Parsed %u item colors\n", i);
+	PWLOG(LOG_INFO, "Parsed %u item colors\n", i);
 	fclose(fp);
 	return 0;
 }
@@ -111,7 +111,7 @@ load_descriptions(void)
 	char *line = NULL;
 
 	if (fp == NULL) {
-		fprintf(stderr, "Can't open item_ext_desc.txt\n");
+		PWLOG(LOG_ERROR, "Can't open item_ext_desc.txt\n");
 		return -1;
 	}
 
@@ -139,7 +139,7 @@ load_descriptions(void)
 		i++;
 	}
 
-	fprintf(stderr, "Parsed %u item descriptions\n", i);
+	PWLOG(LOG_INFO, "Parsed %u item descriptions\n", i);
 	fclose(fp);
 	return 0;
 }
@@ -1455,7 +1455,7 @@ get_table(struct pw_elements *elements, const char *name)
 	long sz; \
 \
 	if (fp == NULL) { \
-		fprintf(stderr, "cant open %s for writing\n", filename); \
+		PWLOG(LOG_ERROR, "cant open %s for writing\n", filename); \
 	} else { \
 		sz = serialize(fp, table->serializer, \
 				(void *)table->chain->data, table->chain->count); \
@@ -1495,7 +1495,7 @@ pw_elements_serialize(struct pw_elements *elements)
 
 	FILE *fp = fopen("items.json", "wb");
 	if (fp == NULL) {
-		fprintf(stderr, "cant open items.json for writing\n");
+		PWLOG(LOG_ERROR, "cant open items.json for writing\n");
 		return;
 	}
 	size_t prev_sz, sz = 0;
@@ -1572,13 +1572,13 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 
 	obj_type = JSs(obj, "_db", "type");
 	if (!obj_type) {
-		pwlog(LOG_ERROR, "missing obj._db.type\n");
+		PWLOG(LOG_ERROR, "missing obj._db.type\n");
 		return -1;
 	}
 
 	id = JSi(obj, "id");
 	if (!id) {
-		pwlog(LOG_ERROR, "missing obj.id\n");
+		PWLOG(LOG_ERROR, "missing obj.id\n");
 		return -1;
 	}
 
@@ -1590,7 +1590,7 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 	}
 
 	if (i == elements->tables_count) {
-		pwlog(LOG_ERROR, "pw_elements_get_table() failed\n");
+		PWLOG(LOG_ERROR, "unknown obj type\n");
 		return -1;
 	}
 
@@ -1617,7 +1617,7 @@ pw_elements_load_table(struct pw_elements *elements, const char *name, uint32_t 
 
 	table = calloc(1, sizeof(*table));
 	if (!table) {
-		pwlog(LOG_ERROR, "pw_elements_load_table: calloc() failed\n");
+		PWLOG(LOG_ERROR, "calloc() failed\n");
 		return;
 	}
 
@@ -1628,7 +1628,7 @@ pw_elements_load_table(struct pw_elements *elements, const char *name, uint32_t 
 	fread(&count, 1, sizeof(count), fp);
 	table->chain = table->chain_last = chain = calloc(1, sizeof(struct pw_elements_chain) + count * el_size);
 	if (!chain) {
-		pwlog(LOG_ERROR, "pw_elements_load_table: calloc() failed\n");
+		PWLOG(LOG_ERROR, "calloc() failed\n");
 		return;
 	}
 	chain->count = chain->capacity = count;
@@ -1767,13 +1767,13 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 	int rc;
 
 	if (fp == NULL) {
-		fprintf(stderr, "cant open %s\n", filename);
+		PWLOG(LOG_ERROR, "cant open %s\n", filename);
 		return 1;
 	}
 
 	g_elements_map = pw_idmap_init();
 	if (!g_elements_map) {
-		fprintf(stderr, "pw_idmap_init() failed\n");
+		PWLOG(LOG_ERROR, "pw_idmap_init() failed\n");
 		fclose(fp);
 		return 1;
 	}
@@ -1782,7 +1782,7 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 
 	fread(&el->hdr, 1, sizeof(el->hdr), fp);
 	if (el->hdr.version != 12) {
-		fprintf(stderr, "element version mismatch, expected 12, found %d\n", el->hdr.version);
+		PWLOG(LOG_ERROR, "element version mismatch, expected 12, found %d\n", el->hdr.version);
 		fclose(fp);
 		return 1;
 	}
@@ -1965,7 +1965,7 @@ pw_elements_save(struct pw_elements *el, const char *filename, bool is_server)
 
 	fp = fopen(filename, "wb");
 	if (fp == NULL) {
-		fprintf(stderr, "cant open %s\n", filename);
+		PWLOG(LOG_ERROR, "cant open %s\n", filename);
 		return 1;
 	}
 
@@ -1973,7 +1973,7 @@ pw_elements_save(struct pw_elements *el, const char *filename, bool is_server)
 		/* server and client are technically different version */
 		server_fp = fopen("patcher/server_elements_hdr.data", "rb");
 		if (fp == NULL) {
-			fprintf(stderr, "cant open patcher/server_elements_hdr.data\n");
+			PWLOG(LOG_ERROR, "cant open patcher/server_elements_hdr.data\n");
 			return 1;
 		}
 

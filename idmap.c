@@ -64,7 +64,7 @@ pw_idmap_set(struct pw_idmap *map, long long id, void *type, void *data)
 
 	el = calloc(1, sizeof(struct pw_id_el));
 	if (!el) {
-		pwlog(LOG_ERROR, "pw_idmap_get: calloc() failed\n");
+		PWLOG(LOG_ERROR, "calloc() failed\n");
 		return;
 	}
 

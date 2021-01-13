@@ -48,7 +48,8 @@ void deserialize(struct cjson *obj, struct serializer *slzr_table, void *data);
 
 #define LOG_ERROR 0
 #define LOG_INFO 1
-void pwlog(int type, const char *fmt, ...);
+void pwlog(int type, const char *filename, unsigned lineno, const char *fnname, const char *fmt, ...);
+#define PWLOG(type, ...) pwlog((type), __FILE__, __LINE__, __func__, __VA_ARGS__)
 
 struct pw_idmap;
 struct pw_idmap *pw_idmap_init(void);
