@@ -1923,7 +1923,7 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 }
 
 static void
-pw_elements_save_table(struct pw_elements_table *table, FILE *fp)
+pw_elements_save_table(struct pw_elements_table *table, FILE *fp, int skipped_offset)
 {
 	struct pw_elements_chain *chain;
 	size_t count_off;
@@ -1937,9 +1937,15 @@ pw_elements_save_table(struct pw_elements_table *table, FILE *fp)
 	while (chain) {
 		for (uint32_t i = 0; i < chain->count; i++) {
 			void *el = (void *)(chain->data + i * table->el_size);
+
 			/* skip items with the *removed* bit set */
 			if (*(uint32_t *)el & (1 << 31)) continue;
-			fwrite(el, table->el_size, 1, fp);
+			if (skipped_offset) {
+				fwrite(el, 1, skipped_offset, fp);
+				fwrite((char *)el + skipped_offset + 4, 1, table->el_size - skipped_offset - 4, fp);
+			} else {
+				fwrite(el, table->el_size, 1, fp);
+			}
 			count++;
 		}
 		chain = chain->next;
@@ -1951,31 +1957,82 @@ pw_elements_save_table(struct pw_elements_table *table, FILE *fp)
 	fseek(fp, end_off, SEEK_SET);
 }
 
-int
-pw_elements_save(struct pw_elements *el, const char *filename)
+static struct serializer *
+find_serializer(struct serializer *s, const char *name)
 {
-	FILE *fp = fopen(filename, "wb");
+	while (s->type != TYPE_END) {
+		if (strcmp(s->name, name) == 0) {
+			return s;
+		}
+	}
+
+	return NULL;
+}
+
+int
+pw_elements_save(struct pw_elements *el, const char *filename, bool is_server)
+{
+	FILE *fp;
+	FILE *server_fp = NULL;
+
+	fp = fopen(filename, "wb");
 	if (fp == NULL) {
 		fprintf(stderr, "cant open %s\n", filename);
 		return 1;
 	}
 
-	fwrite(&el->hdr, 1, sizeof(el->hdr), fp);
+	if (is_server) {
+		/* server and client are technically different version */
+		server_fp = fopen("patcher/server_elements_hdr.data", "rb");
+		if (fp == NULL) {
+			fprintf(stderr, "cant open patcher/server_elements_hdr.data\n");
+			return 1;
+		}
+
+		struct header hdr;
+
+		fread(&hdr, 1, sizeof(hdr), server_fp);
+		fwrite(&hdr, 1, sizeof(hdr), fp);
+	} else {
+		fwrite(&el->hdr, 1, sizeof(el->hdr), fp);
+	}
 
 	size_t i;
 	for (i = 0; i < el->tables_count; i++) {
 		struct pw_elements_table *table = el->tables[i];
 
-		pw_elements_save_table(table, fp);
+		if (is_server && strcmp(table->name, "npc_crafts")) {
+			pw_elements_save_table(table, fp, 72);
+		} else if (is_server && strcmp(table->name, "recipes")) {
+			pw_elements_save_table(table, fp, 92);
+		} else {
+			pw_elements_save_table(table, fp, 0);
+		}
 
+		/* save additional data after some specific tables */
 		if (strcmp(table->name, "armorrune_essence") == 0) {
-			save_control_block_0(&el->control_block0, fp);
+			if (is_server) {
+				struct control_block0 cb0;
+
+				load_control_block_0(&cb0, server_fp);
+				save_control_block_0(&cb0, fp);
+			} else {
+				save_control_block_0(&el->control_block0, fp);
+			}
 		} else if (strcmp(table->name, "war_tankcallin_essence") == 0) {
-			save_control_block_1(&el->control_block1, fp);
+			if (is_server) {
+				struct control_block1 cb1;
+
+				load_control_block_1(&cb1, server_fp);
+				save_control_block_1(&cb1, fp);
+			} else {
+				save_control_block_1(&el->control_block1, fp);
+			}
 		} else if (strcmp(table->name, "npcs") == 0) {
 			pw_elements_save_talk_proc(el, fp);
 		}
 	}
+
 	fclose(fp);
 	return 0;
 }

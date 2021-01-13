@@ -19,7 +19,7 @@ extern uint32_t g_elements_last_id;
 extern struct pw_idmap *g_elements_map;
 
 int pw_elements_load(struct pw_elements *el, const char *filename);
-int pw_elements_save(struct pw_elements *el, const char *filename);
+int pw_elements_save(struct pw_elements *el, const char *filename, bool is_server);
 void pw_elements_serialize(struct pw_elements *elements);
 int pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj);
 
