@@ -140,63 +140,63 @@ download_mem(const char *url, char **buf, size_t *len)
 static int
 change_charset(char *src_charset, char *dst_charset, char *src, long srclen, char *dst, long dstlen)
 {
-    iconv_t cd;
-    int rc;
+	iconv_t cd;
+	int rc;
 
-    cd = iconv_open(dst_charset, src_charset);
-    if (cd == 0) {
-        return -1;
-    }
+	cd = iconv_open(dst_charset, src_charset);
+	if (cd == 0) {
+		return -1;
+	}
 
-    rc = iconv(cd, &src, (size_t *) &srclen, &dst, (size_t *) &dstlen);
-    iconv_close(cd);
-    return rc;
+	rc = iconv(cd, &src, (size_t *) &srclen, &dst, (size_t *) &dstlen);
+	iconv_close(cd);
+	return rc;
 }
 
 void
 fwsprint(FILE *fp, const uint16_t *buf, int maxlen)
 {
-    char out[1024] = {};
-    char *b = out;
+	char out[1024] = {};
+	char *b = out;
 
-    change_charset("UTF-16LE", "UTF-8", (char *)buf, maxlen * 2, out, sizeof(out));
-    while (*b) {
-        if (*b == '\\') {
-            fputs("\\\\", fp);
-        } else if (*b == '"') {
-            fputs("\\\"", fp);
-        } else if (*b == '\r') {
-            /* do nothing */
-        } else if (*b == '\n') {
-            fputs("\\n", fp);
-        } else {
-            fputc(*b, fp);
-        }
-        b++;
-    }
+	change_charset("UTF-16LE", "UTF-8", (char *)buf, maxlen * 2, out, sizeof(out));
+	while (*b) {
+		if (*b == '\\') {
+			fputs("\\\\", fp);
+		} else if (*b == '"') {
+			fputs("\\\"", fp);
+		} else if (*b == '\r') {
+			/* do nothing */
+		} else if (*b == '\n') {
+			fputs("\\n", fp);
+		} else {
+			fputc(*b, fp);
+		}
+		b++;
+	}
 }
 
 void
 sprint(char *dst, size_t dstsize, const char *src, int srcsize)
 {
-    change_charset("GB2312", "UTF-8", (char *)src, srcsize, dst, dstsize);
+	change_charset("GB2312", "UTF-8", (char *)src, srcsize, dst, dstsize);
 }
 
 void
 fsprint(FILE *fp, const char *buf, int maxlen)
 {
-    char out[1024] = {};
-    char *b = out;
+	char out[1024] = {};
+	char *b = out;
 
-    sprint(out, sizeof(out), buf, maxlen);
-    while (*b) {
-        if (*b == '\\') {
-            fputs("\\\\", fp);
-        } else {
-            fputc(*b, fp);
-        }
-        b++;
-    }
+	sprint(out, sizeof(out), buf, maxlen);
+	while (*b) {
+		if (*b == '\\') {
+			fputs("\\\\", fp);
+		} else {
+			fputc(*b, fp);
+		}
+		b++;
+	}
 }
 
 
@@ -354,7 +354,7 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 				}
 			} else if (slzr->type == CUSTOM) {
 				data += slzr->fn(fp, data);
-                nonzero = true;
+				nonzero = true;
 			} else if (slzr->type == ARRAY_END) {
 				break;
 			} else if (slzr->type == TYPE_END) {

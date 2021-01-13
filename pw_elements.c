@@ -216,7 +216,7 @@ static struct serializer equipment_addon_serializer[] = {
 	{ "name", WSTRING(32) },
 	{ "num_params", INT32 },
 	{ "params", ARRAY_START(3) },
-        { "", CUSTOM, float_or_int_fn },
+		{ "", CUSTOM, float_or_int_fn },
 	{ "", ARRAY_END },
 	{ "", TYPE_END },
 };
