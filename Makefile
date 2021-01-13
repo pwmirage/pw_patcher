@@ -1,10 +1,10 @@
 OBJECTS = common.o pw_elements.o cjson.o idmap.o
-ALL_OBJECTS := $(OBJECTS) export.o import.o
+ALL_OBJECTS := $(OBJECTS) export.o srv_patcher.o
 CFLAGS := -O0 -g -MD -MP -fno-strict-aliasing -Wall -Wno-format-truncation $(CFLAGS)
 
 $(shell mkdir -p build &>/dev/null)
 
-all: build/export build/import
+all: build/export build/srv_patcher
 
 clean:
 	rm -f $(ALL_OBJECTS:%.o=build/%.o) $(ALL_OBJECTS:%.o=build/%.d)
@@ -12,7 +12,7 @@ clean:
 build/export: $(OBJECTS:%.o=build/%.o) export.o
 	gcc $(CFLAGS) -o $@ $^
 
-build/import: $(OBJECTS:%.o=build/%.o) import.o
+build/srv_patcher: $(OBJECTS:%.o=build/%.o) srv_patcher.o
 	gcc $(CFLAGS) -o $@ $^
 
 build/%.o: %.c
