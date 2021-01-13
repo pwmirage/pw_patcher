@@ -1432,16 +1432,33 @@ static struct serializer npc_equipbind_service_serializer[] = { { "", TYPE_END }
 static struct serializer npc_equipdestroy_service_serializer[] = { { "", TYPE_END } };
 static struct serializer npc_equipundestroy_service_serializer[] = { { "", TYPE_END } };
 
-#define EXPORT_TABLE(elements, table, filename) \
+static struct pw_elements_table *
+get_table(struct pw_elements *elements, const char *name)
+{
+	size_t i;
+
+	for (i = 0; i < elements->tables_count; i++) {
+		struct pw_elements_table *table = elements->tables[i];
+		
+		if (strcmp(table->name, name) == 0) {
+			return table;
+		}
+	}
+
+	return NULL;
+}
+
+#define EXPORT_TABLE(elements, table_name, filename) \
 ({ \
 	FILE *fp = fopen(filename, "wb"); \
+	struct pw_elements_table *table = get_table(elements, #table_name); \
 	long sz; \
 \
 	if (fp == NULL) { \
 		fprintf(stderr, "cant open %s for writing\n", filename); \
 	} else { \
-		sz = serialize(fp, table ## _serializer, \
-				(void *)(elements)->table, (elements)->table ## _cnt); \
+		sz = serialize(fp, table->serializer, \
+				(void *)table->chain->data, table->chain->count); \
 		fclose(fp); \
 		truncate(filename, sz); \
 	} \
@@ -1483,11 +1500,14 @@ pw_elements_serialize(struct pw_elements *elements)
 	}
 	size_t prev_sz, sz = 0;
 
-#define EXPORT_ITEMS(table) \
+#define STR(x, y) #x #y
+#define EXPORT_ITEMS(table_name) \
 ({ \
+	struct pw_elements_table *table = get_table(elements, STR(table_name, _essence)); \
+\
 	prev_sz = sz; \
-	sz = serialize(fp, table ## _essence_serializer, \
-			(void *)(elements)->table ## _essence, (elements)->table ## _essence_cnt); \
+	sz = serialize(fp, table->serializer, \
+			(void *)table->chain->data, table->chain->count); \
 	if (prev_sz > 0) { \
 		fseek(fp, prev_sz - 1, SEEK_SET); \
 		fprintf(fp, ",\n"); /* overwrite ] and [ */ \
@@ -1548,7 +1568,7 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 	void **table_el;
 	const char *obj_type;
 	int64_t id;
-	int i, rc;
+	int i;
 
 	obj_type = JSs(obj, "_db", "type");
 	if (!obj_type) {
@@ -1653,13 +1673,14 @@ pw_elements_read_talk_proc(struct talk_proc *talk, FILE *fp)
 }
 
 static int32_t
-pw_elements_load_talk_proc(FILE *fp)
+pw_elements_load_talk_proc(struct pw_elements *elements, FILE *fp)
 {
 	void *table;
 	int32_t count;
 
 	fread(&count, 1, sizeof(count), fp);
-	table = calloc(count, sizeof(struct talk_proc));
+	elements->talk_proc = table = calloc(count, sizeof(struct talk_proc));
+	elements->talk_proc_cnt = count;
 
 	for (int i = 0; i < count; ++i) {
 		struct talk_proc *talk = table + i * sizeof(struct talk_proc);
@@ -1795,7 +1816,7 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 	LOAD_ARR(npc_decompose_service);
 	LOAD_ARR(npc_type);
 	LOAD_ARR(npcs);
-	pw_elements_load_talk_proc(fp);
+	pw_elements_load_talk_proc(el, fp);
 	LOAD_ARR(face_texture_essence);
 	LOAD_ARR(face_shape_essence);
 	LOAD_ARR(face_emotion_type);

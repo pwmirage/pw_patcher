@@ -19,6 +19,7 @@ extern uint32_t g_elements_last_id;
 extern struct pw_idmap *g_elements_map;
 
 int pw_elements_load(struct pw_elements *el, const char *filename);
+int pw_elements_save(struct pw_elements *el, const char *filename);
 void pw_elements_serialize(struct pw_elements *elements);
 int pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj);
 
@@ -33,7 +34,7 @@ struct pw_elements_table {
 };
 
 struct pw_elements_chain {
-	struct pw_elements_table_el *next;
+	struct pw_elements_chain *next;
 	size_t capacity;
 	size_t count;
 	char data[0];
@@ -59,7 +60,6 @@ struct pw_elements {
 			char *unk2;
 	} control_block1;
 
-	int32_t talk_proc_cnt;
 	struct talk_proc {
 			int32_t id;
 			char16_t name[64];
@@ -79,9 +79,9 @@ struct pw_elements {
 					} *choices;
 			} *questions;
 	};
-	struct pw_elements_table *talk_proc;
+	void *talk_proc;
+	uint32_t talk_proc_cnt;
 
-	int32_t equipment_addon_cnt;
 	struct equipment_addon {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -92,14 +92,12 @@ struct pw_elements {
 	};
 	struct pw_elements_table *equipment_addon;
 
-	int32_t weapon_major_types_cnt;
 	struct weapon_major_types {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
 	struct pw_elements_table *weapon_major_types;
 
-	int32_t weapon_minor_types_cnt;
 	struct weapon_minor_types {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -116,7 +114,6 @@ struct pw_elements {
 	};
 	struct pw_elements_table *weapon_minor_types;
 
-	int32_t weapon_essence_cnt;
 	struct weapon_essence {
 		int32_t id;
 		int32_t id_major_type;
@@ -178,14 +175,12 @@ struct pw_elements {
 	};
         struct pw_elements_table *weapon_essence;
 
-	int32_t armor_major_types_cnt;
 	struct armor_major_types {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *armor_major_types;
 
-	int32_t armor_minor_types_cnt;
 	struct armor_minor_types {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -193,7 +188,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *armor_minor_types;
 
-	int32_t armor_essence_cnt;
 	struct armor_essence {
 		int32_t id;
 		int32_t id_major_type;
@@ -253,14 +247,12 @@ struct pw_elements {
 	};
         struct pw_elements_table *armor_essence;
 
-	int32_t decoration_major_types_cnt;
 	struct decoration_major_types {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *decoration_major_types;
 
-	int32_t decoration_minor_types_cnt;
 	struct decoration_minor_types {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -268,7 +260,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *decoration_minor_types;
 
-	int32_t decoration_essence_cnt;
 	struct decoration_essence {
 		int32_t id;
 		int32_t id_major_type;
@@ -325,21 +316,18 @@ struct pw_elements {
 	};
         struct pw_elements_table *decoration_essence;
 
-	int32_t medicine_major_types_cnt;
 	struct medicine_major_types {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *medicine_major_types;
 
-	int32_t medicine_minor_types_cnt;
 	struct medicine_minor_types {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *medicine_minor_types;
 
-	int32_t medicine_essence_cnt;
 	struct medicine_essence {
 		int32_t id;
 		int32_t id_major_type;
@@ -361,21 +349,18 @@ struct pw_elements {
 	};
         struct pw_elements_table *medicine_essence;
 
-	int32_t material_major_type_cnt;
 	struct material_major_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *material_major_type;
 
-	int32_t material_sub_type_cnt;
 	struct material_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *material_sub_type;
 
-	int32_t material_essence_cnt;
 	struct material_essence {
 		int32_t id;
 		int32_t id_major_type;
@@ -395,14 +380,12 @@ struct pw_elements {
 	};
         struct pw_elements_table *material_essence;
 
-	int32_t damagerune_sub_type_cnt;
 	struct damagerune_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *damagerune_sub_type;
 
-	int32_t damagerune_essence_cnt;
 	struct damagerune_essence {
 		int32_t id;
 		int32_t id_sub_type;
@@ -421,14 +404,12 @@ struct pw_elements {
 	};
         struct pw_elements_table *damagerune_essence;
 
-	int32_t armorrune_sub_type_cnt;
 	struct armorrune_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
 	struct pw_elements_table *armorrune_sub_type;
 
-	int32_t armorrune_essence_cnt;
 	struct armorrune_essence {
 		int32_t id;
 		int32_t id_sub_type;
@@ -450,14 +431,12 @@ struct pw_elements {
 	};
         struct pw_elements_table *armorrune_essence;
 
-	int32_t skilltome_sub_type_cnt;
 	struct skilltome_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *skilltome_sub_type;
 
-	int32_t skilltome_essence_cnt;
 	struct skilltome_essence {
 		int32_t id;
 		int32_t id_sub_type;
@@ -472,7 +451,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *skilltome_essence;
 
-	int32_t flysword_essence_cnt;
 	struct flysword_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -498,7 +476,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *flysword_essence;
 
-	int32_t wingmanwing_essence_cnt;
 	struct wingmanwing_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -517,7 +494,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *wingmanwing_essence;
 
-	int32_t townscroll_essence_cnt;
 	struct townscroll_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -532,7 +508,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *townscroll_essence;
 
-	int32_t unionscroll_essence_cnt;
 	struct unionscroll_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -547,7 +522,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *unionscroll_essence;
 
-	int32_t revivescroll_essence_cnt;
 	struct revivescroll_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -563,7 +537,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *revivescroll_essence;
 
-	int32_t element_essence_cnt;
 	struct element_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -578,7 +551,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *element_essence;
 
-	int32_t taskmatter_essence_cnt;
 	struct taskmatter_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -589,7 +561,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *taskmatter_essence;
 
-	int32_t tossmatter_essence_cnt;
 	struct tossmatter_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -615,14 +586,12 @@ struct pw_elements {
 	};
         struct pw_elements_table *tossmatter_essence;
 
-	int32_t projectile_types_cnt;
 	struct projectile_types {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *projectile_types;
 
-	int32_t projectile_essence_cnt;
 	struct projectile_essence {
 		int32_t id;
 		int32_t type;
@@ -649,14 +618,12 @@ struct pw_elements {
 	};
         struct pw_elements_table *projectile_essence;
 
-	int32_t quiver_sub_type_cnt;
 	struct quiver_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *quiver_sub_type;
 
-	int32_t quiver_essence_cnt;
 	struct quiver_essence {
 		int32_t id;
 		int32_t id_sub_type;
@@ -669,14 +636,12 @@ struct pw_elements {
 	};
         struct pw_elements_table *quiver_essence;
 
-	int32_t stone_types_cnt;
 	struct stone_types {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *stone_types;
 
-	int32_t stone_essence_cnt;
 	struct stone_essence {
 		int32_t id;
 		int32_t id_sub_type;
@@ -699,7 +664,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *stone_essence;
 
-	int32_t monster_addon_cnt;
 	struct monster_addon {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -710,7 +674,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *monster_addon;
 
-	int32_t monster_type_cnt;
 	struct monster_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -749,7 +712,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *monster_type;
 
-	int32_t monsters_cnt;
 	struct monsters {
 		int32_t id;
 		int32_t id_type;
@@ -833,7 +795,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *monsters;
 
-	int32_t npc_talk_service_cnt;
 	struct npc_talk_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -841,7 +802,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_talk_service;
 
-	int32_t npc_sells_cnt;
 	struct npc_sells {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -853,7 +813,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_sells;
 
-	int32_t npc_buy_service_cnt;
 	struct npc_buy_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -861,7 +820,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_buy_service;
 
-	int32_t npc_repair_service_cnt;
 	struct npc_repair_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -869,7 +827,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_repair_service;
 
-	int32_t npc_install_service_cnt;
 	struct npc_install_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -878,7 +835,6 @@ struct pw_elements {
 	};
 	struct pw_elements_table *npc_install_service;
 
-	int32_t npc_uninstall_service_cnt;
 	struct npc_uninstall_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -887,7 +843,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_uninstall_service;
 
-	int32_t npc_task_in_service_cnt;
 	struct npc_task_in_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -895,7 +850,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_task_in_service;
 
-	int32_t npc_task_out_service_cnt;
 	struct npc_task_out_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -903,7 +857,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_task_out_service;
 
-	int32_t npc_task_matter_service_cnt;
 	struct npc_task_matter_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -917,7 +870,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_task_matter_service;
 
-	int32_t npc_skill_service_cnt;
 	struct npc_skill_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -926,7 +878,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_skill_service;
 
-	int32_t npc_heal_service_cnt;
 	struct npc_heal_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -934,7 +885,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_heal_service;
 
-	int32_t npc_transmit_service_cnt;
 	struct npc_transmit_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -948,7 +898,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_transmit_service;
 
-	int32_t npc_transport_service_cnt;
 	struct npc_transport_service { /* unused */
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -960,7 +909,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_transport_service;
 
-	int32_t npc_proxy_service_cnt;
 	struct npc_proxy_service { /* unused */
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -968,14 +916,12 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_proxy_service;
 
-	int32_t npc_storage_service_cnt;
 	struct npc_storage_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *npc_storage_service;
 
-	int32_t npc_crafts_cnt;
 	struct npc_crafts {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -988,7 +934,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_crafts;
 
-	int32_t npc_decompose_service_cnt;
 	struct npc_decompose_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -996,14 +941,12 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_decompose_service;
 
-	int32_t npc_type_cnt;
 	struct npc_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *npc_type;
 
-	int32_t npcs_cnt;
 	struct npcs {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1047,7 +990,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *npcs;
 
-	int32_t face_texture_essence_cnt;
 	struct face_texture_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1063,7 +1005,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *face_texture_essence;
 
-	int32_t face_shape_essence_cnt;
 	struct face_shape_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1078,7 +1019,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *face_shape_essence;
 
-	int32_t face_emotion_type_cnt;
 	struct face_emotion_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1086,7 +1026,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *face_emotion_type;
 
-	int32_t face_expression_essence_cnt;
 	struct face_expression_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1098,7 +1037,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *face_expression_essence;
 
-	int32_t face_hair_essence_cnt;
 	struct face_hair_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1112,7 +1050,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *face_hair_essence;
 
-	int32_t face_moustache_essence_cnt;
 	struct face_moustache_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1125,7 +1062,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *face_moustache_essence;
 
-	int32_t colorpicker_essence_cnt;
 	struct colorpicker_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1136,7 +1072,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *colorpicker_essence;
 
-	int32_t customizedata_essence_cnt;
 	struct customizedata_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1146,21 +1081,18 @@ struct pw_elements {
 	};
         struct pw_elements_table *customizedata_essence;
 
-	int32_t recipe_major_type_cnt;
 	struct recipe_major_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *recipe_major_type;
 
-	int32_t recipe_sub_type_cnt;
 	struct recipe_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *recipe_sub_type;
 
-	int32_t recipes_cnt;
 	struct recipes {
 		int32_t id;
 		int32_t id_major_type;
@@ -1187,7 +1119,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *recipes;
 
-	int32_t enemy_faction_config_cnt;
 	struct enemy_faction_config {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1195,7 +1126,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *enemy_faction_config;
 
-	int32_t charracter_class_config_cnt;
 	struct charracter_class_config {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1225,7 +1155,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *charracter_class_config;
 
-	int32_t param_adjust_config_cnt;
 	struct param_adjust_config {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1368,7 +1297,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *param_adjust_config;
 
-	int32_t player_action_info_config_cnt;
 	struct player_action_info_config {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1389,7 +1317,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *player_action_info_config;
 
-	int32_t taskdice_essence_cnt;
 	struct taskdice_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1406,7 +1333,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *taskdice_essence;
 
-	int32_t tasknormalmatter_essence_cnt;
 	struct tasknormalmatter_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1420,7 +1346,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *tasknormalmatter_essence;
 
-	int32_t face_faling_essence_cnt;
 	struct face_faling_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1433,7 +1358,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *face_faling_essence;
 
-	int32_t player_levelexp_config_cnt;
 	struct player_levelexp_config {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1441,14 +1365,12 @@ struct pw_elements {
 	};
         struct pw_elements_table *player_levelexp_config;
 
-	int32_t mine_type_cnt;
 	struct mine_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *mine_type;
 
-	int32_t mines_cnt;
 	struct mines {
 		int32_t id;
 		int32_t id_type;
@@ -1485,7 +1407,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *mines;
 
-	int32_t npc_identify_service_cnt;
 	struct npc_identify_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1493,14 +1414,12 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_identify_service;
 
-	int32_t fashion_major_type_cnt;
 	struct fashion_major_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *fashion_major_type;
 
-	int32_t fashion_sub_type_cnt;
 	struct fashion_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1508,7 +1427,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *fashion_sub_type;
 
-	int32_t fashion_essence_cnt;
 	struct fashion_essence {
 		int32_t id;
 		int32_t id_major_type;
@@ -1530,21 +1448,18 @@ struct pw_elements {
 	};
         struct pw_elements_table *fashion_essence;
 
-	int32_t faceticket_major_type_cnt;
 	struct faceticket_major_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *faceticket_major_type;
 
-	int32_t faceticket_sub_type_cnt;
 	struct faceticket_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *faceticket_sub_type;
 
-	int32_t faceticket_essence_cnt;
 	struct faceticket_essence {
 		int32_t id;
 		int32_t id_major_type;
@@ -1563,21 +1478,18 @@ struct pw_elements {
 	};
         struct pw_elements_table *faceticket_essence;
 
-	int32_t facepill_major_type_cnt;
 	struct facepill_major_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *facepill_major_type;
 
-	int32_t facepill_sub_type_cnt;
 	struct facepill_sub_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *facepill_sub_type;
 
-	int32_t facepill_essence_cnt;
 	struct facepill_essence {
 		int32_t id;
 		int32_t id_major_type;
@@ -1612,7 +1524,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *facepill_essence;
 
-	int32_t armor_sets_cnt;
 	struct armor_sets {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1644,14 +1555,12 @@ struct pw_elements {
 	};
         struct pw_elements_table *armor_sets;
 
-	int32_t gm_generator_type_cnt;
 	struct gm_generator_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *gm_generator_type;
 
-	int32_t gm_generator_essence_cnt;
 	struct gm_generator_essence {
 		int32_t id;
 		int32_t id_type;
@@ -1665,14 +1574,12 @@ struct pw_elements {
 	};
         struct pw_elements_table *gm_generator_essence;
 
-	int32_t pet_type_cnt;
 	struct pet_type {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
 	};
         struct pw_elements_table *pet_type;
 
-	int32_t pet_essence_cnt;
 	struct pet_essence {
 		int32_t id;
 		int32_t id_type;
@@ -1720,7 +1627,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *pet_essence;
 
-	int32_t pet_egg_essence_cnt;
 	struct pet_egg_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1745,7 +1651,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *pet_egg_essence;
 
-	int32_t pet_food_essence_cnt;
 	struct pet_food_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1763,7 +1668,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *pet_food_essence;
 
-	int32_t pet_faceticket_essence_cnt;
 	struct pet_faceticket_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1777,7 +1681,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *pet_faceticket_essence;
 
-	int32_t fireworks_essence_cnt;
 	struct fireworks_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1794,7 +1697,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *fireworks_essence;
 
-	int32_t war_tankcallin_essence_cnt;
 	struct war_tankcallin_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1808,7 +1710,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *war_tankcallin_essence;
 
-	int32_t npc_war_towerbuild_service_cnt;
 	struct npc_war_towerbuild_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1835,7 +1736,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_war_towerbuild_service;
 
-	int32_t player_secondlevel_config_cnt;
 	struct player_secondlevel_config {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1843,7 +1743,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *player_secondlevel_config;
 
-	int32_t npc_resetprop_service_cnt;
 	struct npc_resetprop_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1925,7 +1824,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_resetprop_service;
 
-	int32_t npc_petname_service_cnt;
 	struct npc_petname_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1934,7 +1832,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_petname_service;
 
-	int32_t npc_petlearnskill_service_cnt;
 	struct npc_petlearnskill_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1943,7 +1840,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_petlearnskill_service;
 
-	int32_t npc_petforgetskill_service_cnt;
 	struct npc_petforgetskill_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1952,7 +1848,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_petforgetskill_service;
 
-	int32_t skillmatter_essence_cnt;
 	struct skillmatter_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1969,7 +1864,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *skillmatter_essence;
 
-	int32_t refine_ticket_essence_cnt;
 	struct refine_ticket_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -1999,7 +1893,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *refine_ticket_essence;
 
-	int32_t destroying_essence_cnt;
 	struct destroying_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -2013,7 +1906,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *destroying_essence;
 
-	int32_t npc_equipbind_service_cnt;
 	struct npc_equipbind_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -2022,7 +1914,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_equipbind_service;
 
-	int32_t npc_equipdestroy_service_cnt;
 	struct npc_equipdestroy_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -2031,7 +1922,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_equipdestroy_service;
 
-	int32_t npc_equipundestroy_service_cnt;
 	struct npc_equipundestroy_service {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -2040,7 +1930,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *npc_equipundestroy_service;
 
-	int32_t bible_essence_cnt;
 	struct bible_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -2064,7 +1953,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *bible_essence;
 
-	int32_t speaker_essence_cnt;
 	struct speaker_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -2079,7 +1967,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *speaker_essence;
 
-	int32_t autohp_essence_cnt;
 	struct autohp_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -2096,7 +1983,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *autohp_essence;
 
-	int32_t automp_essence_cnt;
 	struct automp_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -2113,7 +1999,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *automp_essence;
 
-	int32_t double_exp_essence_cnt;
 	struct double_exp_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -2128,7 +2013,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *double_exp_essence;
 
-	int32_t transmitscroll_essence_cnt;
 	struct transmitscroll_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
@@ -2142,7 +2026,6 @@ struct pw_elements {
 	};
         struct pw_elements_table *transmitscroll_essence;
 
-	int32_t dye_ticket_essence_cnt;
 	struct dye_ticket_essence {
 		int32_t id;
 		char16_t name[64 / sizeof(char16_t)];
