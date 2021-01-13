@@ -77,7 +77,7 @@ download_wget(const char *url, const char *filename)
 
 	snprintf(buf, sizeof(buf), "wget \"%s\" -O \"%s\"", url, filename);
 	rc = system(buf);
-	if (rc == -1) {
+	if (rc != 0) {
 		return rc;
 	}
 
