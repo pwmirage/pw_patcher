@@ -79,6 +79,7 @@ add_child(struct cjson *parent, struct cjson *child)
 
 	if (!last) {
 		parent->a = child;
+		parent->count++;
 		assert(child->next == NULL);
 		child->next = NULL;
 		return 0;
@@ -262,6 +263,46 @@ cjson_parse(char *str)
 				}
 
 				b = end - 1; /* will be incremented */
+				cur_key = NULL;
+				break;
+			}
+			case 't':
+			case 'f':
+			{
+				struct cjson *obj;
+				char *end;
+				bool val;
+
+				/* truexyz will still match as true -> don't care */
+				if (strncmp(b, "true", 4) == 0) {
+					val = true;
+				} else if (strncmp(b, "false", 5) == 0) {
+					val = false;
+				} else {
+					break;
+				}
+
+				if (!cur_key && cur_obj->type != CJSON_TYPE_ARRAY) {
+					assert(false);
+					goto err;
+				}
+
+				obj = new_obj(&mem);
+				if (!obj) {
+					assert(false);
+					goto err;
+				}
+				obj->i = val;
+				obj->parent = cur_obj;
+				obj->key = cur_key;
+				obj->type = CJSON_TYPE_BOOLEAN;
+
+				if (add_child(cur_obj, obj) != 0) {
+					assert(false);
+					goto err;
+				}
+
+				b += val ? 3 : 4; /* will be incremented */
 				cur_key = NULL;
 				break;
 			}
