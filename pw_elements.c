@@ -1608,14 +1608,14 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 }
 
 static void
-pw_elements_load_table(struct pw_elements *elements, struct pw_elements_table **table_p, const char *name, uint32_t el_size, struct serializer *serializer, FILE *fp)
+pw_elements_load_table(struct pw_elements *elements, const char *name, uint32_t el_size, struct serializer *serializer, FILE *fp)
 {
 	struct pw_elements_table *table;
 	struct pw_elements_chain *chain;
 	int32_t i, count;
 	void *el;
 
-	*table_p = table = calloc(1, sizeof(*table));
+	table = calloc(1, sizeof(*table));
 	if (!table) {
 		pwlog(LOG_ERROR, "pw_elements_load_table: calloc() failed\n");
 		return;
@@ -1787,130 +1787,130 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 		return 1;
 	}
 
-#define LOAD_ARR(arr_name) \
-	pw_elements_load_table(el, &el->arr_name, #arr_name, sizeof(struct arr_name), arr_name ## _serializer, fp)
+#define LOAD_ARR(arr_name, el_size) \
+	pw_elements_load_table(el, #arr_name, el_size, arr_name ## _serializer, fp)
 
-	LOAD_ARR(equipment_addon);
-	LOAD_ARR(weapon_major_types);
-	LOAD_ARR(weapon_minor_types);
-	LOAD_ARR(weapon_essence);
-	LOAD_ARR(armor_major_types);
-	LOAD_ARR(armor_minor_types);
-	LOAD_ARR(armor_essence);
-	LOAD_ARR(decoration_major_types);
-	LOAD_ARR(decoration_minor_types);
-	LOAD_ARR(decoration_essence);
-	LOAD_ARR(medicine_major_types);
-	LOAD_ARR(medicine_minor_types);
-	LOAD_ARR(medicine_essence);
-	LOAD_ARR(material_major_type);
-	LOAD_ARR(material_sub_type);
-	LOAD_ARR(material_essence);
-	LOAD_ARR(damagerune_sub_type);
-	LOAD_ARR(damagerune_essence);
-	LOAD_ARR(armorrune_sub_type);
-	LOAD_ARR(armorrune_essence);
+	LOAD_ARR(equipment_addon, 84);
+	LOAD_ARR(weapon_major_types, 68);
+	LOAD_ARR(weapon_minor_types, 356);
+	LOAD_ARR(weapon_essence, 1404);
+	LOAD_ARR(armor_major_types, 68);
+	LOAD_ARR(armor_minor_types, 72);
+	LOAD_ARR(armor_essence, 1104);
+	LOAD_ARR(decoration_major_types, 68);
+	LOAD_ARR(decoration_minor_types, 72);
+	LOAD_ARR(decoration_essence, 1156);
+	LOAD_ARR(medicine_major_types, 68);
+	LOAD_ARR(medicine_minor_types, 68);
+	LOAD_ARR(medicine_essence, 376);
+	LOAD_ARR(material_major_type, 68);
+	LOAD_ARR(material_sub_type, 68);
+	LOAD_ARR(material_essence, 368);
+	LOAD_ARR(damagerune_sub_type, 68);
+	LOAD_ARR(damagerune_essence, 364);
+	LOAD_ARR(armorrune_sub_type, 68);
+	LOAD_ARR(armorrune_essence, 624);
 	load_control_block_0(&el->control_block0, fp);
-	LOAD_ARR(skilltome_sub_type);
-	LOAD_ARR(skilltome_essence);
-	LOAD_ARR(flysword_essence);
-	LOAD_ARR(wingmanwing_essence);
-	LOAD_ARR(townscroll_essence);
-	LOAD_ARR(unionscroll_essence);
-	LOAD_ARR(revivescroll_essence);
-	LOAD_ARR(element_essence);
-	LOAD_ARR(taskmatter_essence);
-	LOAD_ARR(tossmatter_essence);
-	LOAD_ARR(projectile_types);
-	LOAD_ARR(projectile_essence);
-	LOAD_ARR(quiver_sub_type);
-	LOAD_ARR(quiver_essence);
-	LOAD_ARR(stone_types);
-	LOAD_ARR(stone_essence);
-	LOAD_ARR(monster_addon);
-	LOAD_ARR(monster_type);
-	LOAD_ARR(monsters);
-	LOAD_ARR(npc_talk_service);
-	LOAD_ARR(npc_sells);
-	LOAD_ARR(npc_buy_service);
-	LOAD_ARR(npc_repair_service);
-	LOAD_ARR(npc_install_service);
-	LOAD_ARR(npc_uninstall_service);
-	LOAD_ARR(npc_task_in_service);
-	LOAD_ARR(npc_task_out_service);
-	LOAD_ARR(npc_task_matter_service);
-	LOAD_ARR(npc_skill_service);
-	LOAD_ARR(npc_heal_service);
-	LOAD_ARR(npc_transmit_service);
-	LOAD_ARR(npc_transport_service);
-	LOAD_ARR(npc_proxy_service);
-	LOAD_ARR(npc_storage_service);
-	LOAD_ARR(npc_crafts);
-	LOAD_ARR(npc_decompose_service);
-	LOAD_ARR(npc_type);
-	LOAD_ARR(npcs);
+	LOAD_ARR(skilltome_sub_type, 68);
+	LOAD_ARR(skilltome_essence, 348);
+	LOAD_ARR(flysword_essence, 516);
+	LOAD_ARR(wingmanwing_essence, 488);
+	LOAD_ARR(townscroll_essence, 348);
+	LOAD_ARR(unionscroll_essence, 348);
+	LOAD_ARR(revivescroll_essence, 352);
+	LOAD_ARR(element_essence, 348);
+	LOAD_ARR(taskmatter_essence, 208);
+	LOAD_ARR(tossmatter_essence, 888);
+	LOAD_ARR(projectile_types, 68);
+	LOAD_ARR(projectile_essence, 892);
+	LOAD_ARR(quiver_sub_type, 68);
+	LOAD_ARR(quiver_essence, 340);
+	LOAD_ARR(stone_types, 68);
+	LOAD_ARR(stone_essence, 436);
+	LOAD_ARR(monster_addon, 84);
+	LOAD_ARR(monster_type, 196);
+	LOAD_ARR(monsters, 1500);
+	LOAD_ARR(npc_talk_service, 72);
+	LOAD_ARR(npc_sells, 1224);
+	LOAD_ARR(npc_buy_service, 72);
+	LOAD_ARR(npc_repair_service, 72);
+	LOAD_ARR(npc_install_service, 200);
+	LOAD_ARR(npc_uninstall_service, 200);
+	LOAD_ARR(npc_task_in_service, 196);
+	LOAD_ARR(npc_task_out_service, 196);
+	LOAD_ARR(npc_task_matter_service, 644);
+	LOAD_ARR(npc_skill_service, 584);
+	LOAD_ARR(npc_heal_service, 72);
+	LOAD_ARR(npc_transmit_service, 460);
+	LOAD_ARR(npc_transport_service, 328);
+	LOAD_ARR(npc_proxy_service, 72);
+	LOAD_ARR(npc_storage_service, 68);
+	LOAD_ARR(npc_crafts, 1228);
+	LOAD_ARR(npc_decompose_service, 72);
+	LOAD_ARR(npc_type, 68);
+	LOAD_ARR(npcs, 848);
 	pw_elements_load_talk_proc(el, fp);
-	LOAD_ARR(face_texture_essence);
-	LOAD_ARR(face_shape_essence);
-	LOAD_ARR(face_emotion_type);
-	LOAD_ARR(face_expression_essence);
-	LOAD_ARR(face_hair_essence);
-	LOAD_ARR(face_moustache_essence);
-	LOAD_ARR(colorpicker_essence);
-	LOAD_ARR(customizedata_essence);
-	LOAD_ARR(recipe_major_type);
-	LOAD_ARR(recipe_sub_type);
-	LOAD_ARR(recipes);
-	LOAD_ARR(enemy_faction_config);
-	LOAD_ARR(charracter_class_config);
-	LOAD_ARR(param_adjust_config);
-	LOAD_ARR(player_action_info_config);
-	LOAD_ARR(taskdice_essence);
-	LOAD_ARR(tasknormalmatter_essence);
-	LOAD_ARR(face_faling_essence);
-	LOAD_ARR(player_levelexp_config);
-	LOAD_ARR(mine_type);
-	LOAD_ARR(mines);
-	LOAD_ARR(npc_identify_service);
-	LOAD_ARR(fashion_major_type);
-	LOAD_ARR(fashion_sub_type);
-	LOAD_ARR(fashion_essence);
-	LOAD_ARR(faceticket_major_type);
-	LOAD_ARR(faceticket_sub_type);
-	LOAD_ARR(faceticket_essence);
-	LOAD_ARR(facepill_major_type);
-	LOAD_ARR(facepill_sub_type);
-	LOAD_ARR(facepill_essence);
-	LOAD_ARR(armor_sets);
-	LOAD_ARR(gm_generator_type);
-	LOAD_ARR(gm_generator_essence);
-	LOAD_ARR(pet_type);
-	LOAD_ARR(pet_essence);
-	LOAD_ARR(pet_egg_essence);
-	LOAD_ARR(pet_food_essence);
-	LOAD_ARR(pet_faceticket_essence);
-	LOAD_ARR(fireworks_essence);
-	LOAD_ARR(war_tankcallin_essence);
+	LOAD_ARR(face_texture_essence, 476);
+	LOAD_ARR(face_shape_essence, 348);
+	LOAD_ARR(face_emotion_type, 196);
+	LOAD_ARR(face_expression_essence, 336);
+	LOAD_ARR(face_hair_essence, 468);
+	LOAD_ARR(face_moustache_essence, 340);
+	LOAD_ARR(colorpicker_essence, 208);
+	LOAD_ARR(customizedata_essence, 204);
+	LOAD_ARR(recipe_major_type, 68);
+	LOAD_ARR(recipe_sub_type, 68);
+	LOAD_ARR(recipes, 404);
+	LOAD_ARR(enemy_faction_config, 196);
+	LOAD_ARR(charracter_class_config, 160);
+	LOAD_ARR(param_adjust_config, 612);
+	LOAD_ARR(player_action_info_config, 488);
+	LOAD_ARR(taskdice_essence, 404);
+	LOAD_ARR(tasknormalmatter_essence, 344);
+	LOAD_ARR(face_faling_essence, 340);
+	LOAD_ARR(player_levelexp_config, 668);
+	LOAD_ARR(mine_type, 68);
+	LOAD_ARR(mines, 452);
+	LOAD_ARR(npc_identify_service, 72);
+	LOAD_ARR(fashion_major_type, 68);
+	LOAD_ARR(fashion_sub_type, 72);
+	LOAD_ARR(fashion_essence, 404);
+	LOAD_ARR(faceticket_major_type, 68);
+	LOAD_ARR(faceticket_sub_type, 68);
+	LOAD_ARR(faceticket_essence, 488);
+	LOAD_ARR(facepill_major_type, 68);
+	LOAD_ARR(facepill_sub_type, 68);
+	LOAD_ARR(facepill_essence, 2412);
+	LOAD_ARR(armor_sets, 292);
+	LOAD_ARR(gm_generator_type, 68);
+	LOAD_ARR(gm_generator_essence, 344);
+	LOAD_ARR(pet_type, 68);
+	LOAD_ARR(pet_essence, 480);
+	LOAD_ARR(pet_egg_essence, 628);
+	LOAD_ARR(pet_food_essence, 360);
+	LOAD_ARR(pet_faceticket_essence, 344);
+	LOAD_ARR(fireworks_essence, 480);
+	LOAD_ARR(war_tankcallin_essence, 344);
 	load_control_block_1(&el->control_block1, fp);
-	LOAD_ARR(npc_war_towerbuild_service);
-	LOAD_ARR(player_secondlevel_config);
-	LOAD_ARR(npc_resetprop_service);
-	LOAD_ARR(npc_petname_service);
-	LOAD_ARR(npc_petlearnskill_service);
-	LOAD_ARR(npc_petforgetskill_service);
-	LOAD_ARR(skillmatter_essence);
-	LOAD_ARR(refine_ticket_essence);
-	LOAD_ARR(destroying_essence);
-	LOAD_ARR(npc_equipbind_service);
-	LOAD_ARR(npc_equipdestroy_service);
-	LOAD_ARR(npc_equipundestroy_service);
-	LOAD_ARR(bible_essence);
-	LOAD_ARR(speaker_essence);
-	LOAD_ARR(autohp_essence);
-	LOAD_ARR(automp_essence);
-	LOAD_ARR(double_exp_essence);
-	LOAD_ARR(transmitscroll_essence);
-	LOAD_ARR(dye_ticket_essence);
+	LOAD_ARR(npc_war_towerbuild_service, 148);
+	LOAD_ARR(player_secondlevel_config, 1092);
+	LOAD_ARR(npc_resetprop_service, 368);
+	LOAD_ARR(npc_petname_service, 76);
+	LOAD_ARR(npc_petlearnskill_service, 584);
+	LOAD_ARR(npc_petforgetskill_service, 76);
+	LOAD_ARR(skillmatter_essence, 356);
+	LOAD_ARR(refine_ticket_essence, 436);
+	LOAD_ARR(destroying_essence, 344);
+	LOAD_ARR(npc_equipbind_service, 76);
+	LOAD_ARR(npc_equipdestroy_service, 76);
+	LOAD_ARR(npc_equipundestroy_service, 76);
+	LOAD_ARR(bible_essence, 384);
+	LOAD_ARR(speaker_essence, 348);
+	LOAD_ARR(autohp_essence, 356);
+	LOAD_ARR(automp_essence, 356);
+	LOAD_ARR(double_exp_essence, 348);
+	LOAD_ARR(transmitscroll_essence, 344);
+	LOAD_ARR(dye_ticket_essence, 368);
 
 #undef LOAD_ARR
 
@@ -1957,18 +1957,6 @@ pw_elements_save_table(struct pw_elements_table *table, FILE *fp, int skipped_of
 	fseek(fp, end_off, SEEK_SET);
 }
 
-static struct serializer *
-find_serializer(struct serializer *s, const char *name)
-{
-	while (s->type != TYPE_END) {
-		if (strcmp(s->name, name) == 0) {
-			return s;
-		}
-	}
-
-	return NULL;
-}
-
 int
 pw_elements_save(struct pw_elements *el, const char *filename, bool is_server)
 {
@@ -2001,9 +1989,9 @@ pw_elements_save(struct pw_elements *el, const char *filename, bool is_server)
 	for (i = 0; i < el->tables_count; i++) {
 		struct pw_elements_table *table = el->tables[i];
 
-		if (is_server && strcmp(table->name, "npc_crafts")) {
+		if (is_server && strcmp(table->name, "npc_crafts") == 0) {
 			pw_elements_save_table(table, fp, 72);
-		} else if (is_server && strcmp(table->name, "recipes")) {
+		} else if (is_server && strcmp(table->name, "recipes") == 0) {
 			pw_elements_save_table(table, fp, 92);
 		} else {
 			pw_elements_save_table(table, fp, 0);

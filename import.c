@@ -56,6 +56,8 @@ import_stream_cb(void *ctx, struct cjson *obj)
     }
 
     fprintf(stderr, "type: %s\n", JSs(obj, "_db", "type"));
+
+    print_obj(obj->a, 1);
     pw_elements_patch_obj(g_elements, obj);
 }
 
@@ -84,7 +86,7 @@ patch(const char *elements_path, const char *url)
         return 1;
     }
 
-    pw_elements_save(g_elements, "elements_exp.data", true);
+    pw_elements_save(g_elements, "elements_exp.data", false);
 	return 0;
 }
 
