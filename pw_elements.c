@@ -1692,6 +1692,39 @@ pw_elements_load_talk_proc(struct pw_elements *elements, FILE *fp)
 }
 
 static void
+pw_elements_write_talk_proc(struct talk_proc *talk, FILE *fp)
+{
+	fwrite(&talk->id, 1, sizeof(talk->id), fp);
+	fwrite(&talk->name, 1, sizeof(talk->name), fp);
+
+	fwrite(&talk->questions_cnt, 1, sizeof(talk->questions_cnt), fp);
+	for (int q = 0; q < talk->questions_cnt; ++q) {
+		struct question *question = &talk->questions[q];
+		fwrite(&question->id, 1, sizeof(question->id), fp);
+		fwrite(&question->control, 1, sizeof(question->control), fp);
+
+		fwrite(&question->text_size, 1, sizeof(question->text_size), fp);
+		fwrite(question->text, 1, question->text_size * sizeof(*question->text), fp);
+
+		fwrite(&question->choices_cnt, 1, sizeof(question->choices_cnt), fp);
+		fwrite(question->choices, 1, question->choices_cnt * sizeof(*question->choices), fp);
+	}
+}
+
+static void
+pw_elements_save_talk_proc(struct pw_elements *elements, FILE *fp)
+{
+	uint32_t count = elements->talk_proc_cnt;
+
+	fwrite(&count, 1, sizeof(count), fp);
+	for (int i = 0; i < count; ++i) {
+		struct talk_proc *talk = elements->talk_proc + sizeof(*talk) * i;
+
+		pw_elements_write_talk_proc(talk, fp);
+	}
+}
+
+static void
 load_control_block_0(struct control_block0 *block, FILE *fp)
 {
 		fread(&block->unk1, 1, sizeof(block->unk1), fp);
@@ -1889,3 +1922,60 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 	return rc;
 }
 
+static void
+pw_elements_save_table(struct pw_elements_table *table, FILE *fp)
+{
+	struct pw_elements_chain *chain;
+	size_t count_off;
+	uint32_t count = 0;
+
+	count_off = ftell(fp);
+	/* item count goes here, but we don't know it yet */
+	fseek(fp, 4, SEEK_CUR);
+
+	chain = table->chain;
+	while (chain) {
+		for (uint32_t i = 0; i < chain->count; i++) {
+			void *el = (void *)(chain->data + i * table->el_size);
+			/* skip items with the *removed* bit set */
+			if (*(uint32_t *)el & (1 << 31)) continue;
+			fwrite(el, table->el_size, 1, fp);
+			count++;
+		}
+		chain = chain->next;
+	}
+
+	size_t end_off = ftell(fp);
+	fseek(fp, count_off, SEEK_SET);
+	fwrite(&count, 1, sizeof(count), fp);
+	fseek(fp, end_off, SEEK_SET);
+}
+
+int
+pw_elements_save(struct pw_elements *el, const char *filename)
+{
+	FILE *fp = fopen(filename, "wb");
+	if (fp == NULL) {
+		fprintf(stderr, "cant open %s\n", filename);
+		return 1;
+	}
+
+	fwrite(&el->hdr, 1, sizeof(el->hdr), fp);
+
+	size_t i;
+	for (i = 0; i < el->tables_count; i++) {
+		struct pw_elements_table *table = el->tables[i];
+
+		pw_elements_save_table(table, fp);
+
+		if (strcmp(table->name, "armorrune_essence") == 0) {
+			save_control_block_0(&el->control_block0, fp);
+		} else if (strcmp(table->name, "war_tankcallin_essence") == 0) {
+			save_control_block_1(&el->control_block1, fp);
+		} else if (strcmp(table->name, "npcs") == 0) {
+			pw_elements_save_talk_proc(el, fp);
+		}
+	}
+	fclose(fp);
+	return 0;
+}

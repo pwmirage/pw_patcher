@@ -84,6 +84,7 @@ patch(const char *elements_path, const char *url)
         return 1;
     }
 
+    pw_elements_save(g_elements, "elements_exp.data");
 	return 0;
 }
 
