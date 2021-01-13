@@ -92,6 +92,196 @@ add_child(struct cjson *parent, struct cjson *child)
 	return 0;
 }
 
+struct cjson *
+cjson_parse(char *str)
+{
+	struct cjson_mempool *mem;
+	struct cjson *top_obj; 
+	struct cjson *cur_obj;
+	char *cur_key = NULL;
+	char *b = str;
+	bool need_comma = false;
+
+	if (*b != '{' && *b != '[') {
+		assert(false);
+		return NULL;
+	}
+
+	mem = calloc(1, sizeof(*mem) + CJSON_MIN_POOLSIZE * sizeof(struct cjson));
+	if (!mem) {
+		assert(false);
+		return NULL;
+	}
+	mem->capacity = CJSON_MIN_POOLSIZE;
+
+	top_obj = cur_obj = new_obj(&mem);
+	cur_obj->parent = NULL;
+	cur_obj->key = "";
+	cur_obj->type = *b == '{' ? CJSON_TYPE_OBJECT : CJSON_TYPE_ARRAY;
+	cur_obj->mem = mem;
+
+	/* we handled the root object/array separately, go on */
+	b++;
+
+	while (*b) {
+		switch(*b) {
+			case '[':
+			case '{': {
+				struct cjson *obj;
+
+				need_comma = false;
+				if (!cur_key && cur_obj->type != CJSON_TYPE_ARRAY) {
+					assert(false);
+					goto err;
+				}
+
+				obj = new_obj(&mem);
+				if (!obj) {
+					assert(false);
+					goto err;
+				}
+				obj->parent = cur_obj;
+				obj->key = cur_key;
+				obj->type = *b == '{' ? CJSON_TYPE_OBJECT : CJSON_TYPE_ARRAY;
+				if (add_child(cur_obj, obj) != 0) {
+					assert(false);
+					goto err;
+				}
+				cur_obj = obj;
+				cur_key = NULL;
+				break;
+			}
+			case ']':
+			case '}': {
+				need_comma = true;
+				if (cur_key || (*b == ']' && cur_obj->type == CJSON_TYPE_OBJECT) ||
+				    (*b == '}' && cur_obj->type == CJSON_TYPE_ARRAY)) {
+					assert(false);
+					goto err;
+				}
+
+				cur_obj = cur_obj->parent;
+				if (!cur_obj) {
+					return top_obj;
+				}
+				break;
+			}
+			case '"': {
+				char *start = ++b;
+
+				while (*b && *b != '"') b++;
+				if (*b == 0 || *(b + 1) == 0) {
+					goto err;
+				}
+				*b = 0;
+
+				if (cur_key || cur_obj->type == CJSON_TYPE_ARRAY) {
+					struct cjson *obj = new_obj(&mem);
+
+					if (!obj) {
+						assert(false);
+						goto err;
+					}
+					obj->parent = cur_obj;
+					obj->key = cur_key;
+					obj->type = CJSON_TYPE_STRING;
+					obj->s = start;
+					if (add_child(cur_obj, obj) != 0) {
+						assert(false);
+						goto err;
+					}
+
+					cur_key = NULL;
+					need_comma = true;
+				} else {
+					if (need_comma) {
+						assert(false);
+						goto err;
+					}
+
+					if (cur_obj->type != CJSON_TYPE_OBJECT) {
+						assert(false);
+						goto err;
+					}
+
+					cur_key = start;
+				}
+				break;
+			}
+			case '0':
+			case '1':
+			case '2':
+			case '3':
+			case '4':
+			case '5':
+			case '6':
+			case '7':
+			case '8':
+			case '9':
+			case '-':
+			case '.':
+			{
+				struct cjson *obj;
+				char *end;
+
+				if (!cur_key && cur_obj->type != CJSON_TYPE_ARRAY) {
+					assert(false);
+					goto err;
+				}
+
+
+				obj = new_obj(&mem);
+				if (!obj) {
+					assert(false);
+					goto err;
+				}
+				obj->parent = cur_obj;
+				obj->key = cur_key;
+
+				errno = 0;
+				obj->i = strtoll(b, &end, 0);
+				if (end == b || errno == ERANGE) {
+					assert(false);
+					goto err;
+				}
+
+				if (*end == '.' || *end == 'e' || *end == 'E') {
+					obj->d = strtod(b, &end);
+					if (end == b || errno == ERANGE) {
+						assert(false);
+						goto err;
+					}
+					obj->type = CJSON_TYPE_FLOAT;
+				} else {
+					obj->type = CJSON_TYPE_INTEGER;
+				}
+
+				if (add_child(cur_obj, obj) != 0) {
+					assert(false);
+					goto err;
+				}
+
+				b = end - 1; /* will be incremented */
+				cur_key = NULL;
+				break;
+			}
+			case ',':
+				need_comma = false;
+				break;
+			case ':':
+			case ' ':
+			default:
+				break;
+		}
+		b++;
+	}
+
+	return top_obj;
+err:
+	cjson_free(top_obj);
+	return NULL;
+}
+
 int
 cjson_parse_arr_stream(char *str, cjson_parse_arr_stream_cb obj_cb, void *cb_ctx)
 {
