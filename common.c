@@ -21,15 +21,17 @@
 #include "common.h"
 #include "cjson.h"
 
+#ifndef __MINGW32__
 #include <iconv.h>
+#endif
 
 static FILE *g_nullfile;
 
 #ifdef __MINGW32__
 #include <wininet.h>
 
-static void
-download_wininet(const char *url, char *filename)
+static int
+download_wininet(const char *url, const char *filename)
 {
 	HINTERNET hInternetSession;
 	HINTERNET hURL;
@@ -140,6 +142,60 @@ download_mem(const char *url, char **buf, size_t *len)
 static int
 change_charset(char *src_charset, char *dst_charset, char *src, long srclen, char *dst, long dstlen)
 {
+#ifdef __MINGW32__
+	UINT codepage = CP_UTF8;
+	int rc;
+
+	if (strcmp(src_charset, "UTF-16LE") == 0) {
+		if (strcmp(dst_charset, "UTF-8") != 0) {
+			return -1;
+		}
+
+		rc = WideCharToMultiByte(CP_UTF8, 0, (wchar_t *)src, srclen / 2, dst, dstlen, NULL, NULL);
+		if (rc == 0) {
+			return GetLastError();
+		}
+		return 0;
+	}
+
+	if (strcmp(dst_charset, "UTF-16LE") == 0) {
+		if (strcmp(src_charset, "UTF-8") != 0) {
+			return -1;
+		}
+
+		rc = MultiByteToWideChar(CP_UTF8, 0, src, srclen, (wchar_t *)dst, dstlen / 2);
+		if (rc == 0) {
+			return GetLastError();
+		}
+		return 0;
+	}
+
+	char *tmpdst = calloc(1, dstlen);
+	if (!tmpdst) {
+		return -ENOMEM;
+	}
+
+
+	if (strcmp(src_charset, "UTF-8") == 0) {
+		codepage = CP_UTF8;
+	} else if (strcmp(src_charset, "GBK") == 0) {
+		codepage = 936;
+	}
+	rc = MultiByteToWideChar(codepage, 0, src, srclen, (wchar_t *)tmpdst, dstlen / 2);
+
+	if (strcmp(dst_charset, "UTF-8") == 0) {
+		codepage = CP_UTF8;
+	} else if (strcmp(dst_charset, "GBK") == 0) {
+		codepage = 936;
+	}
+	rc = rc && WideCharToMultiByte(CP_UTF8, 0, (wchar_t *)tmpdst, dstlen / 2, dst, dstlen, NULL, NULL);
+	free(tmpdst);
+
+	if (rc == 0) {
+		return GetLastError();
+	}
+	return 0;
+#else
 	iconv_t cd;
 	int rc;
 
@@ -151,6 +207,7 @@ change_charset(char *src_charset, char *dst_charset, char *src, long srclen, cha
 	rc = iconv(cd, &src, (size_t *) &srclen, &dst, (size_t *) &dstlen);
 	iconv_close(cd);
 	return rc;
+#endif
 }
 
 void
@@ -179,7 +236,7 @@ fwsprint(FILE *fp, const uint16_t *buf, int maxlen)
 void
 sprint(char *dst, size_t dstsize, const char *src, int srcsize)
 {
-	change_charset("GB2312", "UTF-8", (char *)src, srcsize, dst, dstsize);
+	change_charset("GBK", "UTF-8", (char *)src, srcsize, dst, dstsize);
 }
 
 void
@@ -278,7 +335,7 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 		nonzero = false;
 
 		while (true) {
-			if (slzr->type == INT16) {
+			if (slzr->type == _INT16) {
 				if (!obj_printed || (*(uint16_t *)data != 0 && slzr->name[0] != '_')) {
 					if (slzr->name[0] != 0) {
 						fprintf(fp, "\"%s\":", slzr->name);
@@ -287,7 +344,7 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 					nonzero = *(uint16_t *)data != 0;
 				}
 				data += 2;
-			} else if (slzr->type == INT32) {
+			} else if (slzr->type == _INT32) {
 				if (!obj_printed || (*(uint32_t *)data != 0 && slzr->name[0] != '_')) {
 					if (slzr->name[0] != 0) {
 						fprintf(fp, "\"%s\":", slzr->name);
@@ -296,8 +353,8 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 					nonzero = *(uint32_t *)data != 0;
 				}
 				data += 4;
-			} else if (slzr->type > CONST_INT(0) && slzr->type <= CONST_INT(0x1000)) {
-				unsigned num = slzr->type - CONST_INT(0);
+			} else if (slzr->type > _CONST_INT(0) && slzr->type <= _CONST_INT(0x1000)) {
+				unsigned num = slzr->type - _CONST_INT(0);
 
 				if (!obj_printed || (num != 0 && slzr->name[0] != '_')) {
 					if (slzr->name[0] != 0) {
@@ -306,7 +363,7 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 					fprintf(fp, "%u,", num);
 					nonzero = num != 0;
 				}
-			} else if (slzr->type == FLOAT) {
+			} else if (slzr->type == _FLOAT) {
 				if (!obj_printed || (*(float *)data != 0 && slzr->name[0] != '_')) {
 					if (slzr->name[0] != 0) {
 						fprintf(fp, "\"%s\":", slzr->name);
@@ -315,8 +372,8 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 					nonzero = *(float *)data != 0;
 				}
 				data += 4;
-			} else if (slzr->type > WSTRING(0) && slzr->type <= WSTRING(0x1000)) {
-				unsigned len = slzr->type - WSTRING(0);
+			} else if (slzr->type > _WSTRING(0) && slzr->type <= _WSTRING(0x1000)) {
+				unsigned len = slzr->type - _WSTRING(0);
 
 				if (slzr->name[0] != '_') {
 					if (slzr->name[0] != 0) {
@@ -328,8 +385,8 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 					nonzero = *(uint16_t *)data != 0;
 				}
 				data += len * 2;
-			} else if (slzr->type > STRING(0) && slzr->type <= STRING(0x1000)) {
-				unsigned len = slzr->type - STRING(0);
+			} else if (slzr->type > _STRING(0) && slzr->type <= _STRING(0x1000)) {
+				unsigned len = slzr->type - _STRING(0);
 
 				if (slzr->name[0] != '_') {
 					if (slzr->name[0] != 0) {
@@ -341,8 +398,8 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 					nonzero = *(char *)data != 0;
 				}
 				data += len;
-			} else if (slzr->type > ARRAY_START(0) && slzr->type <= ARRAY_START(0x1000)) {
-				unsigned cnt = slzr->type - ARRAY_START(0);
+			} else if (slzr->type > _ARRAY_START(0) && slzr->type <= _ARRAY_START(0x1000)) {
+				unsigned cnt = slzr->type - _ARRAY_START(0);
 
 				if (slzr->name[0] != '_') {
 					if (slzr->name[0] != 0) {
@@ -352,12 +409,12 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 					_serialize(fp, &slzr, &data, cnt, true, false);
 					fprintf(fp, ",");
 				}
-			} else if (slzr->type == CUSTOM) {
+			} else if (slzr->type == _CUSTOM) {
 				data += slzr->fn(fp, data);
 				nonzero = true;
-			} else if (slzr->type == ARRAY_END) {
+			} else if (slzr->type == _ARRAY_END) {
 				break;
-			} else if (slzr->type == TYPE_END) {
+			} else if (slzr->type == _TYPE_END) {
 				break;
 			}
 			slzr++;
@@ -413,9 +470,9 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 	while (true) {
 		struct cjson *json_f;
 
-		if (slzr->type == ARRAY_END) {
+		if (slzr->type == _ARRAY_END) {
 			break;
-		} else if (slzr->type == TYPE_END) {
+		} else if (slzr->type == _TYPE_END) {
 			break;
 		}
 
@@ -432,12 +489,12 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 			json_f = cjson_obj(obj, slzr->name);
 		}
 
-		if (slzr->type == INT16) {
+		if (slzr->type == _INT16) {
 			if (json_f->type != CJSON_TYPE_NONE) {
 				*(uint16_t *)data = json_f->i;
 			}
 			data += 2;
-		} else if (slzr->type == INT32) {
+		} else if (slzr->type == _INT32) {
 			if (json_f->type != CJSON_TYPE_NONE && strcmp(slzr->name, "id") != 0) {
 				char buf[2048] = {0};
 				struct cjson *json = json_f;
@@ -454,15 +511,15 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 				*(uint32_t *)data = json_f->i;
 			}
 			data += 4;
-		} else if (slzr->type > CONST_INT(0) && slzr->type <= CONST_INT(0x1000)) {
+		} else if (slzr->type > _CONST_INT(0) && slzr->type <= _CONST_INT(0x1000)) {
 			continue;
-		} else if (slzr->type == FLOAT) {
+		} else if (slzr->type == _FLOAT) {
 			if (json_f->type != CJSON_TYPE_NONE) {
 				*(float *)data = json_f->d;
 			}
 			data += 4;
-		} else if (slzr->type > WSTRING(0) && slzr->type <= WSTRING(0x1000)) {
-			unsigned len = slzr->type - WSTRING(0);
+		} else if (slzr->type > _WSTRING(0) && slzr->type <= _WSTRING(0x1000)) {
+			unsigned len = slzr->type - _WSTRING(0);
 
 			char buf[2048] = {0};
 			struct cjson *json = json_f;
@@ -479,8 +536,8 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 				change_charset("UTF-8", "UTF-16LE", json_f->s, strlen(json_f->s), (char *)data, len * 2);
 			}
 			data += len * 2;
-		} else if (slzr->type > STRING(0) && slzr->type <= STRING(0x1000)) {
-			unsigned len = slzr->type - STRING(0);
+		} else if (slzr->type > _STRING(0) && slzr->type <= _STRING(0x1000)) {
+			unsigned len = slzr->type - _STRING(0);
 
 			char buf[2048] = {0};
 			struct cjson *json = json_f;
@@ -494,11 +551,11 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 
 			if (json_f->type != CJSON_TYPE_NONE) {
 				memset(data, 0, len * 2);
-				change_charset("UTF-8", "GB2312", json_f->s, strlen(json_f->s), (char *)data, len);
+				change_charset("UTF-8", "GBK", json_f->s, strlen(json_f->s), (char *)data, len);
 			}
 			data += len;
-		} else if (slzr->type > ARRAY_START(0) && slzr->type <= ARRAY_START(0x1000)) {
-			unsigned cnt = slzr->type - ARRAY_START(0);
+		} else if (slzr->type > _ARRAY_START(0) && slzr->type <= _ARRAY_START(0x1000)) {
+			unsigned cnt = slzr->type - _ARRAY_START(0);
 			void *arr_data_end = data;
 			struct serializer *tmp_slzr = ++slzr;
 			size_t arr_el_size = 0;
@@ -528,7 +585,7 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 
 			data += arr_el_size * cnt;
 			slzr = tmp_slzr;
-		} else if (slzr->type == CUSTOM) {
+		} else if (slzr->type == _CUSTOM) {
 			if (slzr->des_fn) {
 				data += slzr->des_fn(obj, data);
 			}
@@ -570,6 +627,7 @@ pwlog(int type, const char *filename, unsigned lineno, const char *fnname, const
 	va_start(args, fmt);
 	vfprintf(stderr, fmt, args);
 	va_end(args);
+	fflush(stderr);
 }
 
 static void __attribute__((constructor))
@@ -577,6 +635,6 @@ common_init()
 {
 	g_nullfile = fopen("/dev/null", "w");
 	if (g_nullfile == NULL) {
-		g_nullfile = fopen("NULL", "w");
+		g_nullfile = fopen("NUL", "w");
 	}
 }

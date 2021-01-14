@@ -6,14 +6,18 @@
 #include <windows.h>
 #include <commctrl.h>
 #include <shellapi.h>
+#include <assert.h>
+#include <unistd.h>
 
 #include "common.h"
-#include "client.h"
-#include "load.c"
+#include "pw_elements.h"
+#include "cjson.h"
+#include "cjson_ext.h"
+#include "gui.h"
 
+static char *g_branch_name = "public";
 static char *g_version_str;
-static const nx_json *g_version;
-static int g_latest_version;
+static struct cjson *g_version;
 
 struct task_ctx {
 	mg_callback cb;
@@ -127,16 +131,18 @@ check_deps(void)
 }
 
 void
-on_init(void)
+on_init(int argc, char *argv[])
 {
 	char tmpbuf[1024];
-	char *buf;
 	size_t len;
 	int rc;
 	FILE *fp;
 
-	setlocale(LC_ALL, "en_US.UTF-8");
-	freopen("patcher/patch.log", "w", stderr);
+	if (argc >= 3) {
+		if (strcmp(argv[1], "-b") == 0) {
+			g_branch_name = argv[2];
+		}
+	}
 
 	set_text(g_status_left_lbl, "Reading local version ...");
 
@@ -153,32 +159,42 @@ on_init(void)
 	}
 
 	set_text(g_status_left_lbl, "Fetching latest version ...");
-	const char *branch_name = "test1";
-	
+
 	snprintf(tmpbuf, sizeof(tmpbuf), "http://miragetest.ddns.net/editor/project/fetch/%s/since/%s",
-			branch_name, cur_hash);
+			g_branch_name, cur_hash);
 
-	rc = download_mem(tmpbuf, &buf, &len);
+	rc = download_mem(tmpbuf, &g_version_str, &len);
 	if (rc) {
-		PWLOG(LOG_ERROR, "download_mem failed for %s\n", tmpbuf);
-		return 1;
-	}
-
-	struct cjson *ver_cjson = cjson_parse(buf);
-	if (!ver_cjson) {
 		set_text(g_status_right_lbl, "Can't fetch patch list");
 		return;
 	}
 
-	g_version = nx_json_parse_utf8(g_version_str);
+	g_version = cjson_parse(g_version_str);
 	if (!g_version) {
 		set_text(g_status_right_lbl, "Can't parse patch list");
 		return;
 	}
 
-	set_text(g_changelog_lbl, nx_json_get(g_version, "description")->text_value);
+	char *motd = JSs(g_version, "message");
+	char *c = motd;
 
-	if (nx_json_get(g_version, "version")->int_value > 10) {
+	while (*c) {
+		if (*c == '\\' && *(c + 1) == 'n') {
+			*c = '\r';
+			*(c + 1) = '\n';
+		}
+		c++;
+	}
+	set_text(g_changelog_lbl, motd);
+
+	if (version != JSi(g_version, "version")) {
+		rc = download("https://raw.githubusercontent.com/pwmirage/version/master/banner.bmp", "patcher/banner");
+		if (rc == 0) {
+			set_banner("patcher/banner");
+		}
+	}
+
+	if (JSi(g_version, "patcher_version") > 11) {
 		set_text(g_status_right_lbl, "Patcher outdated. Please download new version from pwmirage.com/patcher");
 		rc = MessageBox(0, "New version of the patcher is available! "
 						"Would you like to download it now?", "Patcher Update", MB_YESNO);
@@ -188,17 +204,6 @@ on_init(void)
 				return;
 		}
 		return;
-	}
-
-	const nx_json *patchlist = nx_json_get(g_version, "patchlist");
-	const nx_json *last_patch = nx_json_item(patchlist, patchlist->length - 1);
-	g_latest_version = nx_json_get(last_patch, "id")->int_value;
-
-	if (local_version != g_latest_version) {
-		rc = download("https://raw.githubusercontent.com/pwmirage/version/master/banner.bmp", "patcher/banner");
-		if (rc == 0) {
-			set_banner("patcher/banner");
-		}
 	}
 
 	set_text(g_status_left_lbl, "Checking prerequisites ...");
@@ -246,11 +251,11 @@ on_init(void)
 	}
 
 	char msg[256];
-	snprintf(msg, sizeof(msg), "Current version: %d. Latest: %d", local_version, g_latest_version);
-	fprintf(stderr, "%s\n", msg);
+	snprintf(msg, sizeof(msg), "Current version: %d. Latest: %d", version, (int)JSi(g_version, "version"));
+	PWLOG(LOG_INFO, "%s\n", msg);
 	set_text(g_status_left_lbl, msg);
 
-	if (local_version == g_latest_version) {
+	if (version == JSi(g_version, "version")) {
 		set_text(g_status_right_lbl, "Ready to launch");
 		enable_button(g_play_button, true);
 	} else {
@@ -264,7 +269,7 @@ void
 on_fini(void)
 {
 	if (g_version) {
-		nx_json_free(g_version);
+		cjson_free(g_version);
 	}
 	free(g_version_str);
 	g_version_str = NULL;
@@ -334,114 +339,134 @@ err:
 	return NULL;
 }
 
+static void
+print_obj(struct cjson *obj, int depth)
+{
+	int i;
+
+	while (obj) {
+		for (i = 0; i < depth; i++) {
+			fprintf(stderr, "  ");
+		}
+		fprintf(stderr, "%s\n", obj->key);
+
+		if (obj->type == CJSON_TYPE_OBJECT) {
+			print_obj(obj->a, depth + 1);
+		}
+
+		obj = obj->next;
+	}
+}
+
+static void
+import_stream_cb(void *ctx, struct cjson *obj)
+{
+	struct pw_elements *elements = ctx;
+
+	if (obj->type != CJSON_TYPE_OBJECT) {
+		PWLOG(LOG_ERROR, "found non-object in the patch file (type=%d)\n", obj->type);
+		assert(false);
+		return;
+	}
+
+	PWLOG(LOG_INFO, "type: %s\n", JSs(obj, "_db", "type"));
+
+	print_obj(obj->a, 1);
+	pw_elements_patch_obj(elements, obj);
+}
+
+static int
+patch(struct pw_elements *elements, const char *url)
+{
+	char *buf;
+	size_t num_bytes = 1;
+	int rc;
+
+	rc = download_mem(url, &buf, &num_bytes);
+	if (rc) {
+		PWLOG(LOG_ERROR, "download_mem(%s) failed: %d\n", url, rc);
+		return 1;
+	}
+
+	rc = cjson_parse_arr_stream(buf, import_stream_cb, elements);
+	free(buf);
+	if (rc) {
+		PWLOG(LOG_ERROR, "cjson_parse_arr_stream() failed: %d\n", url, rc);
+		return 1;
+	}
+
+	return 0;
+}
+
 void
 patch_cb(void *arg1, void *arg2)
 {
-	struct pw_elements elements;
-	struct pw_task_file tasks;
-	int rc;
+	struct pw_elements elements = {0};
+	char tmpbuf[1024];
+	int i, rc;
 
 	set_progress(0);
 
 	enable_button(g_patch_button, false);
 	set_text(g_status_right_lbl, "Loading local files");
 
-	rc = pw_elements_load(&elements, "patcher/elements.data.src");
+	if (JSi(g_version, "cumulative")) {
+		rc = pw_elements_load(&elements, "element/data/elements.data");
+	} else {
+		rc = pw_elements_load(&elements, "patcher/elements.src");
+	}
 	if (rc != 0) {
-		set_text(g_status_right_lbl, "elements.data.src not found. Please click the repair button");
+		set_text(g_status_right_lbl, "elements.src not found. Please click the repair button");
 		goto err_retry;
 	}
 
-	rc = pw_tasks_load(&tasks, "patcher/tasks.data.src");
-	if (rc) {
-		set_text(g_status_right_lbl, "tasks.data.src not found. Please click the repair button");
-		goto err_retry;
-	}
-
-	unsigned num_types = PW_ELEMENTS_COUNT(&elements);
-	struct list_pool *pool = list_pool_init(num_types, 65536 * 128);
-	if (!pool) {
-		set_text(g_status_right_lbl, "Failed to allocate memory. Please report this on pwmirage.com");
-		goto err_retry;
-	}
-
-	set_progress(10);
-	set_text(g_status_right_lbl, "Fetching rates...");
-
-	char *rates_str;
-	size_t len;
-	const nx_json *rates;
-	rc = download_mem("https://raw.githubusercontent.com/pwmirage/version/master/rates.json", &rates_str, &len);
-	if (rc) {
-		set_text(g_status_right_lbl, "Fetching failed! Please try again");
-		goto err_retry;
-	}
-
-	rates = nx_json_parse_utf8(rates_str);
-	if (!rates) {
-		set_text(g_status_right_lbl, "Parsing failed! Please try again");
-		goto err_retry;
-	}
-
-	adjust_rates(&elements, rates);
-	pw_tasks_process_rates(&tasks, rates);
-
+	set_progress(5);
 	set_text(g_status_right_lbl, "Updating...");
 
-	const nx_json *patchlist = nx_json_get(g_version, "patchlist");
-		const nx_json *patch = JS(patchlist, patchlist->length - 1);
-		char url[256];
-		char *patch_str;
+	const char *origin = JSs(g_version, "origin");
+	struct cjson *updates = JS(g_version, "updates");
+	for (i = 0; i < updates->count; i++) {
+		struct cjson *update = JS(updates, i);
+		bool is_cached = JSi(update, "cached");
+		const char *hash_type = is_cached ? "cache" : "uploads";
 
+		PWLOG(LOG_INFO, "Fetching patch \"%s\" ...\n", JSs(update, "topic"));
+		snprintf(tmpbuf, sizeof(tmpbuf), "Downloading patch %d of %d", i + 1, updates->count);
+		set_text(g_status_right_lbl, tmpbuf);
 
-		snprintf(url, sizeof(url), "https://raw.githubusercontent.com/pwmirage/version/master/cache/%s", JSs(patch, "file"));
-		fprintf(stderr, "Downloading %s ...", url);
-		
-		rc = download_mem(url, &patch_str, &len);
+		snprintf(tmpbuf, sizeof(tmpbuf), "%s/%s/%s/%s.json", origin, hash_type, "test1", JSs(update, "hash"));
+		rc = patch(&elements, tmpbuf);
 		if (rc) {
-				set_text(g_status_right_lbl, "Fetching failed! Please try again");
-				goto err_retry;
+			PWLOG(LOG_ERROR, "Failed to patch\n");
 		}
+	}
 
-		set_progress(50);
+	set_text(g_status_right_lbl, "Done!");
 
-		fprintf(stderr, "done! parsing...");
-		const nx_json* json = nx_json_parse_utf8(patch_str);
-		if (!json) {
-			set_text(g_status_right_lbl, "Parsing failed! Please try again");
-			goto err_retry;
-		}
-
-		fprintf(stderr, "done! Processing now.\n");
-		process_changeset(&elements, pool, json);
-		pw_tasks_process_changeset(&elements, &tasks, pool, json);
-		set_text(g_status_right_lbl, "Done!");
-
-		int written = snprintf(url, sizeof(url), "Current version: %d. ", JSi(patch, "id"));
-		snprintf(url + written, sizeof(url) - written, "Latest: %d", g_latest_version);
-		set_text(g_status_left_lbl, url);
-
-		nx_json_free(json);
-		free(patch_str);
+	int written = snprintf(tmpbuf, sizeof(tmpbuf), "Current version: %d. ", 0); /* XXX */
+	snprintf(tmpbuf + written, sizeof(tmpbuf) - written, "Latest: %d", (int)JSi(g_version, "version"));
+	set_text(g_status_left_lbl,tmpbuf);
 
 	set_progress(10 + 80);
-	fprintf(stderr, "Saving.\n");
+	PWLOG(LOG_INFO, "Saving.\n");
 	set_text(g_status_right_lbl, "Saving files...");
-	rc = pw_elements_save(&elements, "element/data/elements.data");
-	rc = rc ? rc : pw_tasks_save(&tasks, "element/data/tasks.data", true);
+	rc = pw_elements_save(&elements, "element/data/elements.data", false);
 	if (rc) {
 		set_text(g_status_right_lbl, "Saving failed. No permission to access game directories?");
 		return;
 	}
 	set_text(g_status_right_lbl, "Ready to launch");
-	fprintf(stderr, "All done\n");
+	PWLOG(LOG_INFO, "All done\n");
 
 	set_progress(100);
 	enable_button(g_patch_button, false);
 	enable_button(g_play_button, true);
 	{
 		FILE *fp = fopen("patcher/version", "wb");
-		fwrite(&g_latest_version, sizeof(g_latest_version), 1, fp);
+		unsigned v = JSi(g_version, "version");
+
+		fwrite(&v, sizeof(v), 1, fp);
+		/* TODO save hash as well */
 		fclose(fp);
 	}
 

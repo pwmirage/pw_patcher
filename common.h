@@ -10,6 +10,19 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+#ifdef __MINGW32__
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
+/* XXX MinGW bug? */
+#define truncate(filepath, sz) \
+	({ int fd = open(filepath, O_WRONLY); \
+	   int rc = ftruncate(fd, sz); \
+	   close(fd); \
+	   rc; })
+#endif
+
 struct cjson;
 struct serializer {
 	const char *name;
@@ -20,16 +33,16 @@ struct serializer {
 	size_t (*des_fn)(struct cjson *f, void *data);
 };
 
-#define TYPE_END 0
-#define INT16 1
-#define INT32 2
-#define FLOAT 3
-#define ARRAY_END 4
-#define CUSTOM 5
-#define WSTRING(n) (0x1000 + (n))
-#define STRING(n) (0x2000 + (n))
-#define ARRAY_START(n) (0x3000 + (n))
-#define CONST_INT(n) (0x4001 + (n))
+#define _TYPE_END 0
+#define _INT16 1
+#define _INT32 2
+#define _FLOAT 3
+#define _ARRAY_END 4
+#define _CUSTOM 5
+#define _WSTRING(n) (0x1000 + (n))
+#define _STRING(n) (0x2000 + (n))
+#define _ARRAY_START(n) (0x3000 + (n))
+#define _CONST_INT(n) (0x4001 + (n))
 
 int download(const char *url, const char *filename);
 int readfile(const char *path, char **buf, size_t *len);

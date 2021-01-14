@@ -45,7 +45,7 @@ pw_idmap_get(struct pw_idmap *map, long long id, void *type)
 void
 pw_idmap_set(struct pw_idmap *map, long long id, void *type, void *data)
 {
-	struct pw_id_el *el, *last_el;
+	struct pw_id_el *el, *last_el = NULL;
 
 	el = map->lists[id % PW_IDMAP_ARR_SIZE];
 	while (el) {

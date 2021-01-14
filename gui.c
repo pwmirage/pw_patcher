@@ -5,8 +5,10 @@
 #include <assert.h>
 #include <windows.h>
 #include <commctrl.h>
+#include <locale.h>
 
 #include "gui.h"
+#include "common.h"
 
 #define MG_CB_MSG (WM_USER + 165)
 
@@ -136,10 +138,34 @@ init_gui(HWND hwnd, HINSTANCE hInst)
 			(LPARAM)GetStockObject(DEFAULT_GUI_FONT));
 }
 
+static char *g_cmdline;
+static char g_exe_name[32] = "pwmirage.exe";
+
 static void
-on_init_cb(void *arg1, void *arg2) {
-	Sleep(150);
-	on_init();
+on_init_cb(void *arg1, void *arg2)
+{
+	char *argv[64] = {0};
+	int argc = 0;
+	char *str = g_cmdline;
+	char *c = str;
+
+	PWLOG(LOG_INFO, "Flags: %s\n", g_cmdline);
+	argv[argc++] = g_exe_name;
+
+	while (c && *c) {
+		if (*c == ' ') {
+			*c = 0;
+			argv[argc++] = str;
+			str = c + 1;
+		}
+		c++;
+	}
+
+	if (str && *str) {
+		argv[argc++] = str;
+	}
+
+	on_init(argc, argv);
 }
 
 static LRESULT CALLBACK
@@ -191,6 +217,11 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrevInstance,
 				LPSTR lpCmdLine, int nCmdShow)
 {
 	MSG msg;
+
+	setlocale(LC_ALL, "en_US.UTF-8");
+	freopen("patcher/patch.log", "w", stderr);
+
+	g_cmdline = lpCmdLine;
 
 	init_win(hInst);
 	while (GetMessage(&msg, NULL, 0, 0)) {

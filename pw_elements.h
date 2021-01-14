@@ -9,7 +9,12 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <wchar.h>
+
+#ifdef __MINGW32__
+#define char16_t uint16_t
+#else
 #include <uchar.h>
+#endif
 
 struct pw_elements;
 struct cjson;

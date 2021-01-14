@@ -1,3 +1,9 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright(c) 2020-2021 Darek Stojaczyk for pwmirage.com
+ */
+
+#ifndef PW_GUI_H
+#define PW_GUI_H
 
 typedef void (*mg_callback)(void *arg1, void *arg2);
 
@@ -22,9 +28,11 @@ extern HWND g_repair_button;
 extern HBITMAP g_bmp;
 extern HDC g_hdc;
 
-void on_init();
+void on_init(int argc, char *argv[]);
 void on_fini();
 void ui_thread(mg_callback cb, void *arg1, void *arg2);
 void task(mg_callback cb, void *arg1, void *arg2);
 void reload_banner(const char *path);
 void on_button_click(int btn);
+
+#endif /* PW_GUI_H */

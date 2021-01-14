@@ -152,7 +152,7 @@ main(int argc, char *argv[])
 			PWLOG(LOG_ERROR, "Failed to patch\n");
 		}
 	}
-	
+
 	cjson_free(ver_cjson);
 	free(buf);
 

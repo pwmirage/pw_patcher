@@ -1,0 +1,28 @@
+#include "winuser.h"
+
+1 RT_MANIFEST app.manifest
+18253 ICON "icon.ico"
+
+1 VERSIONINFO
+FILEVERSION     0,0,8,0
+PRODUCTVERSION  0,0,8,0
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904E4"
+    BEGIN
+      VALUE "CompanyName", "Perfect World Mirage"
+      VALUE "FileDescription", "PW Mirage Patcher"
+      VALUE "FileVersion", "0.0.8.0"
+      VALUE "InternalName", "mgpatcher"
+      VALUE "LegalCopyright", "Beta @ pwmirage.com"
+      VALUE "OriginalFilename", "mgpatcher.exe"
+      VALUE "ProductName", "Mirage Patcher"
+      VALUE "ProductVersion", "0.8.0"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1252
+  END
+END
