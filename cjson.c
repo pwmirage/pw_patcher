@@ -270,7 +270,6 @@ cjson_parse(char *str)
 			case 'f':
 			{
 				struct cjson *obj;
-				char *end;
 				bool val;
 
 				/* truexyz will still match as true -> don't care */

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * Copyright(c) 2020 Darek Stojaczyk for pwmirage.com
+ * Copyright(c) 2020-2021 Darek Stojaczyk for pwmirage.com
  */
 
 #include <stdlib.h>
@@ -100,19 +100,17 @@ main(int argc, char *argv[])
 		return 0;
 	}
 
-	fp = fopen("patcher/version", "w+");
-	if (!fp) {
-		PWLOG(LOG_ERROR, "can't open patcher/version\n");
-		return 1;
-	}
-
 	unsigned version = 0;
 	char cur_hash[64] = {0};
 	cur_hash[0] = '0';
-	fread(&version, 1, sizeof(version), fp);
-	fread(cur_hash, 1, sizeof(cur_hash), fp);
-	cur_hash[sizeof(cur_hash) - 1] = 0;
-	fclose(fp);
+
+	fp = fopen("patcher/version", "w+b");
+	if (fp) {
+		fread(&version, 1, sizeof(version), fp);
+		fread(cur_hash, 1, sizeof(cur_hash), fp);
+		cur_hash[sizeof(cur_hash) - 1] = 0;
+		fclose(fp);
+	}
 
 	g_elements = calloc(1, sizeof(*g_elements));
 	if (!g_elements) {
