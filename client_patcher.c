@@ -16,6 +16,7 @@
 #include "gui.h"
 
 static char *g_branch_name = "public";
+static bool g_patcher_outdated = false;
 static char *g_version_str;
 static struct cjson *g_version;
 
@@ -194,24 +195,27 @@ on_init(int argc, char *argv[])
 		}
 	}
 
-	if (JSi(g_version, "patcher_version") > 11) {
-		set_text(g_status_right_lbl, "Patcher outdated. Please download new version from pwmirage.com/patcher");
+	if (JSi(g_version, "patcher_version") >= 11) {
+		g_patcher_outdated = true;
+		set_text(g_patch_button, "Update");
+		enable_button(g_patch_button, true);
+		set_text(g_status_right_lbl, "Patcher outdated. Click the update button or download at pwmirage.com/patcher");
 		rc = MessageBox(0, "New version of the patcher is available! "
-						"Would you like to download it now?", "Patcher Update", MB_YESNO);
+				"Would you like to download it now?", "Patcher Update", MB_YESNO);
 		if (rc == IDYES) {
-				ShellExecute(NULL, NULL, "patcher\\updater.exe", NULL, NULL, SW_SHOW);
-				ui_thread(quit_cb, NULL, NULL);
-				return;
+			ShellExecute(NULL, NULL, "patcher\\updater.exe", NULL, NULL, SW_SHOW);
+			ui_thread(quit_cb, NULL, NULL);
+			return;
 		}
 		return;
 	}
 
 	set_text(g_status_left_lbl, "Checking prerequisites ...");
 	if (access("element/d3d8.dll", F_OK) != 0) {
-			rc = download("https://github.com/crosire/d3d8to9/releases/latest/download/d3d8.dll", "element/d3d8.dll");
-			if (rc != 0) {
-				MessageBox(0, "Failed to download d3d8.dll. Perfect World might not run to its full potential", "Status", MB_OK);
-			}
+		rc = download("https://github.com/crosire/d3d8to9/releases/latest/download/d3d8.dll", "element/d3d8.dll");
+		if (rc != 0) {
+			MessageBox(0, "Failed to download d3d8.dll. Perfect World might not run to its full potential", "Status", MB_OK);
+		}
 	}
 
 	rc = check_deps();
@@ -404,6 +408,17 @@ patch_cb(void *arg1, void *arg2)
 	struct pw_elements elements = {0};
 	char tmpbuf[1024];
 	int i, rc;
+
+	if (g_patcher_outdated) {
+		rc = MessageBox(0, "New version of the patcher is available! "
+				"Would you like to download it now?", "Patcher Update", MB_YESNO);
+		if (rc == IDYES) {
+			ShellExecute(NULL, NULL, "patcher\\updater.exe", NULL, NULL, SW_SHOW);
+			ui_thread(quit_cb, NULL, NULL);
+			return;
+		}
+		return;
+	}
 
 	set_progress(0);
 
