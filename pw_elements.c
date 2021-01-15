@@ -21,24 +21,6 @@ static char *g_item_descs[65536] = {};
 uint32_t g_elements_last_id;
 struct pw_idmap *g_elements_map;
 
-static void *
-add_element(struct pw_elements_table *table)
-{
-	struct pw_elements_chain *chain = table->chain_last;
-
-	if (chain->count < chain->capacity) {
-		return &chain->data[chain->count++ * table->el_size];
-	}
-
-	size_t table_count = 16;
-	chain->next = table->chain_last = calloc(1, sizeof(struct pw_elements_chain) + table_count * table->el_size);
-	chain = table->chain_last;
-	chain->capacity = table_count;
-	chain->count = 1;
-
-	return chain->data;
-}
-
 static int
 load_icons(void)
 {
@@ -1432,13 +1414,13 @@ static struct serializer npc_equipbind_service_serializer[] = { { "", _TYPE_END 
 static struct serializer npc_equipdestroy_service_serializer[] = { { "", _TYPE_END } };
 static struct serializer npc_equipundestroy_service_serializer[] = { { "", _TYPE_END } };
 
-static struct pw_elements_table *
+static struct pw_chain_table *
 get_table(struct pw_elements *elements, const char *name)
 {
 	size_t i;
 
 	for (i = 0; i < elements->tables_count; i++) {
-		struct pw_elements_table *table = elements->tables[i];
+		struct pw_chain_table *table = elements->tables[i];
 		
 		if (strcmp(table->name, name) == 0) {
 			return table;
@@ -1451,7 +1433,7 @@ get_table(struct pw_elements *elements, const char *name)
 #define EXPORT_TABLE(elements, table_name, filename) \
 ({ \
 	FILE *fp = fopen(filename, "wb"); \
-	struct pw_elements_table *table = get_table(elements, #table_name); \
+	struct pw_chain_table *table = get_table(elements, #table_name); \
 	long sz; \
 \
 	if (fp == NULL) { \
@@ -1503,7 +1485,7 @@ pw_elements_serialize(struct pw_elements *elements)
 #define STR(x, y) #x #y
 #define EXPORT_ITEMS(table_name) \
 ({ \
-	struct pw_elements_table *table = get_table(elements, STR(table_name, _essence)); \
+	struct pw_chain_table *table = get_table(elements, STR(table_name, _essence)); \
 \
 	prev_sz = sz; \
 	sz = serialize(fp, table->serializer, \
@@ -1564,7 +1546,7 @@ pw_elements_serialize(struct pw_elements *elements)
 int
 pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 {
-	struct pw_elements_table *table;
+	struct pw_chain_table *table;
 	void **table_el;
 	const char *obj_type;
 	int64_t id;
@@ -1598,7 +1580,7 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 	if (!table_el) {
 		uint32_t el_id = g_elements_last_id++;
 
-		table_el = add_element(table);
+		table_el = pw_chain_table_new_el(table);
 		*(uint32_t *)table_el = el_id;
 		pw_idmap_set(g_elements_map, id, table, table_el);
 		return -1;
@@ -1610,8 +1592,8 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 static void
 pw_elements_load_table(struct pw_elements *elements, const char *name, uint32_t el_size, struct serializer *serializer, FILE *fp)
 {
-	struct pw_elements_table *table;
-	struct pw_elements_chain *chain;
+	struct pw_chain_table *table;
+	struct pw_chain_el *chain;
 	int32_t i, count;
 	void *el;
 
@@ -1626,7 +1608,7 @@ pw_elements_load_table(struct pw_elements *elements, const char *name, uint32_t 
 	table->serializer = serializer;
 
 	fread(&count, 1, sizeof(count), fp);
-	table->chain = table->chain_last = chain = calloc(1, sizeof(struct pw_elements_chain) + count * el_size);
+	table->chain = table->chain_last = chain = calloc(1, sizeof(struct pw_chain_el) + count * el_size);
 	if (!chain) {
 		PWLOG(LOG_ERROR, "calloc() failed\n");
 		return;
@@ -1923,9 +1905,9 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 }
 
 static void
-pw_elements_save_table(struct pw_elements_table *table, FILE *fp, int skipped_offset)
+pw_elements_save_table(struct pw_chain_table *table, FILE *fp, int skipped_offset)
 {
-	struct pw_elements_chain *chain;
+	struct pw_chain_el *chain;
 	size_t count_off;
 	uint32_t count = 0;
 
@@ -1987,7 +1969,7 @@ pw_elements_save(struct pw_elements *el, const char *filename, bool is_server)
 
 	size_t i;
 	for (i = 0; i < el->tables_count; i++) {
-		struct pw_elements_table *table = el->tables[i];
+		struct pw_chain_table *table = el->tables[i];
 
 		if (is_server && strcmp(table->name, "npc_crafts") == 0) {
 			pw_elements_save_table(table, fp, 72);

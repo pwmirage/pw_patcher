@@ -27,6 +27,24 @@
 
 static FILE *g_nullfile;
 
+void *
+pw_chain_table_new_el(struct pw_chain_table *table)
+{
+	struct pw_chain_el *chain = table->chain_last;
+
+	if (chain->count < chain->capacity) {
+		return &chain->data[chain->count++ * table->el_size];
+	}
+
+	size_t table_count = 16;
+	chain->next = table->chain_last = calloc(1, sizeof(struct pw_chain_el) + table_count * table->el_size);
+	chain = table->chain_last;
+	chain->capacity = table_count;
+	chain->count = 1;
+
+	return chain->data;
+}
+
 #ifdef __MINGW32__
 #include <wininet.h>
 

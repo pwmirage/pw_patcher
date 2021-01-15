@@ -33,6 +33,24 @@ struct serializer {
 	size_t (*des_fn)(struct cjson *f, void *data);
 };
 
+struct pw_chain_el;
+struct pw_chain_table {
+	const char *name;
+	struct serializer *serializer;
+	size_t el_size;
+	struct pw_chain_el *chain;
+	struct pw_chain_el *chain_last;
+};
+
+struct pw_chain_el {
+	struct pw_chain_el *next;
+	size_t capacity;
+	size_t count;
+	char data[0];
+};
+
+void *pw_chain_table_new_el(struct pw_chain_table *table);
+
 #define _TYPE_END 0
 #define _INT16 1
 #define _INT32 2

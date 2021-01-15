@@ -28,23 +28,6 @@ int pw_elements_save(struct pw_elements *el, const char *filename, bool is_serve
 void pw_elements_serialize(struct pw_elements *elements);
 int pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj);
 
-struct serializer;
-struct pw_elements_chain;
-struct pw_elements_table {
-	const char *name;
-	struct serializer *serializer;
-	size_t el_size;
-	struct pw_elements_chain *chain;
-	struct pw_elements_chain *chain_last;
-};
-
-struct pw_elements_chain {
-	struct pw_elements_chain *next;
-	size_t capacity;
-	size_t count;
-	char data[0];
-};
-
 struct talk_proc {
 	int32_t id;
 	char16_t name[64];
@@ -88,7 +71,7 @@ struct pw_elements {
 	void *talk_proc;
 	uint32_t talk_proc_cnt;
 
-	struct pw_elements_table *tables[256];
+	struct pw_chain_table *tables[256];
 	size_t tables_count;
 };
 
