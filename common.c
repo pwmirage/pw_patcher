@@ -330,7 +330,7 @@ js_strlen(const char *str)
 
 static long
 _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
-		unsigned data_cnt, bool skip_empty_objs, bool newlines)
+		unsigned data_cnt, bool skip_empty_objs, bool newlines, bool force_object)
 {
 	unsigned data_idx;
 	struct serializer *slzr;
@@ -338,7 +338,9 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 	bool nonzero, obj_printed;
 	long sz, arr_sz;
 
-	fprintf(fp, "[");
+	if (!force_object) {
+		fprintf(fp, "[");
+	}
 	/* in case the arr is full of empty objects or just 0-fields -> print just [] */
 	arr_sz = ftell(fp);
 	for (data_idx = 0; data_idx < data_cnt; data_idx++) {
@@ -353,7 +355,16 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 		nonzero = false;
 
 		while (true) {
-			if (slzr->type == _INT16) {
+			if (slzr->type == _INT8) {
+				if (!obj_printed || (*(uint16_t *)data != 0 && slzr->name[0] != '_')) {
+					if (slzr->name[0] != 0) {
+						fprintf(fp, "\"%s\":", slzr->name);
+					}
+					fprintf(fp, "%u,", *(uint8_t *)data);
+					nonzero = *(uint8_t *)data != 0;
+				}
+				data += 1;
+			} else if (slzr->type == _INT16) {
 				if (!obj_printed || (*(uint16_t *)data != 0 && slzr->name[0] != '_')) {
 					if (slzr->name[0] != 0) {
 						fprintf(fp, "\"%s\":", slzr->name);
@@ -424,13 +435,24 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 						fprintf(fp, "\"%s\":", slzr->name);
 					}
 					slzr++;
-					_serialize(fp, &slzr, &data, cnt, true, false);
+					_serialize(fp, &slzr, &data, cnt, true, false, false);
+					fprintf(fp, ",");
+				}
+			} else if (slzr->type == _OBJECT_START) {
+				if (slzr->name[0] != '_') {
+					if (slzr->name[0] != 0) {
+						fprintf(fp, "\"%s\":", slzr->name);
+					}
+					slzr++;
+					_serialize(fp, &slzr, &data, 1, true, false, true);
 					fprintf(fp, ",");
 				}
 			} else if (slzr->type == _CUSTOM) {
 				data += slzr->fn(fp, data);
 				nonzero = true;
 			} else if (slzr->type == _ARRAY_END) {
+				break;
+			} else if (slzr->type == _OBJECT_END) {
 				break;
 			} else if (slzr->type == _TYPE_END) {
 				break;
@@ -466,17 +488,19 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 	/* overwrite previous comma and strip empty objects from the array */
 	fseek(fp, arr_sz, SEEK_SET);
 
-	fprintf(fp, "]");
+	if (!force_object) {
+		fprintf(fp, "]");
+	}
 
 	*slzr_table_p = slzr;
 	*data_p = data;
-	return arr_sz + 1;
+	return arr_sz + !force_object;
 }
 
 long
 serialize(FILE *fp, struct serializer *slzr_table, void *data, unsigned data_cnt)
 {
-	return _serialize(fp, &slzr_table, &data, data_cnt, false, true);
+	return _serialize(fp, &slzr_table, &data, data_cnt, false, true, false);
 }
 
 static void
@@ -489,6 +513,8 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 		struct cjson *json_f;
 
 		if (slzr->type == _ARRAY_END) {
+			break;
+		if (slzr->type == _OBJECT_END) {
 			break;
 		} else if (slzr->type == _TYPE_END) {
 			break;
@@ -507,7 +533,12 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 			json_f = cjson_obj(obj, slzr->name);
 		}
 
-		if (slzr->type == _INT16) {
+		if (slzr->type == _INT8) {
+			if (json_f->type != CJSON_TYPE_NONE) {
+				*(uint8_t *)data = json_f->i;
+			}
+			data += 1;
+		} else if (slzr->type == _INT16) {
 			if (json_f->type != CJSON_TYPE_NONE) {
 				*(uint16_t *)data = json_f->i;
 			}
@@ -580,7 +611,7 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 			struct cjson *json_el;
 
 			/* serialize to /dev/null to get arr element's size */
-			_serialize(g_nullfile, &tmp_slzr, &arr_data_end, 1, true, false);
+			_serialize(g_nullfile, &tmp_slzr, &arr_data_end, 1, true, false, false);
 			arr_el_size = (size_t)((uintptr_t)arr_data_end - (uintptr_t)data);
 
 			json_el = json_f->a;
@@ -603,6 +634,9 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 
 			data += arr_el_size * cnt;
 			slzr = tmp_slzr;
+		} else if (slzr->type == _OBJECT_START) {
+			slzr++;
+			_deserialize(json_f, &slzr, &data);
 		} else if (slzr->type == _CUSTOM) {
 			if (slzr->des_fn) {
 				data += slzr->des_fn(obj, data);

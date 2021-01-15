@@ -52,15 +52,18 @@ struct pw_chain_el {
 void *pw_chain_table_new_el(struct pw_chain_table *table);
 
 #define _TYPE_END 0
+#define _INT8 1
 #define _INT16 1
 #define _INT32 2
 #define _FLOAT 3
 #define _ARRAY_END 4
 #define _CUSTOM 5
+#define _OBJECT_END 6
 #define _WSTRING(n) (0x1000 + (n))
 #define _STRING(n) (0x2000 + (n))
 #define _ARRAY_START(n) (0x3000 + (n))
-#define _CONST_INT(n) (0x4001 + (n))
+#define _OBJECT_START 0x4001
+#define _CONST_INT(n) (0x4002 + (n))
 
 int download(const char *url, const char *filename);
 int readfile(const char *path, char **buf, size_t *len);
