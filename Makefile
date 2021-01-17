@@ -16,21 +16,21 @@ client: build/client_patcher build/updater
 clean:
 	rm -f $(ALL_OBJECTS:%.o=build/%.o) $(ALL_OBJECTS:%.o=build/%.d)
 
-build/export: $(OBJECTS:%.o=build/%.o) export.o
+build/export: $(OBJECTS:%.o=build/%.o) build/export.o
 	gcc $(CFLAGS) -o $@ $^
 
-build/srv_patcher: $(OBJECTS:%.o=build/%.o) srv_patcher.o
+build/srv_patcher: $(OBJECTS:%.o=build/%.o) build/srv_patcher.o
 	gcc $(CFLAGS) -o $@ $^
 
-build/client_patcher: $(OBJECTS:%.o=build/%.o) client_patcher.o
+build/client_patcher: $(OBJECTS:%.o=build/%.o) build/client_patcher.o
 	windres -i res.rc -o resource.o
 	gcc $(CFLAGS) -o $@ $^ resource.o -s -Wl,--subsystem,windows -lwininet -lwininet -mwindows
 
-build/updater: updater.o
+build/updater: build/updater.o
 	windres -i updater.rc -o updater_rc.o
 	gcc $(CFLAGS) -o $@ $^ updater_rc.o -s -Wl,--subsystem,windows -lwininet -Wno-address-of-packed-member
 
 build/%.o: %.c
 	gcc $(CFLAGS) -c -o $@ $<
 
--include $(OBJECTS:%.o=build/%.d)
+-include $(ALL_OBJECTS:%.o=build/%.d)
