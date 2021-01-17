@@ -26,6 +26,7 @@
 #include "pw_npc.h"
 
 static struct pw_elements *g_elements;
+static struct pw_npc_file g_npc_files[PW_MAX_MAPS];
 
 static void
 print_obj(struct cjson *obj, int depth)
@@ -55,10 +56,34 @@ import_stream_cb(void *ctx, struct cjson *obj)
 		return;
 	}
 
-	PWLOG(LOG_INFO, "type: %s\n", JSs(obj, "_db", "type"));
+	const char *type = JSs(obj, "_db", "type");
+	PWLOG(LOG_INFO, "type: %s\n", type);
 
 	print_obj(obj->a, 1);
-	pw_elements_patch_obj(g_elements, obj);
+
+	if (strncmp(type, "spawners_", 9) == 0) {
+		struct pw_npc_file *npcfile;
+		const char *mapid = type + 9;
+		int i;
+
+		for (i = 0; i < PW_MAX_MAPS; i++) {
+			npcfile = &g_npc_files[i];
+
+			if (strcmp(npcfile->name, mapid) == 0) {
+				break;
+			}
+		}
+
+		if (i == PW_MAX_MAPS) {
+			PWLOG(LOG_ERROR, "found unknown map in the patch file (\"%s\")\n", type);
+			assert(false);
+			return;
+		}
+
+		pw_npcs_patch_obj(npcfile, obj);
+	} else {
+		pw_elements_patch_obj(g_elements, obj);
+	}
 }
 
 static int
@@ -124,6 +149,19 @@ main(int argc, char *argv[])
 		return 1;
 	}
 
+	for (i = 0; i < PW_MAX_MAPS; i++) {
+		const struct map_name *map = &g_map_names[i];
+		struct pw_npc_file *npc = &g_npc_files[i];
+
+		snprintf(tmpbuf, sizeof(tmpbuf), "config/%s/npcgen.data", map->dir_name);
+		rc = pw_npcs_load(npc, map->name, tmpbuf);
+		if (rc) {
+			PWLOG(LOG_ERROR, "pw_npcs_load(\"%s\") failed: %d\n", map->name, rc);
+			return 1;
+		}
+		
+	}
+
 	const char *branch_name = argv[1];
 	
 	snprintf(tmpbuf, sizeof(tmpbuf), "http://miragetest.ddns.net/editor/project/fetch/%s/since/%s",
@@ -157,5 +195,18 @@ main(int argc, char *argv[])
 	free(buf);
 
 	pw_elements_save(g_elements, "elements_exp.data", true);
+
+	for (i = 0; i < PW_MAX_MAPS; i++) {
+		const struct map_name *map = &g_map_names[i];
+		struct pw_npc_file *npc = &g_npc_files[i];
+
+		snprintf(tmpbuf, sizeof(tmpbuf), "config/%s/npcgen.data", map->dir_name);
+		rc = pw_npcs_save(npc, tmpbuf);
+		if (rc) {
+			PWLOG(LOG_ERROR, "pw_npcs_save(\"%s\") failed: %d\n", map->name, rc);
+			return 1;
+		}
+	}
+
 	return rc;
 }

@@ -27,6 +27,42 @@
 
 static FILE *g_nullfile;
 
+int
+pw_chain_table_init(struct pw_chain_table *table, const char *name, struct serializer *serializer, size_t el_size, size_t count)
+{
+	table->name = name;
+	table->serializer = serializer;
+	table->el_size = el_size;
+
+	table->chain = table->chain_last = calloc(1, sizeof(*table->chain) + el_size * count);
+	if (!table->chain) {
+		return -ENOMEM;
+	}
+
+	table->chain->capacity = count;
+	return 0;
+}
+
+struct pw_chain_table *
+pw_chain_table_alloc(const char *name, struct serializer *serializer, size_t el_size, size_t count)
+{
+	struct pw_chain_table *table;
+	int rc;
+
+	table = calloc(1, sizeof(*table));
+	if (!table) {
+		return NULL;
+	}
+
+	rc = pw_chain_table_init(table, name, serializer, el_size, count);
+	if (rc) {
+		free(table);
+		return NULL;
+	}
+
+	return table;
+}
+
 void *
 pw_chain_table_new_el(struct pw_chain_table *table)
 {
@@ -38,6 +74,10 @@ pw_chain_table_new_el(struct pw_chain_table *table)
 
 	size_t table_count = 16;
 	chain->next = table->chain_last = calloc(1, sizeof(struct pw_chain_el) + table_count * table->el_size);
+	if (!chain->next) {
+		return NULL;
+	}
+
 	chain = table->chain_last;
 	chain->capacity = table_count;
 	chain->count = 1;
@@ -514,7 +554,7 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 
 		if (slzr->type == _ARRAY_END) {
 			break;
-		if (slzr->type == _OBJECT_END) {
+		} else if (slzr->type == _OBJECT_END) {
 			break;
 		} else if (slzr->type == _TYPE_END) {
 			break;

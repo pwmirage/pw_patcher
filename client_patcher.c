@@ -449,7 +449,7 @@ patch_cb(void *arg1, void *arg2)
 		snprintf(tmpbuf, sizeof(tmpbuf), "Downloading patch %d of %d", i + 1, updates->count);
 		set_text(g_status_right_lbl, tmpbuf);
 
-		snprintf(tmpbuf, sizeof(tmpbuf), "%s/%s/%s/%s.json", origin, hash_type, "test1", JSs(update, "hash"));
+		snprintf(tmpbuf, sizeof(tmpbuf), "%s/%s/%s/%s.json", origin, hash_type, g_branch_name, JSs(update, "hash"));
 		rc = patch(&elements, tmpbuf);
 		if (rc) {
 			PWLOG(LOG_ERROR, "Failed to patch\n");

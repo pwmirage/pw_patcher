@@ -49,6 +49,12 @@ struct pw_chain_el {
 	char data[0];
 };
 
+#define PW_CHAIN_TABLE_FOREACH(_var, _chain, _table) \
+	for ((_chain) = (_table)->chain; (_chain); (_chain) = (_chain)->next) \
+	for ((_var) = (void *)(_chain)->data; (_var) != (void *)(_chain)->data + (_chain)->count * (_table)->el_size; (_var) += (_table)->el_size)
+
+int pw_chain_table_init(struct pw_chain_table *table, const char *name, struct serializer *serializer, size_t el_size, size_t count);
+struct pw_chain_table *pw_chain_table_alloc(const char *name, struct serializer *serializer, size_t el_size, size_t count);
 void *pw_chain_table_new_el(struct pw_chain_table *table);
 
 #define _TYPE_END 0

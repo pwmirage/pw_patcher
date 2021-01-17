@@ -1,6 +1,6 @@
-OBJECTS = common.o pw_elements.o cjson.o idmap.o
+OBJECTS = common.o pw_elements.o cjson.o idmap.o pw_npc.o
 ALL_OBJECTS := $(OBJECTS) export.o srv_patcher.o
-CFLAGS := -O3 -MD -MP -fno-strict-aliasing -Wall -Wno-format-truncation $(CFLAGS)
+CFLAGS := -O0 -g -MD -MP -fno-strict-aliasing -Wall -Wno-format-truncation $(CFLAGS)
 
 ifeq ($(OS),Windows_NT)
 	OBJECTS := $(OBJECTS) gui.o
