@@ -679,7 +679,7 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 			_deserialize(json_f, &slzr, &data);
 		} else if (slzr->type == _CUSTOM) {
 			if (slzr->des_fn) {
-				data += slzr->des_fn(obj, data);
+				data += slzr->des_fn(json_f, data);
 			}
 		}
 

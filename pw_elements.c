@@ -1576,13 +1576,13 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 		return -1;
 	}
 
-	table_el = pw_idmap_get(g_elements_map, id, table);
+	table_el = pw_idmap_get(g_elements_map, id, table->idmap_type);
 	if (!table_el) {
 		uint32_t el_id = g_elements_last_id++;
 
 		table_el = pw_chain_table_new_el(table);
 		*(uint32_t *)table_el = el_id;
-		pw_idmap_set(g_elements_map, id, table, table_el);
+		pw_idmap_set(g_elements_map, id, el_id, table->idmap_type, table_el);
 		return -1;
 	}
 	deserialize(obj, table->serializer, table_el);
@@ -1596,6 +1596,8 @@ pw_elements_load_table(struct pw_elements *elements, const char *name, uint32_t 
 	struct pw_chain_el *chain;
 	int32_t i, count;
 	void *el;
+	long idmap_type;
+	unsigned table_max_id = 0;
 
 	table = calloc(1, sizeof(*table));
 	if (!table) {
@@ -1616,18 +1618,24 @@ pw_elements_load_table(struct pw_elements *elements, const char *name, uint32_t 
 	chain->count = chain->capacity = count;
 	fread(chain->data, 1, count * el_size, fp);
 
+	idmap_type = pw_idmap_register_type(g_elements_map);
 	el = chain->data;
 	for (i = 0; i < count; i++) {
 		unsigned id = *(uint32_t *)el;
 
-		if (id > g_elements_last_id) {
-			g_elements_last_id = id;
+		if (id > table_max_id) {
+			table_max_id = id;
+			if (id > g_elements_last_id) {
+				g_elements_last_id = id;
+			}
 		}
 
-		pw_idmap_set(g_elements_map, id, table, el);
+		pw_idmap_set(g_elements_map, id, id, idmap_type, el);
 		el += el_size;
 	}
 
+	table->idmap_type = idmap_type;
+	pw_idmap_end_type_load(g_elements_map, idmap_type, table_max_id);
 	elements->tables[elements->tables_count++] = table;
 }
 
@@ -1753,7 +1761,7 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 		return 1;
 	}
 
-	g_elements_map = pw_idmap_init();
+	g_elements_map = pw_idmap_init("elements");
 	if (!g_elements_map) {
 		PWLOG(LOG_ERROR, "pw_idmap_init() failed\n");
 		fclose(fp);

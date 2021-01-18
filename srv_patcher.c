@@ -154,7 +154,7 @@ main(int argc, char *argv[])
 		struct pw_npc_file *npc = &g_npc_files[i];
 
 		snprintf(tmpbuf, sizeof(tmpbuf), "config/%s/npcgen.data", map->dir_name);
-		rc = pw_npcs_load(npc, map->name, tmpbuf);
+		rc = pw_npcs_load(npc, map->name, tmpbuf, false);
 		if (rc) {
 			PWLOG(LOG_ERROR, "pw_npcs_load(\"%s\") failed: %d\n", map->name, rc);
 			return 1;
@@ -200,7 +200,7 @@ main(int argc, char *argv[])
 		const struct map_name *map = &g_map_names[i];
 		struct pw_npc_file *npc = &g_npc_files[i];
 
-		snprintf(tmpbuf, sizeof(tmpbuf), "config/%s/npcgen.data", map->dir_name);
+		snprintf(tmpbuf, sizeof(tmpbuf), "config/%s/npcgen.data2", map->dir_name);
 		rc = pw_npcs_save(npc, tmpbuf);
 		if (rc) {
 			PWLOG(LOG_ERROR, "pw_npcs_save(\"%s\") failed: %d\n", map->name, rc);

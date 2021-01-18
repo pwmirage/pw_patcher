@@ -37,6 +37,7 @@ struct pw_chain_el;
 struct pw_chain_table {
 	const char *name;
 	struct serializer *serializer;
+	long idmap_type;
 	size_t el_size;
 	struct pw_chain_el *chain;
 	struct pw_chain_el *chain_last;
@@ -92,8 +93,11 @@ void pwlog(int type, const char *filename, unsigned lineno, const char *fnname, 
 #define PWLOG(type, ...) pwlog((type), __FILE__, __LINE__, __func__, __VA_ARGS__)
 
 struct pw_idmap;
-struct pw_idmap *pw_idmap_init(void);
-void *pw_idmap_get(struct pw_idmap *map, long long id, void *type);
-void pw_idmap_set(struct pw_idmap *map, long long id, void *type, void *data);
+struct pw_idmap *pw_idmap_init(const char *name);
+long pw_idmap_register_type(struct pw_idmap *map);
+void *pw_idmap_get(struct pw_idmap *map, long long lid, long type);
+void pw_idmap_set(struct pw_idmap *map, long long lid, long id, long type, void *data);
+void pw_idmap_end_type_load(struct pw_idmap *map, long type, uint32_t max_id);
+int pw_idmap_save(struct pw_idmap *map);
 
 #endif /* PW_COMMON_H */

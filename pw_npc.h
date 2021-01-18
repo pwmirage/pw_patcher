@@ -52,7 +52,7 @@ struct pw_npc_file {
 };
 
 struct cjson;
-int pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path);
+int pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, bool clean_load);
 int pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj);
 int pw_npcs_save(struct pw_npc_file *npc, const char *file_path);
 
