@@ -48,7 +48,7 @@ struct pw_idmap {
 static struct pw_id_el *_idmap_set(struct pw_idmap *map, long long lid, long id, long type, void *data);
 
 struct pw_idmap *
-pw_idmap_init(const char *name)
+pw_idmap_init(const char *name, bool clean_load)
 {
 	struct pw_idmap *map;
 	FILE *fp;
@@ -66,6 +66,10 @@ pw_idmap_init(const char *name)
 		return NULL;
 	}
 	memcpy(map->name, name, strlen(name));
+
+	if (clean_load) {
+		return map;
+	}
 
 	snprintf(buf, sizeof(buf), "patcher/%s.imap", map->name);
 	fp = fopen(buf, "rb");

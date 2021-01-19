@@ -273,7 +273,7 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 	snprintf(buf, sizeof(buf), "npcgen_%s", name);
 
 	npc->name = name;
-	npc->idmap = pw_idmap_init(buf);
+	npc->idmap = pw_idmap_init(buf, clean_load);
 	if (!npc->idmap) {
 		PWLOG(LOG_ERROR, "pw_idmap_init() failed\n");
 		return 1;

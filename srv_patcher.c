@@ -112,12 +112,12 @@ patch(const char *url)
 int
 main(int argc, char *argv[])
 {
+	struct pw_version version;
 	char tmpbuf[1024];
 	char *buf;
 	size_t num_bytes = 0;
 	int i, rc;
 
-	FILE *fp;
 	setlocale(LC_ALL, "en_US.UTF-8");
 
 	if (argc < 2) {
@@ -125,16 +125,28 @@ main(int argc, char *argv[])
 		return 0;
 	}
 
-	unsigned version = 0;
-	char cur_hash[64] = {0};
-	cur_hash[0] = '0';
+	const char *branch_name = argv[1];
+	const char *tmp = getenv("PW_UPDATER_FORCE_FRESH");
+	bool force_fresh_update = false;
+	if (tmp && strlen(tmp) > 0) {
+		PWLOG(LOG_INFO, "PW_UPDATER_FORCE_FRESH set\n");
+		force_fresh_update = true;
+	}
 
-	fp = fopen("patcher/version", "w+b");
-	if (fp) {
-		fread(&version, 1, sizeof(version), fp);
-		fread(cur_hash, 1, sizeof(cur_hash), fp);
-		cur_hash[sizeof(cur_hash) - 1] = 0;
-		fclose(fp);
+	rc = pw_version_load(&version);
+	if (rc < 0) {
+		PWLOG(LOG_ERROR, "pw_version_load() failed with rc=%d\n", rc);
+		return 1;
+	}
+
+	if (force_fresh_update || strcmp(version.branch, branch_name) != 0) {
+		if (!force_fresh_update) {
+			PWLOG(LOG_INFO, "different branch detected, forcing a fresh update\n");
+		}
+		force_fresh_update = true;
+		version.version = 0;
+		snprintf(version.branch, sizeof(version.branch), "%s", branch_name);
+		snprintf(version.cur_hash, sizeof(version.cur_hash), "0");
 	}
 
 	g_elements = calloc(1, sizeof(*g_elements));
@@ -143,29 +155,8 @@ main(int argc, char *argv[])
 		return 1;
 	}
 
-	rc = pw_elements_load(g_elements, "patcher/elements.src");
-	if (rc != 0) {
-		PWLOG(LOG_ERROR, "pw_elements_load(\"patcher/elements.src\") failed: %d\n", rc);
-		return 1;
-	}
-
-	for (i = 0; i < PW_MAX_MAPS; i++) {
-		const struct map_name *map = &g_map_names[i];
-		struct pw_npc_file *npc = &g_npc_files[i];
-
-		snprintf(tmpbuf, sizeof(tmpbuf), "config/%s/npcgen.data", map->dir_name);
-		rc = pw_npcs_load(npc, map->name, tmpbuf, false);
-		if (rc) {
-			PWLOG(LOG_ERROR, "pw_npcs_load(\"%s\") failed: %d\n", map->name, rc);
-			return 1;
-		}
-		
-	}
-
-	const char *branch_name = argv[1];
-	
 	snprintf(tmpbuf, sizeof(tmpbuf), "http://miragetest.ddns.net/editor/project/fetch/%s/since/%s",
-			branch_name, cur_hash);
+			branch_name, version.cur_hash);
 
 	rc = download_mem(tmpbuf, &buf, &num_bytes);
 	if (rc) {
@@ -174,39 +165,85 @@ main(int argc, char *argv[])
 	}
 
 	struct cjson *ver_cjson = cjson_parse(buf);
-
-	const char *origin = JSs(ver_cjson, "origin");
 	struct cjson *updates = JS(ver_cjson, "updates");
-	for (i = 0; i < updates->count; i++) {
-		struct cjson *update = JS(updates, i);
-		bool is_cached = JSi(update, "cached");
-		const char *hash_type = is_cached ? "cache" : "uploads";
+	bool is_cumulative = JSi(ver_cjson, "cumulative") && !force_fresh_update;
+	const char *elements_path;
+	const char *last_hash = NULL;
 
-		PWLOG(LOG_INFO, "Fetching patch \"%s\" ...\n", JSs(update, "topic"));
+	if (updates->count) {
+		if (is_cumulative) {
+			elements_path = "config/elements.data";
+		} else {
+			elements_path = "patcher/elements.data";
+		}
 
-		snprintf(tmpbuf, sizeof(tmpbuf), "%s/%s/%s/%s.json", origin, hash_type, branch_name, JSs(update, "hash"));
-		rc = patch(tmpbuf);
-		if (rc) {
-			PWLOG(LOG_ERROR, "Failed to patch\n");
+		rc = pw_elements_load(g_elements, elements_path, !is_cumulative);
+		if (rc != 0) {
+			PWLOG(LOG_ERROR, "pw_elements_load(\"%s\") failed: %d\n", elements_path, rc);
+			return 1;
+		}
+
+		for (i = 0; i < PW_MAX_MAPS; i++) {
+			const struct map_name *map = &g_map_names[i];
+			struct pw_npc_file *npc = &g_npc_files[i];
+			const char *dir;
+
+			if (is_cumulative) {
+				dir = "config";
+			} else {
+				dir = "patcher";
+			}
+
+			snprintf(tmpbuf, sizeof(tmpbuf), "%s/%s/npcgen.data", dir, map->dir_name);
+			rc = pw_npcs_load(npc, map->name, tmpbuf, !is_cumulative);
+			if (rc) {
+				PWLOG(LOG_ERROR, "pw_npcs_load(\"%s\") failed: %d\n", map->name, rc);
+				return 1;
+			}
+		}
+
+
+		const char *origin = JSs(ver_cjson, "origin");
+
+		for (i = 0; i < updates->count; i++) {
+			struct cjson *update = JS(updates, i);
+			bool is_cached = JSi(update, "cached");
+			const char *hash_type = is_cached ? "cache" : "uploads";
+			last_hash = JSs(update, "hash");
+
+			PWLOG(LOG_INFO, "Fetching patch \"%s\" ...\n", JSs(update, "topic"));
+
+			snprintf(tmpbuf, sizeof(tmpbuf), "%s/%s/%s/%s.json", origin, hash_type, branch_name, last_hash);
+			rc = patch(tmpbuf);
+			if (rc) {
+				PWLOG(LOG_ERROR, "Failed to patch\n");
+			}
+		}
+
+		pw_elements_save(g_elements, "config/elements.data", true);
+
+		for (i = 0; i < PW_MAX_MAPS; i++) {
+			const struct map_name *map = &g_map_names[i];
+			struct pw_npc_file *npc = &g_npc_files[i];
+
+			snprintf(tmpbuf, sizeof(tmpbuf), "config/%s/npcgen.data", map->dir_name);
+			rc = pw_npcs_save(npc, tmpbuf);
+			if (rc) {
+				PWLOG(LOG_ERROR, "pw_npcs_save(\"%s\") failed: %d\n", map->name, rc);
+				return 1;
+			}
 		}
 	}
+
+	version.version = JSi(ver_cjson, "version");
+	snprintf(version.branch, sizeof(version.branch), "%s", branch_name);
+	if (last_hash) {
+		snprintf(version.cur_hash, sizeof(version.cur_hash), "%s", last_hash);
+	}
+	pw_version_save(&version);
 
 	cjson_free(ver_cjson);
 	free(buf);
-
-	pw_elements_save(g_elements, "elements_exp.data", true);
-
-	for (i = 0; i < PW_MAX_MAPS; i++) {
-		const struct map_name *map = &g_map_names[i];
-		struct pw_npc_file *npc = &g_npc_files[i];
-
-		snprintf(tmpbuf, sizeof(tmpbuf), "config/%s/npcgen.data2", map->dir_name);
-		rc = pw_npcs_save(npc, tmpbuf);
-		if (rc) {
-			PWLOG(LOG_ERROR, "pw_npcs_save(\"%s\") failed: %d\n", map->name, rc);
-			return 1;
-		}
-	}
 
 	return rc;
 }

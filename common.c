@@ -697,6 +697,48 @@ deserialize(struct cjson *obj, struct serializer *slzr_table, void *data)
 	_deserialize(obj, &slzr_table, &data);
 }
 
+int
+pw_version_load(struct pw_version *ver)
+{
+	FILE *fp = fopen("patcher/version", "rb");
+
+	if (!fp) {
+		memset(ver, 0, sizeof(*ver));
+		ver->magic = PW_VERSION_MAGIC;
+		return errno;
+	}
+
+	fread(ver, 1, sizeof(*ver), fp);
+	ver->branch[sizeof(ver->branch) - 1] = 0;
+	ver->cur_hash[sizeof(ver->cur_hash) - 1] = 0;
+	fclose(fp);
+
+	if (ver->magic != PW_VERSION_MAGIC) {
+		memset(ver, 0, sizeof(*ver));
+		ver->magic = PW_VERSION_MAGIC;
+		return 1;
+	}
+
+	return 0;
+}
+
+int
+pw_version_save(struct pw_version *ver)
+{
+	FILE *fp = fopen("patcher/version", "wb");
+
+	if (!fp) {
+		return -errno;
+	}
+
+	fwrite(ver, 1, sizeof(*ver), fp);
+	ver->branch[sizeof(ver->branch) - 1] = 0;
+	ver->cur_hash[sizeof(ver->cur_hash) - 1] = 0;
+	fclose(fp);
+
+	return 0;
+}
+
 void
 pwlog(int type, const char *filename, unsigned lineno, const char *fnname, const char *fmt, ...)
 {

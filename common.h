@@ -9,6 +9,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdbool.h>
 
 #ifdef __MINGW32__
 #include <sys/types.h>
@@ -48,6 +49,14 @@ struct pw_chain_el {
 	size_t capacity;
 	size_t count;
 	char data[0];
+};
+
+#define PW_VERSION_MAGIC 0xb78e97a0
+struct pw_version {
+	uint32_t magic;
+	uint32_t version;
+	char branch[64];
+	char cur_hash[64];
 };
 
 #define PW_CHAIN_TABLE_FOREACH(_var, _chain, _table) \
@@ -93,11 +102,14 @@ void pwlog(int type, const char *filename, unsigned lineno, const char *fnname, 
 #define PWLOG(type, ...) pwlog((type), __FILE__, __LINE__, __func__, __VA_ARGS__)
 
 struct pw_idmap;
-struct pw_idmap *pw_idmap_init(const char *name);
+struct pw_idmap *pw_idmap_init(const char *name, bool clean_load);
 long pw_idmap_register_type(struct pw_idmap *map);
 void *pw_idmap_get(struct pw_idmap *map, long long lid, long type);
 void pw_idmap_set(struct pw_idmap *map, long long lid, long id, long type, void *data);
 void pw_idmap_end_type_load(struct pw_idmap *map, long type, uint32_t max_id);
 int pw_idmap_save(struct pw_idmap *map);
+
+int pw_version_load(struct pw_version *ver);
+int pw_version_save(struct pw_version *ver);
 
 #endif /* PW_COMMON_H */
