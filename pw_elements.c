@@ -1590,7 +1590,7 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 }
 
 static void
-pw_elements_load_table(struct pw_elements *elements, const char *name, uint32_t el_size, struct serializer *serializer, FILE *fp)
+pw_elements_load_table(struct pw_elements *elements, const char *name, uint32_t el_size, int skipped_offset, struct serializer *serializer, FILE *fp)
 {
 	struct pw_chain_table *table;
 	struct pw_chain_el *chain;
@@ -1616,11 +1616,17 @@ pw_elements_load_table(struct pw_elements *elements, const char *name, uint32_t 
 		return;
 	}
 	chain->count = chain->capacity = count;
-	fread(chain->data, 1, count * el_size, fp);
 
 	idmap_type = pw_idmap_register_type(g_elements_map);
 	el = chain->data;
 	for (i = 0; i < count; i++) {
+		if (skipped_offset) {
+			fread(el, 1, skipped_offset, fp);
+			fread((char *)el + skipped_offset + 4, 1, el_size - skipped_offset - 4, fp);
+		} else {
+			fread(el, 1, el_size, fp);
+		}
+
 		unsigned id = *(uint32_t *)el;
 
 		if (id > table_max_id) {
@@ -1751,7 +1757,7 @@ save_control_block_1(struct control_block1 *block, FILE *fp)
 }
 
 int
-pw_elements_load(struct pw_elements *el, const char *filename)
+pw_elements_load(struct pw_elements *el, const char *filename, bool clean_load)
 {
 	FILE *fp = fopen(filename, "rb");
 	int rc;
@@ -1761,7 +1767,7 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 		return 1;
 	}
 
-	g_elements_map = pw_idmap_init("elements");
+	g_elements_map = pw_idmap_init("elements", clean_load);
 	if (!g_elements_map) {
 		PWLOG(LOG_ERROR, "pw_idmap_init() failed\n");
 		fclose(fp);
@@ -1771,14 +1777,17 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 	memset(el, 0, sizeof(*el));
 
 	fread(&el->hdr, 1, sizeof(el->hdr), fp);
-	if (el->hdr.version != 12) {
-		PWLOG(LOG_ERROR, "element version mismatch, expected 12, found %d\n", el->hdr.version);
+	if (el->hdr.version != 12 && el->hdr.version != 10) {
+		PWLOG(LOG_ERROR, "element version mismatch, expected 10 or 12, found %d\n", el->hdr.version);
 		fclose(fp);
 		return 1;
 	}
 
+#define LOAD_ARR_OFFSET(arr_name, el_size, offset) \
+	pw_elements_load_table(el, #arr_name, el_size, offset, arr_name ## _serializer, fp)
+
 #define LOAD_ARR(arr_name, el_size) \
-	pw_elements_load_table(el, #arr_name, el_size, arr_name ## _serializer, fp)
+	LOAD_ARR_OFFSET(arr_name, el_size, 0)
 
 	LOAD_ARR(equipment_addon, 84);
 	LOAD_ARR(weapon_major_types, 68);
@@ -1835,7 +1844,7 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 	LOAD_ARR(npc_transport_service, 328);
 	LOAD_ARR(npc_proxy_service, 72);
 	LOAD_ARR(npc_storage_service, 68);
-	LOAD_ARR(npc_crafts, 1228);
+	LOAD_ARR_OFFSET(npc_crafts, 1228, (el->hdr.version == 10) ? 72 : 0);
 	LOAD_ARR(npc_decompose_service, 72);
 	LOAD_ARR(npc_type, 68);
 	LOAD_ARR(npcs, 848);
@@ -1850,7 +1859,7 @@ pw_elements_load(struct pw_elements *el, const char *filename)
 	LOAD_ARR(customizedata_essence, 204);
 	LOAD_ARR(recipe_major_type, 68);
 	LOAD_ARR(recipe_sub_type, 68);
-	LOAD_ARR(recipes, 404);
+	LOAD_ARR_OFFSET(recipes, 404, (el->hdr.version == 10) ? 88 : 0);
 	LOAD_ARR(enemy_faction_config, 196);
 	LOAD_ARR(charracter_class_config, 160);
 	LOAD_ARR(param_adjust_config, 612);
@@ -1934,7 +1943,7 @@ pw_elements_save_table(struct pw_chain_table *table, FILE *fp, int skipped_offse
 				fwrite(el, 1, skipped_offset, fp);
 				fwrite((char *)el + skipped_offset + 4, 1, table->el_size - skipped_offset - 4, fp);
 			} else {
-				fwrite(el, table->el_size, 1, fp);
+				fwrite(el, 1, table->el_size, fp);
 			}
 			count++;
 		}
@@ -1982,7 +1991,7 @@ pw_elements_save(struct pw_elements *el, const char *filename, bool is_server)
 		if (is_server && strcmp(table->name, "npc_crafts") == 0) {
 			pw_elements_save_table(table, fp, 72);
 		} else if (is_server && strcmp(table->name, "recipes") == 0) {
-			pw_elements_save_table(table, fp, 92);
+			pw_elements_save_table(table, fp, 88);
 		} else {
 			pw_elements_save_table(table, fp, 0);
 		}
@@ -2012,5 +2021,6 @@ pw_elements_save(struct pw_elements *el, const char *filename, bool is_server)
 	}
 
 	fclose(fp);
-	return 0;
+
+	return pw_idmap_save(g_elements_map);
 }
