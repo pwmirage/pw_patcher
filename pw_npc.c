@@ -298,10 +298,10 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 		fread(&npc->hdr.triggers_count, 1, sizeof(npc->hdr.triggers_count), fp);
 	}
 
-	PWLOG(LOG_INFO, "spawners_count: %u\n", npc->hdr.creature_sets_count);
-	PWLOG(LOG_INFO, "resource_count: %u\n", npc->hdr.resource_sets_count);
-	PWLOG(LOG_INFO, "dynamics_count: %u\n", npc->hdr.dynamics_count);
-	PWLOG(LOG_INFO, "triggers_count: %u\n", npc->hdr.triggers_count);
+	PWLOG(LOG_DEBUG_5, "spawners_count: %u\n", npc->hdr.creature_sets_count);
+	PWLOG(LOG_DEBUG_5, "resource_count: %u\n", npc->hdr.resource_sets_count);
+	PWLOG(LOG_DEBUG_5, "dynamics_count: %u\n", npc->hdr.dynamics_count);
+	PWLOG(LOG_DEBUG_5, "triggers_count: %u\n", npc->hdr.triggers_count);
 
 	rc = pw_chain_table_init(&npc->spawners, "spawners", spawner_serializer, sizeof(struct pw_spawner_set), npc->hdr.creature_sets_count);
 	if (rc) {
@@ -345,7 +345,7 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 		if (id > max_id) {
 			max_id = id;
 		}
-		PWLOG(LOG_INFO, "spawner parsed, off=%u, id=%u, groups=%u\n", off, id, groups_count);
+		PWLOG(LOG_DEBUG_5, "spawner parsed, off=%u, id=%u, groups=%u\n", off, id, groups_count);
 		pw_idmap_set(npc->idmap, id, id, npc->spawners.idmap_type, el);
 	}
 	pw_idmap_end_type_load(npc->idmap, npc->spawners.idmap_type, max_id);
@@ -395,7 +395,7 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 		if (id > max_id) {
 			max_id = id;
 		}
-		PWLOG(LOG_INFO, "resource parsed, off=%u, id=%u, groups=%u\n", off, id, groups_count);
+		PWLOG(LOG_DEBUG_5, "resource parsed, off=%u, id=%u, groups=%u\n", off, id, groups_count);
 		pw_idmap_set(npc->idmap, id, id, npc->resources.idmap_type, el);
 	}
 	pw_idmap_end_type_load(npc->idmap, npc->resources.idmap_type, max_id);
@@ -426,7 +426,7 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 		}
 
 		id = DYNAMIC_ID(el) & ~(1UL << 31);
-		PWLOG(LOG_INFO, "dynamic parsed, off=%u, id=%u\n", ftell(fp), id);
+		PWLOG(LOG_DEBUG_5, "dynamic parsed, off=%u, id=%u\n", ftell(fp), id);
 		if (id > max_id) {
 			max_id = id;
 		}
@@ -453,7 +453,7 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 		}
 
 		id = TRIGGER_ID(el) & ~(1UL << 31);
-		PWLOG(LOG_INFO, "trigger parsed, off=%u, id=%u\n", ftell(fp), id);
+		PWLOG(LOG_DEBUG_5, "trigger parsed, off=%u, id=%u\n", ftell(fp), id);
 		if (id > max_id) {
 			max_id = id;
 		}
@@ -517,7 +517,7 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 			chain = chain->next;
 		}
 
-		PWLOG(LOG_INFO, "0x%llx not found, creating with id=%u\n", id, el_id);
+		PWLOG(LOG_DEBUG_5, "0x%llx not found, creating with id=%u\n", id, el_id);
 
 		table_el = pw_chain_table_new_el(table);
 		if (table == &npc->spawners) {
@@ -546,7 +546,7 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 	} else {
 		real_id = RESOURCE_ID(table_el);
 	}
-	PWLOG(LOG_INFO, "0x%llx found with real id=%u\n", id, real_id);
+	PWLOG(LOG_DEBUG_5, "0x%llx found with real id=%u\n", id, real_id);
 	deserialize(obj, table->serializer, table_el);
 	return 0;
 }
@@ -574,7 +574,7 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 		uint32_t groups_count = 0;
 
 		if (SPAWNER_ID(set->data) & (1 << 31)) {
-			PWLOG(LOG_INFO, "spawner ignored, off=%u, id=%u\n", ftell(fp), SPAWNER_ID(el));
+			PWLOG(LOG_DEBUG_5, "spawner ignored, off=%u, id=%u\n", ftell(fp), SPAWNER_ID(el));
 			continue;
 		}
 
@@ -593,12 +593,12 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 
 		if (groups_count == 0) {
 			/* skip */
-			PWLOG(LOG_INFO, "spawner skipped, off=%u, id=%u\n", off_begin, SPAWNER_ID(el));
+			PWLOG(LOG_DEBUG_5, "spawner skipped, off=%u, id=%u\n", off_begin, SPAWNER_ID(el));
 			fseek(fp, off_begin, SEEK_SET);
 			continue;
 		}
 
-		PWLOG(LOG_INFO, "spawner saved, off=%u, id=%u\n", off_begin, SPAWNER_ID(el));
+		PWLOG(LOG_DEBUG_5, "spawner saved, off=%u, id=%u\n", off_begin, SPAWNER_ID(el));
 		spawners_count++;
 		size_t end_pos = ftell(fp);
 		fseek(fp, off_begin + 4, SEEK_SET);
@@ -613,7 +613,7 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 		uint32_t groups_count = 0;
 
 		if (RESOURCE_ID(set->data) & (1 << 31)) {
-			PWLOG(LOG_INFO, "resource ignored, off=%u, id=%u\n", ftell(fp), RESOURCE_ID(el));
+			PWLOG(LOG_DEBUG_5, "resource ignored, off=%u, id=%u\n", ftell(fp), RESOURCE_ID(el));
 			continue;
 		}
 
@@ -632,12 +632,12 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 
 		if (groups_count == 0) {
 			/* skip */
-			PWLOG(LOG_INFO, "resource skipped, off=%u, id=%u\n", off_begin, RESOURCE_ID(el));
+			PWLOG(LOG_DEBUG_5, "resource skipped, off=%u, id=%u\n", off_begin, RESOURCE_ID(el));
 			fseek(fp, off_begin, SEEK_SET);
 			continue;
 		}
 
-		PWLOG(LOG_INFO, "resource saved, off=%u, id=%u\n", off_begin, RESOURCE_ID(el));
+		PWLOG(LOG_DEBUG_5, "resource saved, off=%u, id=%u\n", off_begin, RESOURCE_ID(el));
 		resources_count++;
 		size_t end_pos = ftell(fp);
 		fseek(fp, off_begin + 20, SEEK_SET);
@@ -648,10 +648,10 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 	uint32_t dynamics_count = 0;
 	PW_CHAIN_TABLE_FOREACH(el, chain, &npc->dynamics) {
 		if (DYNAMIC_ID(el) & (1 << 31)) {
-			PWLOG(LOG_INFO, "dynamic ignored, off=%u, id=%u\n", ftell(fp), DYNAMIC_ID(el));
+			PWLOG(LOG_DEBUG_5, "dynamic ignored, off=%u, id=%u\n", ftell(fp), DYNAMIC_ID(el));
 			continue;
 		}
-		PWLOG(LOG_INFO, "dynamic saved, off=%u, id=%u\n", ftell(fp), DYNAMIC_ID(el));
+		PWLOG(LOG_DEBUG_5, "dynamic saved, off=%u, id=%u\n", ftell(fp), DYNAMIC_ID(el));
 		fwrite(el, 1, npc->dynamics.el_size, fp);
 		dynamics_count++;
 	}
@@ -659,11 +659,11 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 	uint32_t triggers_count = 0;
 	PW_CHAIN_TABLE_FOREACH(el, chain, &npc->triggers) {
 		if (TRIGGER_ID(el) & (1 << 31)) {
-			PWLOG(LOG_INFO, "trigger ignored, off=%u, id=%u\n", ftell(fp), TRIGGER_ID(el));
+			PWLOG(LOG_DEBUG_5, "trigger ignored, off=%u, id=%u\n", ftell(fp), TRIGGER_ID(el));
 			continue;
 		}
 
-		PWLOG(LOG_INFO, "trigger saved, off=%u, id=%u\n", ftell(fp), TRIGGER_ID(el));
+		PWLOG(LOG_DEBUG_5, "trigger saved, off=%u, id=%u\n", ftell(fp), TRIGGER_ID(el));
 		fwrite(el, 1, npc->triggers.el_size, fp);
 		triggers_count++;
 	}
@@ -675,10 +675,10 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 	fwrite(&dynamics_count, 1, sizeof(dynamics_count), fp);
 	fwrite(&triggers_count, 1, sizeof(triggers_count), fp);
 
-	PWLOG(LOG_INFO, "spawners_count: %u\n", spawners_count);
-	PWLOG(LOG_INFO, "resource_count: %u\n", resources_count);
-	PWLOG(LOG_INFO, "dynamics_count: %u\n", dynamics_count);
-	PWLOG(LOG_INFO, "triggers_count: %u\n", triggers_count);
+	PWLOG(LOG_DEBUG_5, "spawners_count: %u\n", spawners_count);
+	PWLOG(LOG_DEBUG_5, "resource_count: %u\n", resources_count);
+	PWLOG(LOG_DEBUG_5, "dynamics_count: %u\n", dynamics_count);
+	PWLOG(LOG_DEBUG_5, "triggers_count: %u\n", triggers_count);
 
 	fclose(fp);
 

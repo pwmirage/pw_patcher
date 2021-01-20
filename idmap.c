@@ -144,10 +144,6 @@ _idmap_set(struct pw_idmap *map, long long lid, long id, long type, void *data)
 {
 	struct pw_id_el *el, *last_el = NULL;
 
-	if (lid > 200000) {
-		PWLOG(LOG_INFO, "setting big mapping. lid=0x%llx, id=%u\n", lid, id);
-	}
-
 	el = map->lists[lid % PW_IDMAP_ARR_SIZE];
 	while (el) {
 		if (el->lid == lid && el->type == type) {

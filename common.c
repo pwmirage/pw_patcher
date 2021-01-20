@@ -25,6 +25,7 @@
 #include <iconv.h>
 #endif
 
+int g_pwlog_level = 99;
 static FILE *g_nullfile;
 
 int
@@ -744,6 +745,10 @@ pwlog(int type, const char *filename, unsigned lineno, const char *fnname, const
 {
 	va_list args;
 	const char *type_str;
+
+	if (type > g_pwlog_level) {
+		return;
+	}
 
 	switch (type) {
 		case LOG_ERROR:
