@@ -104,7 +104,6 @@ cjson_parse(char *str)
 	bool need_comma = false;
 
 	if (*b != '{' && *b != '[') {
-		assert(false);
 		return NULL;
 	}
 
@@ -333,7 +332,6 @@ cjson_parse_arr_stream(char *str, cjson_parse_arr_stream_cb obj_cb, void *cb_ctx
 	bool need_comma = false;
 
 	if (*b != '[') {
-		assert(false);
 		return -EINVAL;
 	}
 
