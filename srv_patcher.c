@@ -165,6 +165,12 @@ main(int argc, char *argv[])
 	}
 
 	struct cjson *ver_cjson = cjson_parse(buf);
+	if (!ver_cjson) {
+		PWLOG(LOG_ERROR, "cjson_parse() failed\n");
+		free(buf);
+		return 1;
+	}
+
 	struct cjson *updates = JS(ver_cjson, "updates");
 	bool is_cumulative = JSi(ver_cjson, "cumulative") && !force_fresh_update;
 	const char *elements_path;
@@ -208,12 +214,16 @@ main(int argc, char *argv[])
 		for (i = 0; i < updates->count; i++) {
 			struct cjson *update = JS(updates, i);
 			bool is_cached = JSi(update, "cached");
-			const char *hash_type = is_cached ? "cache" : "uploads";
 			last_hash = JSs(update, "hash");
 
 			PWLOG(LOG_INFO, "Fetching patch \"%s\" ...\n", JSs(update, "topic"));
 
-			snprintf(tmpbuf, sizeof(tmpbuf), "%s/%s/%s/%s.json", origin, hash_type, branch_name, last_hash);
+			if (is_cached) {
+				snprintf(tmpbuf, sizeof(tmpbuf), "%s/cache/%s/%s.json", origin, branch_name, last_hash);
+			} else {
+				snprintf(tmpbuf, sizeof(tmpbuf), "%s/uploads/%s.json", origin, last_hash);
+			}
+
 			rc = patch(tmpbuf);
 			if (rc) {
 				PWLOG(LOG_ERROR, "Failed to patch\n");

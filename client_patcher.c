@@ -438,7 +438,7 @@ patch_cb(void *arg1, void *arg2)
 	if (!g_force_update && JSi(g_latest_version, "cumulative")) {
 		rc = pw_elements_load(&elements, "element/data/elements.data", false);
 	} else {
-		rc = pw_elements_load(&elements, "patcher/elements.src", true);
+		rc = pw_elements_load(&elements, "patcher/elements.data.src", true);
 	}
 	if (rc != 0) {
 		set_text(g_status_right_lbl, "elements file not found. Please redownload the client");
@@ -461,10 +461,17 @@ patch_cb(void *arg1, void *arg2)
 		snprintf(tmpbuf, sizeof(tmpbuf), "Downloading patch %d of %d", i + 1, updates->count);
 		set_text(g_status_right_lbl, tmpbuf);
 
-		snprintf(tmpbuf, sizeof(tmpbuf), "%s/%s/%s/%s.json", origin, hash_type, g_branch_name, last_hash);
+		if (is_cached) {
+			snprintf(tmpbuf, sizeof(tmpbuf), "%s/cache/%s/%s.json", origin, g_branch_name, last_hash);
+		} else {
+			snprintf(tmpbuf, sizeof(tmpbuf), "%s/uploads/%s.json", origin, last_hash);
+		}
+
 		rc = patch(&elements, tmpbuf);
 		if (rc) {
 			PWLOG(LOG_ERROR, "Failed to patch\n");
+			set_text(g_status_right_lbl, "Patching failed!");
+			return;
 		}
 	}
 
