@@ -4,8 +4,8 @@
 18253 ICON "icon.ico"
 
 1 VERSIONINFO
-FILEVERSION     1,0,0,0
-PRODUCTVERSION  1,0,0,0
+FILEVERSION     1,0,1,0
+PRODUCTVERSION  1,0,1,0
 BEGIN
   BLOCK "StringFileInfo"
   BEGIN
@@ -13,12 +13,12 @@ BEGIN
     BEGIN
       VALUE "CompanyName", "Perfect World Mirage"
       VALUE "FileDescription", "PW Mirage Updater"
-      VALUE "FileVersion", "1.0.0.0"
+      VALUE "FileVersion", "1.0.1.0"
       VALUE "InternalName", "updater"
       VALUE "LegalCopyright", "Beta @ pwmirage.com"
       VALUE "OriginalFilename", "updater.exe"
       VALUE "ProductName", "Mirage Updater"
-      VALUE "ProductVersion", "1.0.0"
+      VALUE "ProductVersion", "1.0.1"
     END
   END
   BLOCK "VarFileInfo"

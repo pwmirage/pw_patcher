@@ -17,8 +17,10 @@
 
 static char *g_branch_name = "public";
 static bool g_patcher_outdated = false;
-static char *g_version_str;
-static struct cjson *g_version;
+static bool g_force_update = false;
+static char *g_latest_version_str;
+static struct cjson *g_latest_version;
+struct pw_version g_version;
 
 struct task_ctx {
 	mg_callback cb;
@@ -137,7 +139,6 @@ on_init(int argc, char *argv[])
 	char tmpbuf[1024];
 	size_t len;
 	int rc;
-	FILE *fp;
 
 	if (argc >= 3) {
 		if (strcmp(argv[1], "-b") == 0) {
@@ -147,36 +148,38 @@ on_init(int argc, char *argv[])
 
 	set_text(g_status_left_lbl, "Reading local version ...");
 
-	unsigned version = 0;
-	char cur_hash[64] = {0};
-	cur_hash[0] = '0';
+	rc = pw_version_load(&g_version);
+	if (rc < 0) {
+		PWLOG(LOG_ERROR, "pw_version_load() failed with rc=%d\n", rc);
+		return;
+	}
 
-	fp = fopen("patcher/version", "rb");
-	if (fp) {
-		fread(&version, 1, sizeof(version), fp);
-		fread(cur_hash, 1, sizeof(cur_hash), fp);
-		cur_hash[sizeof(cur_hash) - 1] = 0;
-		fclose(fp);
+	if (strcmp(g_version.branch, g_branch_name) != 0) {
+		PWLOG(LOG_INFO, "new branch detected, forcing a fresh update\n");
+		g_force_update = true;
+		g_version.version = 0;
+		snprintf(g_version.branch, sizeof(g_version.branch), "%s", g_branch_name);
+		snprintf(g_version.cur_hash, sizeof(g_version.cur_hash), "0");
 	}
 
 	set_text(g_status_left_lbl, "Fetching latest version ...");
 
 	snprintf(tmpbuf, sizeof(tmpbuf), "http://miragetest.ddns.net/editor/project/fetch/%s/since/%s",
-			g_branch_name, cur_hash);
+			g_branch_name, g_version.cur_hash);
 
-	rc = download_mem(tmpbuf, &g_version_str, &len);
+	rc = download_mem(tmpbuf, &g_latest_version_str, &len);
 	if (rc) {
 		set_text(g_status_right_lbl, "Can't fetch patch list");
 		return;
 	}
 
-	g_version = cjson_parse(g_version_str);
-	if (!g_version) {
+	g_latest_version = cjson_parse(g_latest_version_str);
+	if (!g_latest_version) {
 		set_text(g_status_right_lbl, "Can't parse patch list");
 		return;
 	}
 
-	char *motd = JSs(g_version, "message");
+	char *motd = JSs(g_latest_version, "message");
 	char *c = motd;
 
 	while (*c) {
@@ -188,14 +191,14 @@ on_init(int argc, char *argv[])
 	}
 	set_text(g_changelog_lbl, motd);
 
-	if (version != JSi(g_version, "version")) {
+	if (g_version.version != JSi(g_latest_version, "version")) {
 		rc = download("https://raw.githubusercontent.com/pwmirage/version/master/banner.bmp", "patcher/banner");
 		if (rc == 0) {
 			set_banner("patcher/banner");
 		}
 	}
 
-	if (JSi(g_version, "patcher_version") >= 11) {
+	if (JSi(g_latest_version, "patcher_version") >= 11) {
 		g_patcher_outdated = true;
 		set_text(g_patch_button, "Update");
 		enable_button(g_patch_button, true);
@@ -227,8 +230,8 @@ on_init(int argc, char *argv[])
 		if (install == IDYES) {
 				rc = download("https://aka.ms/vs/16/release/vc_redist.x86.exe", "patcher/vc_redist.x86.exe");
 				if (rc != 0) {
-						set_text(g_status_right_lbl, "vc_redist.x86 download failed!");
-						return;
+					set_text(g_status_right_lbl, "vc_redist.x86 download failed!");
+					return;
 				}
 
 				STARTUPINFO si = {};
@@ -236,8 +239,8 @@ on_init(int argc, char *argv[])
 
 				si.cb = sizeof(si);
 				if(!CreateProcess("patcher\\vc_redist.x86.exe", NULL, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-						set_text(g_status_right_lbl, "vc_redist.x86 execution failed!");
-						return;
+					set_text(g_status_right_lbl, "vc_redist.x86 execution failed!");
+					return;
 				}
 
 				show_ui(g_win, false);
@@ -246,8 +249,8 @@ on_init(int argc, char *argv[])
 				show_ui(g_win, true);
 
 				if (check_deps() != 0) {
-						set_text(g_status_right_lbl, "vc_redist.x86 installation failed!");
-						return;
+					set_text(g_status_right_lbl, "vc_redist.x86 installation failed!");
+					return;
 				}
 		} else {
 				return;
@@ -255,11 +258,11 @@ on_init(int argc, char *argv[])
 	}
 
 	char msg[256];
-	snprintf(msg, sizeof(msg), "Current version: %d. Latest: %d", version, (int)JSi(g_version, "version"));
+	snprintf(msg, sizeof(msg), "Current version: %d. Latest: %d", g_version.version, (int)JSi(g_latest_version, "version"));
 	PWLOG(LOG_INFO, "%s\n", msg);
 	set_text(g_status_left_lbl, msg);
 
-	if (version == JSi(g_version, "version")) {
+	if (g_version.version == JSi(g_latest_version, "version")) {
 		set_text(g_status_right_lbl, "Ready to launch");
 		enable_button(g_play_button, true);
 	} else {
@@ -272,11 +275,11 @@ on_init(int argc, char *argv[])
 void
 on_fini(void)
 {
-	if (g_version) {
-		cjson_free(g_version);
+	if (g_latest_version) {
+		cjson_free(g_latest_version);
 	}
-	free(g_version_str);
-	g_version_str = NULL;
+	free(g_latest_version_str);
+	g_latest_version_str = NULL;
 }
 
 static HMODULE
@@ -373,9 +376,16 @@ import_stream_cb(void *ctx, struct cjson *obj)
 		return;
 	}
 
-	PWLOG(LOG_INFO, "type: %s\n", JSs(obj, "_db", "type"));
+	const char *type = JSs(obj, "_db", "type");
+	PWLOG(LOG_INFO, "type: %s\n", type);
 
 	print_obj(obj->a, 1);
+
+	if (strncmp(type, "spawners_", 9) == 0) {
+		/* server-side only */
+		return;
+	}
+
 	pw_elements_patch_obj(elements, obj);
 }
 
@@ -425,31 +435,33 @@ patch_cb(void *arg1, void *arg2)
 	enable_button(g_patch_button, false);
 	set_text(g_status_right_lbl, "Loading local files");
 
-	if (JSi(g_version, "cumulative")) {
-		rc = pw_elements_load(&elements, "element/data/elements.data");
+	if (!g_force_update && JSi(g_latest_version, "cumulative")) {
+		rc = pw_elements_load(&elements, "element/data/elements.data", false);
 	} else {
-		rc = pw_elements_load(&elements, "patcher/elements.src");
+		rc = pw_elements_load(&elements, "patcher/elements.src", true);
 	}
 	if (rc != 0) {
-		set_text(g_status_right_lbl, "elements.src not found. Please click the repair button");
+		set_text(g_status_right_lbl, "elements file not found. Please redownload the client");
 		goto err_retry;
 	}
 
 	set_progress(5);
 	set_text(g_status_right_lbl, "Updating...");
 
-	const char *origin = JSs(g_version, "origin");
-	struct cjson *updates = JS(g_version, "updates");
+	const char *origin = JSs(g_latest_version, "origin");
+	struct cjson *updates = JS(g_latest_version, "updates");
+	const char *last_hash = NULL;
 	for (i = 0; i < updates->count; i++) {
 		struct cjson *update = JS(updates, i);
 		bool is_cached = JSi(update, "cached");
 		const char *hash_type = is_cached ? "cache" : "uploads";
+		last_hash = JSs(update, "hash");
 
 		PWLOG(LOG_INFO, "Fetching patch \"%s\" ...\n", JSs(update, "topic"));
 		snprintf(tmpbuf, sizeof(tmpbuf), "Downloading patch %d of %d", i + 1, updates->count);
 		set_text(g_status_right_lbl, tmpbuf);
 
-		snprintf(tmpbuf, sizeof(tmpbuf), "%s/%s/%s/%s.json", origin, hash_type, g_branch_name, JSs(update, "hash"));
+		snprintf(tmpbuf, sizeof(tmpbuf), "%s/%s/%s/%s.json", origin, hash_type, g_branch_name, last_hash);
 		rc = patch(&elements, tmpbuf);
 		if (rc) {
 			PWLOG(LOG_ERROR, "Failed to patch\n");
@@ -458,8 +470,8 @@ patch_cb(void *arg1, void *arg2)
 
 	set_text(g_status_right_lbl, "Done!");
 
-	int written = snprintf(tmpbuf, sizeof(tmpbuf), "Current version: %d. ", 0); /* XXX */
-	snprintf(tmpbuf + written, sizeof(tmpbuf) - written, "Latest: %d", (int)JSi(g_version, "version"));
+	int written = snprintf(tmpbuf, sizeof(tmpbuf), "Current version: %d. ", (int)JSi(g_latest_version, "version"));
+	snprintf(tmpbuf + written, sizeof(tmpbuf) - written, "Latest: %d", (int)JSi(g_latest_version, "version"));
 	set_text(g_status_left_lbl,tmpbuf);
 
 	set_progress(10 + 80);
@@ -470,20 +482,21 @@ patch_cb(void *arg1, void *arg2)
 		set_text(g_status_right_lbl, "Saving failed. No permission to access game directories?");
 		return;
 	}
+
+	
 	set_text(g_status_right_lbl, "Ready to launch");
 	PWLOG(LOG_INFO, "All done\n");
 
 	set_progress(100);
 	enable_button(g_patch_button, false);
 	enable_button(g_play_button, true);
-	{
-		FILE *fp = fopen("patcher/version", "wb");
-		unsigned v = JSi(g_version, "version");
 
-		fwrite(&v, sizeof(v), 1, fp);
-		/* TODO save hash as well */
-		fclose(fp);
+	g_version.version = JSi(g_latest_version, "version");
+	snprintf(g_version.branch, sizeof(g_version.branch), "%s", g_branch_name);
+	if (last_hash) {
+		snprintf(g_version.cur_hash, sizeof(g_version.cur_hash), "%s", last_hash);
 	}
+	pw_version_save(&g_version);
 
 	return;
 
@@ -495,6 +508,33 @@ err_retry:
 void
 repair_cb(void *arg1, void *arg2)
 {
+	char tmpbuf[512];
+	size_t len;
+	int rc;
+
+	set_text(g_status_left_lbl, "Fetching latest version ...");
+
+	snprintf(tmpbuf, sizeof(tmpbuf), "http://miragetest.ddns.net/editor/project/fetch/%s/since/0",
+			g_branch_name);
+
+	cjson_free(g_latest_version);
+	g_latest_version = NULL;
+	free(g_latest_version_str);
+	g_latest_version_str = NULL;
+
+	rc = download_mem(tmpbuf, &g_latest_version_str, &len);
+	if (rc) {
+		set_text(g_status_right_lbl, "Can't fetch patch list");
+		return;
+	}
+
+	g_latest_version = cjson_parse(g_latest_version_str);
+	if (!g_latest_version) {
+		set_text(g_status_right_lbl, "Can't parse patch list");
+		return;
+	}
+
+	g_force_update = true;
 	patch_cb(arg1, arg2);
 }
 
