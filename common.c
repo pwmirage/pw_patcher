@@ -108,7 +108,17 @@ download_wininet(const char *url, const char *filename)
 	}
 
 	hInternetSession = InternetOpen("Mirage Patcher", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+	if (!hInternetSession) {
+		fclose(fp);
+		return -1;
+	}
+
 	hURL = InternetOpenUrl(hInternetSession, url,	NULL, 0, 0, 0);
+	if (!hURL) {
+		InternetCloseHandle(hInternetSession);
+		fclose(fp);
+		return -1;
+	}
 
 	char buf[1024];
 
