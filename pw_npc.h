@@ -11,7 +11,7 @@
 #include "common.h"
 
 /* we use one of the unused fields as id */
-#define SPAWNER_ID(s) (*(uint32_t *)((s) + 57))
+#define SPAWNER_ID(s) (*(uint32_t *)((s) + 55))
 #define RESOURCE_ID(r) (*(uint32_t *)((r) + 27))
 #define DYNAMIC_ID(r) (*(uint32_t *)((r) + 0))
 #define TRIGGER_ID(r) (*(uint32_t *)((r) + 0))
