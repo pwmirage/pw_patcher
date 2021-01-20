@@ -104,6 +104,12 @@ load_descriptions(void)
 
 	unsigned i = 0;
 
+	len = 2048;
+	line = malloc(len);
+	if (!line) {
+		PWLOG(LOG_ERROR, "malloc() failed\n");
+		return -1;
+	}
 	while ((read = getline(&line, &len, fp)) != -1) {
 		char *id, *txt;
 
@@ -116,8 +122,13 @@ load_descriptions(void)
 		txt = strtok(NULL, "\"");
 		g_item_descs[atoi(id)] = txt;
 		/* FIXME: line is technically leaked */
-		line = NULL;
-		len = 0;
+
+		len = 2048;
+		line = malloc(len);
+		if (!line) {
+			PWLOG(LOG_ERROR, "malloc() failed\n");
+			return -1;
+		}
 		i++;
 	}
 
