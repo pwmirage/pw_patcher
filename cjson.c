@@ -170,7 +170,7 @@ cjson_parse(char *str)
 			case '"': {
 				char *start = ++b;
 
-				while (*b && *b != '"') b++;
+				while (*b && (*(b - 1) == '\\' || *b != '"')) b++;
 				if (*b == 0 || *(b + 1) == 0) {
 					goto err;
 				}
@@ -404,7 +404,7 @@ cjson_parse_arr_stream(char *str, cjson_parse_arr_stream_cb obj_cb, void *cb_ctx
 			case '"': {
 				char *start = ++b;
 
-				while (*b && *b != '"') b++;
+				while (*b && (*(b - 1) == '\\' || *b != '"')) b++;
 				if (*b == 0 || *(b + 1) == 0) {
 					goto err;
 				}
