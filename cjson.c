@@ -332,6 +332,10 @@ cjson_parse_arr_stream(char *str, cjson_parse_arr_stream_cb obj_cb, void *cb_ctx
 	char *b = str;
 	bool need_comma = false;
 
+	if (*b == 0) {
+		return 0;
+	}
+
 	if (*b != '[') {
 		return -EINVAL;
 	}
@@ -396,7 +400,7 @@ cjson_parse_arr_stream(char *str, cjson_parse_arr_stream_cb obj_cb, void *cb_ctx
 				} else {
 					cur_obj = cur_obj->parent;
 					if (!cur_obj) {
-						return 0;
+						goto end;
 					}
 				}
 				break;
@@ -511,8 +515,9 @@ cjson_parse_arr_stream(char *str, cjson_parse_arr_stream_cb obj_cb, void *cb_ctx
 		b++;
 	}
 
+end:
 	cjson_free(&top_obj);
-	return 0;
+	return (int)(b - str + 1);
 err:
 	cjson_free(&top_obj);
 	return -EFAULT;
