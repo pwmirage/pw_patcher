@@ -64,8 +64,9 @@ static size_t
 deserialize_spawner_type_fn(struct cjson *f, void *data)
 {
 	uint32_t is_npc = 0;
+	const char *name = JSs(f);
 
-	if (strcmp(JSs(f), "npc") == 0) {
+	if (name && strcmp(name, "npc") == 0) {
 		is_npc = 1;
 	}
 	*(uint32_t *)data = is_npc;
@@ -153,7 +154,7 @@ static struct serializer spawner_serializer[] = {
 	{ "spread", _ARRAY_START(3) },
 		{ "", _FLOAT },
 	{ "", _ARRAY_END },
-	{ "type", _CUSTOM, serialize_spawner_type_fn, deserialize_spawner_type_fn },
+	{ "type", _CUSTOM, serialize_spawner_type_fn, deserialize_spawner_type_fn }, /* 4 bytes */
 	{ "mob_type", _INT32 },
 	{ "auto_spawn", _INT8 },
 	{ "auto_respawn", _INT8 },
@@ -492,6 +493,9 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 			table = &npc->spawners;
 		} else if (strcmp(obj_type, "resource") == 0) {
 			table = &npc->resources;
+		} else {
+			PWLOG(LOG_ERROR, "unknown obj.type: \"%s\"\n", obj_type);
+			return -1;
 		}
 
 		table_el = pw_idmap_get(npc->idmap, id, table->idmap_type);
@@ -524,6 +528,9 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 			struct pw_spawner_set *set = table_el;
 
 			SPAWNER_ID(table_el) = el_id;
+			*(uint32_t *)(table_el + 44) = 1; /* NPC */
+			*(uint32_t *)(table_el + 48) = 3214; /* NPC */
+			*(uint8_t *)(table_el + 52) = 1; /* auto spawn */
 			set->groups = pw_chain_table_alloc("spawner_group", spawner_group_serializer, 60, 16);
 		} else if (table == &npc->resources) {
 			struct pw_resource_set *set = table_el;

@@ -90,18 +90,26 @@ static int
 patch(const char *url)
 {
 	char *buf;
-	size_t num_bytes = 1;
+	char *b;
+	ssize_t num_bytes = 1;
 	int rc;
 
-	rc = download_mem(url, &buf, &num_bytes);
+	rc = download_mem(url, &buf, (size_t *)&num_bytes);
 	if (rc) {
 		PWLOG(LOG_ERROR, "download_mem(%s) failed: %d\n", url, rc);
 		return 1;
 	}
 
-	rc = cjson_parse_arr_stream(buf, import_stream_cb, NULL);
+	b = buf;
+	do {
+		rc = cjson_parse_arr_stream(b, import_stream_cb, NULL);
+		/* skip comma and newline */
+		b += rc;
+		while (*b && *b != '[') b++;
+	} while (rc > 0);
+
 	free(buf);
-	if (rc) {
+	if (rc < 0) {
 		PWLOG(LOG_ERROR, "cjson_parse_arr_stream() failed: %d\n", url, rc);
 		return 1;
 	}
@@ -155,8 +163,8 @@ main(int argc, char *argv[])
 		return 1;
 	}
 
-	snprintf(tmpbuf, sizeof(tmpbuf), "http://miragetest.ddns.net/editor/project/fetch/%s/since/%s",
-			branch_name, version.cur_hash);
+	snprintf(tmpbuf, sizeof(tmpbuf), "http://miragetest.ddns.net/editor/project/fetch/%s/since/%s/%u",
+			branch_name, version.cur_hash, version.version);
 
 	rc = download_mem(tmpbuf, &buf, &num_bytes);
 	if (rc) {
@@ -216,7 +224,7 @@ main(int argc, char *argv[])
 			bool is_cached = JSi(update, "cached");
 			last_hash = JSs(update, "hash");
 
-			PWLOG(LOG_INFO, "Fetching patch \"%s\" ...\n", JSs(update, "topic"));
+			PWLOG(LOG_INFO, "Fetching patch \"%s\" ...\n", JSs(update, "name"));
 
 			if (is_cached) {
 				snprintf(tmpbuf, sizeof(tmpbuf), "%s/cache/%s/%s.json", origin, branch_name, last_hash);
@@ -245,6 +253,7 @@ main(int argc, char *argv[])
 		}
 	}
 
+	PWLOG(LOG_INFO, "last_hash: %s\n", last_hash);
 	version.version = JSi(ver_cjson, "version");
 	snprintf(version.branch, sizeof(version.branch), "%s", branch_name);
 	if (last_hash) {

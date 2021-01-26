@@ -99,6 +99,7 @@ void deserialize(struct cjson *obj, struct serializer *slzr_table, void *data);
 #define LOG_ERROR 0
 #define LOG_INFO 1
 #define LOG_DEBUG 100
+#define LOG_DEBUG_1 101
 #define LOG_DEBUG_5 105
 extern int g_pwlog_level;
 void pwlog(int type, const char *filename, unsigned lineno, const char *fnname, const char *fmt, ...);

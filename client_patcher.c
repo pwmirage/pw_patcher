@@ -164,8 +164,8 @@ on_init(int argc, char *argv[])
 
 	set_text(g_status_left_lbl, "Fetching latest version ...");
 
-	snprintf(tmpbuf, sizeof(tmpbuf), "http://miragetest.ddns.net/editor/project/fetch/%s/since/%s",
-			g_branch_name, g_version.cur_hash);
+	snprintf(tmpbuf, sizeof(tmpbuf), "http://miragetest.ddns.net/editor/project/fetch/%s/since/%s/%u",
+			g_branch_name, g_version.cur_hash, g_version.version);
 
 	rc = download_mem(tmpbuf, &g_latest_version_str, &len);
 	if (rc) {
@@ -392,7 +392,7 @@ import_stream_cb(void *ctx, struct cjson *obj)
 static int
 patch(struct pw_elements *elements, const char *url)
 {
-	char *buf;
+	char *buf, *b;
 	size_t num_bytes = 1;
 	int rc;
 
@@ -402,9 +402,15 @@ patch(struct pw_elements *elements, const char *url)
 		return 1;
 	}
 
-	rc = cjson_parse_arr_stream(buf, import_stream_cb, elements);
+	b = buf;
+	do {
+		rc = cjson_parse_arr_stream(b, import_stream_cb, elements);
+		/* skip comma and newline */
+		b += rc;
+		while (*b && *b != '[') b++;
+	} while (rc > 0);
 	free(buf);
-	if (rc) {
+	if (rc < 0) {
 		PWLOG(LOG_ERROR, "cjson_parse_arr_stream() failed: %d\n", url, rc);
 		return 1;
 	}
@@ -454,10 +460,9 @@ patch_cb(void *arg1, void *arg2)
 	for (i = 0; i < updates->count; i++) {
 		struct cjson *update = JS(updates, i);
 		bool is_cached = JSi(update, "cached");
-		const char *hash_type = is_cached ? "cache" : "uploads";
 		last_hash = JSs(update, "hash");
 
-		PWLOG(LOG_INFO, "Fetching patch \"%s\" ...\n", JSs(update, "topic"));
+		PWLOG(LOG_INFO, "Fetching patch \"%s\" ...\n", JSs(update, "name"));
 		snprintf(tmpbuf, sizeof(tmpbuf), "Downloading patch %d of %d", i + 1, updates->count);
 		set_text(g_status_right_lbl, tmpbuf);
 
@@ -521,8 +526,8 @@ repair_cb(void *arg1, void *arg2)
 
 	set_text(g_status_left_lbl, "Fetching latest version ...");
 
-	snprintf(tmpbuf, sizeof(tmpbuf), "http://miragetest.ddns.net/editor/project/fetch/%s/since/0",
-			g_branch_name);
+	snprintf(tmpbuf, sizeof(tmpbuf), "http://miragetest.ddns.net/editor/project/fetch/%s/since/0/%u",
+			g_branch_name, g_version.version);
 
 	cjson_free(g_latest_version);
 	g_latest_version = NULL;

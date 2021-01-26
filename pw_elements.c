@@ -32,6 +32,7 @@ load_icons(void)
 
 	if (fp == NULL) {
 		PWLOG(LOG_ERROR, "Can't open iconlist_ivtrm.txt\n");
+		free(tmp);
 		return -1;
 	}
 
@@ -42,12 +43,13 @@ load_icons(void)
 
 	unsigned i = 0;
 	while ((read = getline(&tmp, &len, fp)) != -1) {
-		sprint(g_icon_names[i], 64, tmp, len);
+		sprint(g_icon_names[i], 64, tmp, strlen(tmp));
 		i++;
 	}
 
 	PWLOG(LOG_INFO, "Parsed %u icons\n", i);
 	fclose(fp);
+	free(tmp);
 	return 0;
 }
 

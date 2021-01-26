@@ -159,6 +159,7 @@ download_wget(const char *url, const char *filename)
 int
 download(const char *url, const char *filename)
 {
+	PWLOG(LOG_DEBUG_1, "Fetching \"%s\" ...\n", url);
 #ifdef __MINGW32__
 	return download_wininet(url, filename);
 #else
@@ -629,7 +630,9 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 				snprintf(buf, sizeof(buf), "%s->%s", json->key, buf2);
 				json = json->parent;
 			}
-			buf[strlen(buf) - 2] = 0;
+			if (strlen(buf) > 2) {
+				buf[strlen(buf) - 2] = 0;
+			}
 
 			if (json_f->type != CJSON_TYPE_NONE) {
 				memset(data, 0, len * 2);
@@ -647,7 +650,9 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 				snprintf(buf, sizeof(buf), "%s->%s", json->key, buf2);
 				json = json->parent;
 			}
-			buf[strlen(buf) - 2] = 0;
+			if (strlen(buf) > 2) {
+				buf[strlen(buf) - 2] = 0;
+			}
 
 			if (json_f->type != CJSON_TYPE_NONE) {
 				memset(data, 0, len * 2);
