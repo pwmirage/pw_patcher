@@ -45,6 +45,7 @@ static void
 cjson_clean_mem(struct cjson *json)
 {
 	struct cjson_mempool *mem = json->mem;
+	json->a = NULL;
 
 	while (mem) {
 		mem->count = 0;
