@@ -118,7 +118,7 @@ pw_idmap_init(const char *name, bool clean_load)
 long
 pw_idmap_register_type(struct pw_idmap *map)
 {
-	return map->registered_types_cnt++;
+	return ++map->registered_types_cnt;
 }
 
 void *
@@ -129,7 +129,7 @@ pw_idmap_get(struct pw_idmap *map, long long lid, long type)
 	el = map->lists[lid % PW_IDMAP_ARR_SIZE];
 
 	while (el) {
-		if (el->lid == lid && el->type == type) {
+		if (el->lid == lid && (type == 0 || el->type == type)) {
 			return el->data;
 		}
 
