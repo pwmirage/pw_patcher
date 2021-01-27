@@ -141,6 +141,19 @@ deserialize_spawner_groups_fn(struct cjson *f, void *data)
 	return 0;
 }
 
+static size_t
+deserialize_id_removed_fn(struct cjson *f, void *data)
+{
+	if (JSi(f)) {
+		*(uint32_t *)(data) |= (1 << 31);
+	} else {
+		*(uint32_t *)(data) &= ~(1 << 31);
+	}
+
+	return 0;
+}
+
+
 static struct serializer spawner_serializer[] = {
 	{ "groups", _CUSTOM, NULL /* FIXME */, deserialize_spawner_groups_fn },
 	{ "fixed_y", _INT32 },
@@ -159,8 +172,9 @@ static struct serializer spawner_serializer[] = {
 	{ "auto_spawn", _INT8 },
 	{ "auto_respawn", _INT8 },
 	{ "_unused1", _INT8 },
+	{ "_removed", _CUSTOM, NULL /* FIXME */, deserialize_id_removed_fn },
 	{ "id", _INT32 },
-	{ "trigger", _FLOAT },
+	{ "trigger", _INT32 },
 	{ "lifetime", _FLOAT },
 	{ "max_num", _INT32 },
 	{ "", _TYPE_END },
@@ -200,6 +214,7 @@ static struct serializer resource_serializer[] = {
 	{ "auto_spawn", _INT8 },
 	{ "auto_respawn", _INT8 },
 	{ "_unused1", _INT8 },
+	{ "_removed", _CUSTOM, NULL /* FIXME */, deserialize_id_removed_fn },
 	{ "id", _INT32 },
 	{ "dir", _ARRAY_START(2) },
 		{ "", _INT8 },
@@ -220,6 +235,7 @@ static struct serializer resource_group_serializer[] = {
 };
 
 static struct serializer dynamic_serializer[] = {
+	{ "_removed", _CUSTOM, NULL /* FIXME */, deserialize_id_removed_fn },
 	{ "id", _INT32 },
 	{ "pos", _ARRAY_START(3) },
 		{ "", _FLOAT },
@@ -234,6 +250,7 @@ static struct serializer dynamic_serializer[] = {
 };
 
 static struct serializer trigger_serializer[] = {
+	{ "_removed", _CUSTOM, NULL /* FIXME */, deserialize_id_removed_fn },
 	{ "id", _INT32 },
 	{ "console_id", _INT32 },
 	{ "name", _WSTRING(64) },
