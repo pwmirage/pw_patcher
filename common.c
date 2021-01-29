@@ -21,9 +21,7 @@
 #include "common.h"
 #include "cjson.h"
 
-#ifndef __MINGW32__
 #include <iconv.h>
-#endif
 
 int g_pwlog_level = 99;
 static FILE *g_nullfile;
@@ -209,63 +207,29 @@ download_mem(const char *url, char **buf, size_t *len)
 	return rc;
 }
 
+static void
+normalize_json_string(char *str)
+{
+	char *read_b = str;
+	char *write_b = str;
+
+	while (*read_b) { /* write_b is slacking behind */
+		*write_b = *read_b;
+		read_b++;
+		write_b++;
+
+		if (*read_b == '\\' && *(read_b + 1) == '\\') {
+			/* skip second \ in strings */
+			read_b++;
+		}
+	}
+
+	*write_b = 0;
+}
+
 static int
 change_charset(char *src_charset, char *dst_charset, char *src, long srclen, char *dst, long dstlen)
 {
-#ifdef __MINGW32__
-	UINT codepage = CP_UTF8;
-	int rc;
-
-	if (strcmp(src_charset, "UTF-16LE") == 0) {
-		if (strcmp(dst_charset, "UTF-8") != 0) {
-			return -1;
-		}
-
-		rc = WideCharToMultiByte(CP_UTF8, 0, (wchar_t *)src, srclen / 2, dst, dstlen, NULL, NULL);
-		if (rc == 0) {
-			return GetLastError();
-		}
-		return 0;
-	}
-
-	if (strcmp(dst_charset, "UTF-16LE") == 0) {
-		if (strcmp(src_charset, "UTF-8") != 0) {
-			return -1;
-		}
-
-		rc = MultiByteToWideChar(CP_UTF8, 0, src, srclen, (wchar_t *)dst, dstlen / 2);
-		if (rc == 0) {
-			return GetLastError();
-		}
-		return 0;
-	}
-
-	char *tmpdst = calloc(1, dstlen);
-	if (!tmpdst) {
-		return -ENOMEM;
-	}
-
-
-	if (strcmp(src_charset, "UTF-8") == 0) {
-		codepage = CP_UTF8;
-	} else if (strcmp(src_charset, "GBK") == 0) {
-		codepage = 936;
-	}
-	rc = MultiByteToWideChar(codepage, 0, src, srclen, (wchar_t *)tmpdst, dstlen / 2);
-
-	if (strcmp(dst_charset, "UTF-8") == 0) {
-		codepage = CP_UTF8;
-	} else if (strcmp(dst_charset, "GBK") == 0) {
-		codepage = 936;
-	}
-	rc = rc && WideCharToMultiByte(CP_UTF8, 0, (wchar_t *)tmpdst, dstlen / 2, dst, dstlen, NULL, NULL);
-	free(tmpdst);
-
-	if (rc == 0) {
-		return GetLastError();
-	}
-	return 0;
-#else
 	iconv_t cd;
 	int rc;
 
@@ -277,7 +241,6 @@ change_charset(char *src_charset, char *dst_charset, char *src, long srclen, cha
 	rc = iconv(cd, &src, (size_t *) &srclen, &dst, (size_t *) &dstlen);
 	iconv_close(cd);
 	return rc;
-#endif
 }
 
 void
@@ -306,7 +269,7 @@ fwsprint(FILE *fp, const uint16_t *buf, int maxlen)
 void
 sprint(char *dst, size_t dstsize, const char *src, int srcsize)
 {
-	change_charset("GBK", "UTF-8", (char *)src, srcsize, dst, dstsize);
+	change_charset("GB2312", "UTF-8", (char *)src, srcsize, dst, dstsize);
 }
 
 void

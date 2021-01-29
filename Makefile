@@ -24,7 +24,7 @@ build/srv_patcher: $(OBJECTS:%.o=build/%.o) build/srv_patcher.o
 
 build/client_patcher: $(OBJECTS:%.o=build/%.o) build/client_patcher.o
 	windres -i res.rc -o resource.o
-	gcc $(CFLAGS) -o $@ $^ resource.o -s -Wl,--subsystem,windows -lwininet -lwininet -mwindows
+	gcc $(CFLAGS) -o $@ $^ resource.o -s -Wl,--subsystem,windows -lwininet -lwininet -mwindows -Wl,-Bstatic -liconv -Wl,-Bdynamic
 
 build/updater: build/updater.o
 	windres -i updater.rc -o updater_rc.o
