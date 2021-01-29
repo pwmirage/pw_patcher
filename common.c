@@ -555,8 +555,38 @@ serialize(FILE *fp, struct serializer *slzr_table, void *data, unsigned data_cnt
 	return _serialize(fp, &slzr_table, &data, data_cnt, false, true, false);
 }
 
+void
+deserialize_log(struct cjson *json_f, void *data)
+{
+	char buf[2048] = {0};
+	char buf2[2048];
+	struct cjson *json = json_f;
+
+	while (json && json->key) {
+		memcpy(buf2, buf, sizeof(buf2));
+		snprintf(buf, sizeof(buf), "%s->%s", json->key, buf2);
+		json = json->parent;
+	}
+	buf[strlen(buf) - 2] = 0;
+
+	switch (json_f->type) {
+		case CJSON_TYPE_INTEGER:
+			PWLOG(LOG_INFO, "patching \"%s\" (prev:%d, new:%d)\n", buf, *(uint32_t *)data, json_f->i);
+			break;
+		case CJSON_TYPE_FLOAT:
+			PWLOG(LOG_INFO, "patching \"%s\" (prev:%.8f, new:%.8f)\n", buf, *(float *)data, json_f->d);
+			break;
+		case CJSON_TYPE_BOOLEAN:
+			PWLOG(LOG_INFO, "patching \"%s\" (prev:%u, new:%u)\n", buf, *(char *)data, json_f->i);
+			break;
+		case CJSON_TYPE_STRING:
+			PWLOG(LOG_INFO, "patching \"%s\" (new:%s)\n", buf, json_f->s);
+			break;
+	}
+}
+
 static void
-_deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
+_deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p, bool is_root_obj)
 {
 	struct serializer *slzr = *slzr_table_p;
 	void *data = *data_p;
@@ -572,7 +602,8 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 			break;
 		}
 
-		if (strcmp(slzr->name, "id") == 0) {
+		/* TODO make id fields _CUSTOM in all serializers */
+		if (is_root_obj && strcmp(slzr->name, "id") == 0) {
 			data += 4;
 			slzr++;
 			continue;
@@ -587,28 +618,23 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 
 		if (slzr->type == _INT8) {
 			if (json_f->type != CJSON_TYPE_NONE) {
+				uint32_t _data = *(uint8_t *)data;
+
+				deserialize_log(json_f, &_data);
 				*(uint8_t *)data = json_f->i;
 			}
 			data += 1;
 		} else if (slzr->type == _INT16) {
 			if (json_f->type != CJSON_TYPE_NONE) {
+				uint32_t _data = *(uint8_t *)data;
+
+				deserialize_log(json_f, &_data);
 				*(uint16_t *)data = json_f->i;
 			}
 			data += 2;
 		} else if (slzr->type == _INT32) {
-			if (json_f->type != CJSON_TYPE_NONE && strcmp(slzr->name, "id") != 0) {
-				char buf[2048] = {0};
-				struct cjson *json = json_f;
-				while (json && json->key) {
-					char buf2[2048];
-					memcpy(buf2, buf, sizeof(buf2));
-					snprintf(buf, sizeof(buf), "%s->%s", json->key, buf2);
-					json = json->parent;
-				}
-				buf[strlen(buf) - 2] = 0;
-				PWLOG(LOG_INFO, "patching \"%s\" (prev:%d, new:%d)\n", buf, *(uint32_t *)data, json_f->i);
-
-				/* don't override IDs */
+			if (json_f->type != CJSON_TYPE_NONE) {
+				deserialize_log(json_f, data);
 				*(uint32_t *)data = json_f->i;
 			}
 			data += 4;
@@ -616,6 +642,7 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 			continue;
 		} else if (slzr->type == _FLOAT) {
 			if (json_f->type != CJSON_TYPE_NONE) {
+				deserialize_log(json_f, data);
 				*(float *)data = json_f->d;
 			}
 			data += 4;
@@ -635,6 +662,8 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 			}
 
 			if (json_f->type != CJSON_TYPE_NONE) {
+				normalize_json_string(json_f->s);
+				deserialize_log(json_f, data);
 				memset(data, 0, len * 2);
 				change_charset("UTF-8", "UTF-16LE", json_f->s, strlen(json_f->s), (char *)data, len * 2);
 			}
@@ -655,8 +684,10 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 			}
 
 			if (json_f->type != CJSON_TYPE_NONE) {
+				normalize_json_string(json_f->s);
+				deserialize_log(json_f, data);
 				memset(data, 0, len * 2);
-				change_charset("UTF-8", "GBK", json_f->s, strlen(json_f->s), (char *)data, len);
+				change_charset("UTF-8", "GB2312", json_f->s, strlen(json_f->s), (char *)data, len);
 			}
 			data += len;
 		} else if (slzr->type > _ARRAY_START(0) && slzr->type <= _ARRAY_START(0x1000)) {
@@ -684,7 +715,7 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 				void *arr_data_el = data + arr_el_size * idx;
 				tmp_slzr = slzr;
 
-				_deserialize(json_el, &tmp_slzr, &arr_data_el);
+				_deserialize(json_el, &tmp_slzr, &arr_data_el, false);
 				json_el = json_el->next;
 			}
 
@@ -692,7 +723,7 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 			slzr = tmp_slzr;
 		} else if (slzr->type == _OBJECT_START) {
 			slzr++;
-			_deserialize(json_f, &slzr, &data);
+			_deserialize(json_f, &slzr, &data, false);
 		} else if (slzr->type == _CUSTOM) {
 			if (slzr->des_fn) {
 				data += slzr->des_fn(json_f, data);
@@ -710,7 +741,7 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p)
 void
 deserialize(struct cjson *obj, struct serializer *slzr_table, void *data)
 {
-	_deserialize(obj, &slzr_table, &data);
+	_deserialize(obj, &slzr_table, &data, true);
 }
 
 int

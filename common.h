@@ -95,6 +95,7 @@ long serialize(FILE *fp, struct serializer *slzr_table,
 		void *data, unsigned data_cnt);
 
 void deserialize(struct cjson *obj, struct serializer *slzr_table, void *data);
+void deserialize_log(struct cjson *json_f, void *data);
 
 #define LOG_ERROR 0
 #define LOG_INFO 1
@@ -106,9 +107,12 @@ void pwlog(int type, const char *filename, unsigned lineno, const char *fnname, 
 #define PWLOG(type, ...) pwlog((type), __FILE__, __LINE__, __func__, __VA_ARGS__)
 
 struct pw_idmap;
+typedef void (*pw_idmap_async_fn)(void *el, void *ctx);
+
 struct pw_idmap *pw_idmap_init(const char *name, bool clean_load);
 long pw_idmap_register_type(struct pw_idmap *map);
 void *pw_idmap_get(struct pw_idmap *map, long long lid, long type);
+int pw_idmap_get_async(struct pw_idmap *map, long long lid, long type, pw_idmap_async_fn fn, void *fn_ctx);
 void pw_idmap_set(struct pw_idmap *map, long long lid, long id, long type, void *data);
 void pw_idmap_end_type_load(struct pw_idmap *map, long type, uint32_t max_id);
 int pw_idmap_save(struct pw_idmap *map);
