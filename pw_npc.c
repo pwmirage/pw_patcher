@@ -16,6 +16,8 @@
 #include "common.h"
 #include "pw_npc.h"
 
+extern struct pw_idmap *g_elements_map;
+
 const struct map_name g_map_names[PW_MAX_MAPS] = {
 	{ "gs01", "world" },
 	{ "is01", "a01" },
@@ -144,6 +146,10 @@ deserialize_spawner_groups_fn(struct cjson *f, void *data)
 static size_t
 deserialize_id_removed_fn(struct cjson *f, void *data)
 {
+	uint32_t is_removed = !!(*(uint32_t *)(data) & (1 << 31));
+
+	deserialize_log(f, &is_removed);
+
 	if (JSi(f)) {
 		*(uint32_t *)(data) |= (1 << 31);
 	} else {
@@ -153,6 +159,38 @@ deserialize_id_removed_fn(struct cjson *f, void *data)
 	return 0;
 }
 
+static void
+deserialize_elements_id_field_async_fn(void *data, void *target_data)
+{
+	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)target_data, *(uint32_t *)data);
+	*(uint32_t *)target_data = *(uint32_t *)data;
+}
+
+static size_t
+deserialize_elements_id_field_fn(struct cjson *f, void *data)
+{
+	int64_t val = JSi(f);
+
+	if (val >= 0x80000000) {
+		int rc = pw_idmap_get_async(g_elements_map, val, 0, deserialize_elements_id_field_async_fn, data);
+
+		if (rc) {
+			assert(false);
+		}
+	} else {
+		deserialize_log(f, data);
+		*(uint32_t *)(data) = (uint32_t)val;
+	}
+
+	return 4;
+}
+
+static size_t
+serialize_elements_id_field_fn(FILE *fp, void *data)
+{
+	/* TODO */
+	return 4;
+}
 
 static struct serializer spawner_serializer[] = {
 	{ "groups", _CUSTOM, NULL /* FIXME */, deserialize_spawner_groups_fn },
@@ -174,14 +212,14 @@ static struct serializer spawner_serializer[] = {
 	{ "_unused1", _INT8 },
 	{ "_removed", _CUSTOM, NULL /* FIXME */, deserialize_id_removed_fn },
 	{ "id", _INT32 },
-	{ "trigger", _INT32 },
+	{ "trigger", _INT32 /* TODO parse high IDs */ },
 	{ "lifetime", _FLOAT },
 	{ "max_num", _INT32 },
 	{ "", _TYPE_END },
 };
 
 static struct serializer spawner_group_serializer[] = {
-	{ "type", _INT32 },
+	{ "type", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 	{ "count", _INT32 },
 	{ "_unused1", _INT32 },
 	{ "_unused2", _INT32 },
@@ -195,7 +233,7 @@ static struct serializer spawner_group_serializer[] = {
 	{ "default_group", _INT8 },
 	{ "default_need", _INT8 },
 	{ "default_help", _INT8 },
-	{ "path_id", _INT32 },
+	{ "path_id", _INT32, /* TODO parse high IDs */ },
 	{ "path_type", _INT32 },
 	{ "path_speed", _INT32 },
 	{ "disappear_time", _INT32 },
@@ -220,14 +258,14 @@ static struct serializer resource_serializer[] = {
 		{ "", _INT8 },
 	{ "", _ARRAY_END },
 	{ "rad", _INT8 },
-	{ "trigger", _INT32 },
+	{ "trigger", _INT32 }, /* TODO */
 	{ "max_num", _INT32 },
 	{ "", _TYPE_END },
 };
 
 static struct serializer resource_group_serializer[] = {
 	{ "_unused_type", _INT32 },
-	{ "type", _INT32 },
+	{ "type", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 	{ "respawn_time", _INT32 },
 	{ "count", _INT32 },
 	{ "height_offset", _FLOAT },

@@ -57,7 +57,8 @@ import_stream_cb(void *ctx, struct cjson *obj)
 	}
 
 	const char *type = JSs(obj, "_db", "type");
-	PWLOG(LOG_INFO, "type: %s\n", type);
+	long long id = JSi(obj, "id");
+	PWLOG(LOG_INFO, "type: %s, id: 0x%llx\n", type, id);
 
 	print_obj(obj->a, 1);
 

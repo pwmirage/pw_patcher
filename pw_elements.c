@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <limits.h>
+#include <assert.h>
 
 #include "common.h"
 #include "cjson_ext.h"
@@ -206,6 +207,39 @@ serialize_item_id_fn(FILE *fp, void *data)
 	return 4;
 }
 
+static void
+deserialize_elements_id_field_async_fn(void *data, void *target_data)
+{
+	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)target_data, *(uint32_t *)data);
+	*(uint32_t *)target_data = *(uint32_t *)data;
+}
+
+static size_t
+deserialize_elements_id_field_fn(struct cjson *f, void *data)
+{
+	int64_t val = JSi(f);
+
+	if (val >= 0x80000000) {
+		int rc = pw_idmap_get_async(g_elements_map, val, 0, deserialize_elements_id_field_async_fn, data);
+
+		if (rc) {
+			assert(false);
+		}
+	} else {
+		deserialize_log(f, data);
+		*(uint32_t *)(data) = (uint32_t)val;
+	}
+
+	return 4;
+}
+
+static size_t
+serialize_elements_id_field_fn(FILE *fp, void *data)
+{
+	/* TODO */
+	return 4;
+}
+
 static struct serializer equipment_addon_serializer[] = {
 	{ "id", _INT32 },
 	{ "name", _WSTRING(32) },
@@ -222,7 +256,7 @@ static struct serializer mines_serializer[] = {
 	{ "name", _WSTRING(32) },
 	{ "level", _INT32 },
 	{ "level_required", _INT32 },
-	{ "item_required", _INT32 },
+	{ "item_required", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 	{ "use_up_tool", _INT32 },
 	{ "time_min", _INT32 },
 	{ "time_max", _INT32 },
@@ -230,18 +264,18 @@ static struct serializer mines_serializer[] = {
 	{ "sp", _INT32 },
 	{ "file_model", _STRING(128) },
 	{ "mat_item", _ARRAY_START(16) },
-		{ "id", _INT32 },
+		{ "id", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 		{ "prob", _FLOAT },
 	{ "", _ARRAY_END },
 	{ "mat_count", _ARRAY_START(2) },
 		{ "num", _INT32 },
 		{ "prob", _FLOAT },
 	{ "", _ARRAY_END },
-	{ "task_in", _INT32 },
+	{ "task_in", _INT32 }, /* TODO */
 	{ "task_out", _INT32 },
 	{ "uninterruptible", _INT32 },
 	{ "npcgen", _ARRAY_START(4) },
-		{ "mob_id", _INT32 },
+		{ "mob_id", _INT32 }, /* TODO */
 		{ "num", _INT32 },
 		{ "radius", _FLOAT },
 	{ "", _ARRAY_END },
@@ -269,7 +303,7 @@ static struct serializer monsters_serializer[] = {
 	{ "role_in_war", _INT32 },
 	{ "level", _INT32 },
 	{ "show_level", _INT32 },
-	{ "id_pet_egg", _INT32 },
+	{ "id_pet_egg", _INT32 }, /* FIXME */
 	{ "hp", _INT32 },
 	{ "phys_def", _INT32 },
 	{ "magic_def", _ARRAY_START(5) },
@@ -348,7 +382,7 @@ static struct serializer recipes_serializer[] = {
 	{ "skill_level", _INT32 },
 	{ "_bind_type", _INT32 },
 	{ "targets", _ARRAY_START(4) },
-		{ "id", _INT32 },
+		{ "id", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 		{ "prob", _FLOAT },
 	{ "", _ARRAY_END },
 	{ "fail_prob", _FLOAT },
@@ -358,7 +392,7 @@ static struct serializer recipes_serializer[] = {
 	{ "xp", _INT32 },
 	{ "sp", _INT32 },
 	{ "mats", _ARRAY_START(32) },
-		{ "id", _INT32 },
+		{ "id", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 		{ "num", _INT32 },
 	{ "", _ARRAY_END },
 	{ "", _TYPE_END },
@@ -370,7 +404,7 @@ static struct serializer npc_sells_serializer[] = {
 	{ "pages", _ARRAY_START(8) },
 		{ "title", _WSTRING(8) },
 		{ "item_id", _ARRAY_START(32) },
-			{ "", _INT32 },
+			{ "", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 		{ "", _ARRAY_END },
 	{ "", _ARRAY_END },
 	{ "_id_dialog", _INT32 },
@@ -385,38 +419,38 @@ static struct serializer npcs_serializer[] = {
 	{ "attack_rule", _INT32 },
 	{ "file_model", _STRING(128) },
 	{ "tax_rate", _FLOAT },
-	{ "base_monster_id", _INT32 },
+	{ "base_monster_id", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 	{ "greeting", _WSTRING(256) },
-	{ "target_id", _INT32 },
+	{ "target_id", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 	{ "domain_related", _INT32 },
-	{ "id_talk_service", _INT32 },
-	{ "id_sell_service", _INT32 },
-	{ "id_buy_service", _INT32 },
-	{ "id_repair_service", _INT32 },
-	{ "id_install_service", _INT32 },
-	{ "id_uninstall_service", _INT32 },
-	{ "id_task_out_service", _INT32 },
-	{ "id_task_in_service", _INT32 },
-	{ "id_task_matter_service", _INT32 },
-	{ "id_skill_service", _INT32 },
-	{ "id_heal_service", _INT32 },
-	{ "id_transmit_service", _INT32 },
-	{ "id_transport_service", _INT32 },
-	{ "id_proxy_service", _INT32 },
-	{ "id_storage_service", _INT32 },
-	{ "id_make_service", _INT32 },
-	{ "id_decompose_service", _INT32 },
-	{ "id_identify_service", _INT32 },
-	{ "id_war_towerbuild_service", _INT32 },
-	{ "id_resetprop_service", _INT32 },
-	{ "id_petname_service", _INT32 },
-	{ "id_petlearnskill_service", _INT32 },
-	{ "id_petforgetskill_service", _INT32 },
-	{ "id_equipbind_service", _INT32 },
-	{ "id_equipdestroy_service", _INT32 },
-	{ "id_equipundestroy_service", _INT32 },
+	{ "id_talk_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_sell_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_buy_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_repair_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_install_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_uninstall_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_task_out_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_task_in_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_task_matter_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_skill_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_heal_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_transmit_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_transport_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_proxy_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_storage_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_make_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_decompose_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_identify_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_war_towerbuild_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_resetprop_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_petname_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_petlearnskill_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_petforgetskill_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_equipbind_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_equipdestroy_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+	{ "id_equipundestroy_service", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 	{ "combined_services", _INT32 },
-	{ "id_mine", _INT32 },
+	{ "id_mine", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 	{ "", _TYPE_END },
 };
 
@@ -428,7 +462,7 @@ static struct serializer npc_crafts_serializer[] = {
 	{ "pages", _ARRAY_START(8) },
 		{ "title", _WSTRING(8) },
 		{ "recipe_id", _ARRAY_START(32) },
-			{ "", _INT32 },
+			{ "", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 		{ "", _ARRAY_END },
 	{ "", _ARRAY_END },
 	{ "", _TYPE_END },
@@ -516,7 +550,7 @@ static struct serializer weapon_essence_serializer[] = {
 	{ "durability_drop_max", _INT32 },
 	{ "decompose_price", _INT32 },
 	{ "decompose_time", _INT32 },
-	{ "element_id", _INT32 },
+	{ "element_id", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 	{ "element_num", _INT32 },
 	{ "pile_num_max", _INT32 },
 	{ "has_guid", _INT32 },
@@ -595,7 +629,7 @@ static struct serializer armor_essence_serializer[] = {
 	{ "durability_drop_max", _INT32 },
 	{ "decompose_price", _INT32 },
 	{ "decompose_time", _INT32 },
-	{ "element_id", _INT32 },
+	{ "element_id", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 	{ "element_num", _INT32 },
 	{ "pile_num_max", _INT32 },
 	{ "has_guid", _INT32 },
@@ -667,7 +701,7 @@ static struct serializer decoration_essence_serializer[] = {
 	{ "durability_drop_max", _INT32 },
 	{ "decompose_price", _INT32 },
 	{ "decompose_time", _INT32 },
-	{ "element_id", _INT32 },
+	{ "element_id", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 	{ "element_num", _INT32 },
 	{ "pile_num_max", _INT32 },
 	{ "has_guid", _INT32 },
@@ -733,7 +767,7 @@ static struct serializer material_essence_serializer[] = {
 	{ "shop_price", _INT32 },
 	{ "decompose_price", _INT32 },
 	{ "decompose_time", _INT32 },
-	{ "element_id", _INT32 },
+	{ "element_id", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 	{ "element_num", _INT32 },
 	{ "stack_max", _INT32 },
 	{ "has_guid", _INT32 },
@@ -1358,7 +1392,7 @@ static struct serializer armor_sets_serializer[] = {
 	{ "name", _WSTRING(32) },
 	{ "max_equips", _INT32 },
 	{ "equip_ids", _ARRAY_START(12) },
-		{ "", _INT32 },
+		{ "", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 	{ "", _ARRAY_END },
 	{ "addon_ids", _ARRAY_START(11) },
 		{ "", _INT32 },
@@ -1591,12 +1625,11 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 
 	table_el = pw_idmap_get(g_elements_map, id, table->idmap_type);
 	if (!table_el) {
-		uint32_t el_id = g_elements_last_id++;
+		uint32_t el_id = ++g_elements_last_id;
 
 		table_el = pw_chain_table_new_el(table);
 		*(uint32_t *)table_el = el_id;
 		pw_idmap_set(g_elements_map, id, el_id, table->idmap_type, table_el);
-		return -1;
 	}
 	deserialize(obj, table->serializer, table_el);
 	return 0;
