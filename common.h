@@ -32,6 +32,8 @@ struct serializer {
 	size_t (*fn)(FILE *fp, void *data);
 	/* custom deserializer. returns number of bytes processed */
 	size_t (*des_fn)(struct cjson *f, void *data);
+	/* user context */
+	void *ctx;
 };
 
 struct pw_chain_el;

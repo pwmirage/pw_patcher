@@ -455,11 +455,16 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 				}
 			} else if (slzr->type == _OBJECT_START) {
 				if (slzr->name[0] != '_') {
+					struct serializer *nested_slzr = slzr->ctx;
 					if (slzr->name[0] != 0) {
 						fprintf(fp, "\"%s\":", slzr->name);
 					}
 					slzr++;
-					_serialize(fp, &slzr, &data, 1, true, false, true);
+					if (nested_slzr) {
+						_serialize(fp, &nested_slzr, &data, 1, true, false, true);
+					} else {
+						_serialize(fp, &slzr, &data, 1, true, false, true);
+					}
 					fprintf(fp, ",");
 				}
 			} else if (slzr->type == _CUSTOM) {
@@ -685,8 +690,13 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p,
 			data += arr_el_size * cnt;
 			slzr = tmp_slzr;
 		} else if (slzr->type == _OBJECT_START) {
+			struct serializer *nested_slzr = slzr->ctx;
 			slzr++;
-			_deserialize(json_f, &slzr, &data, false);
+			if (nested_slzr) {
+				_deserialize(json_f, &nested_slzr, &data, false);
+			} else {
+				_deserialize(json_f, &slzr, &data, false);
+			}
 		} else if (slzr->type == _CUSTOM) {
 			if (slzr->des_fn) {
 				data += slzr->des_fn(json_f, data);
