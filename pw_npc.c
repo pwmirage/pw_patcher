@@ -80,7 +80,7 @@ deserialize_spawner_groups_fn(struct cjson *f, void *data)
 {
 	struct pw_spawner_set *set = data;
 
-	if (f->type != CJSON_TYPE_OBJECT) {
+	if (f->type != CJSON_TYPE_NONE && f->type != CJSON_TYPE_OBJECT) {
 		PWLOG(LOG_ERROR, "found json group field that is not an object (type: %d)\n", f->type);
 		return 0;
 	}

@@ -16,6 +16,16 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#ifndef MIN
+#ifndef MIN(a, b) ((a) < (b) ? (a) : (b))
+#endif
+
+#ifndef MAX
+#ifndef MAX(a, b) ((a) > (b) ? (a) : (b))
+#endif
+
+extern char g_zeroes[4096];
+
 /* XXX MinGW bug? */
 #define truncate(filepath, sz) \
 	({ int fd = open(filepath, O_WRONLY); \
@@ -95,6 +105,10 @@ void wsnprintf(uint16_t *dst, size_t dstsize, const char *src);
 
 long serialize(FILE *fp, struct serializer *slzr_table,
 		void *data, unsigned data_cnt);
+long _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
+		unsigned data_cnt, bool skip_empty_objs, bool newlines, bool force_object);
+size_t serializer_get_size(struct serializer *slzr_table);
+size_t serializer_get_field_offset(struct serializer *slzr_table, void *data, const char *name);
 
 void deserialize(struct cjson *obj, struct serializer *slzr_table, void *data);
 void deserialize_log(struct cjson *json_f, void *data);

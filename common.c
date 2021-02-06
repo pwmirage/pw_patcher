@@ -25,6 +25,7 @@
 
 int g_pwlog_level = 99;
 static FILE *g_nullfile;
+const char g_zeroes[4096];
 
 int
 pw_chain_table_init(struct pw_chain_table *table, const char *name, struct serializer *serializer, size_t el_size, size_t count)
@@ -82,6 +83,28 @@ pw_chain_table_new_el(struct pw_chain_table *table)
 	chain->count = 1;
 
 	return chain->data;
+}
+
+struct pw_chain_table *
+pw_chain_table_fread(FILE *fp, const char *name, size_t el_count, struct serializer *el_serializer)
+{
+	struct pw_chain_table *tbl;
+	uint32_t el_size = serializer_get_size(el_serializer);
+	size_t i;
+
+	uint32_t el_cap = MIN(8, el_count);
+	tbl = pw_chain_table_alloc(name, el_serializer, el_size, el_count);
+	if (!tbl) {
+		PWLOG(LOG_ERROR, "pw_chain_table_alloc() failed\n");
+		return -1;
+	}
+
+	for (i = 0; i < el_count; i++) {
+		void *el = pw_chain_table_new_el(tbl);
+		fread(el, el_size, 1, fp);
+	}
+
+	return tbl;
 }
 
 #ifdef __MINGW32__
@@ -343,7 +366,7 @@ js_strlen(const char *str)
 	return len;
 }
 
-static long
+long
 _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 		unsigned data_cnt, bool skip_empty_objs, bool newlines, bool force_object)
 {
@@ -551,6 +574,87 @@ deserialize_log(struct cjson *json_f, void *data)
 			PWLOG(LOG_INFO, "patching \"%s\" (new:%s)\n", buf, json_f->s);
 			break;
 	}
+}
+
+size_t
+serializer_get_size(struct serializer *slzr_table)
+{
+	return serializer_get_field_offset(slzr_table, NULL);
+}
+
+int
+serializer_get_offset(struct serializer *slzr, const char *name)
+{
+	int offset = 0;
+	int rc;
+
+	while (true) {
+		if (name && strcmp(slzr->name, name) == 0) {
+			return offset;
+		}
+
+		if (slzr->type == _INT8) {
+			offset += 1;
+		} else if (slzr->type == _INT16) {
+			offset += 2;
+		} else if (slzr->type == _INT32) {
+			offset += 4;
+		} else if (slzr->type == _FLOAT) {
+			offset += 4;
+		} else if (slzr->type > _WSTRING(0) && slzr->type <= _WSTRING(0x1000)) {
+			unsigned len = slzr->type - _WSTRING(0);
+
+			offset += len * 2;
+		} else if (slzr->type > _STRING(0) && slzr->type <= _STRING(0x1000)) {
+			unsigned len = slzr->type - _STRING(0);
+
+			offset += len;
+		} else if (slzr->type > _ARRAY_START(0) && slzr->type <= _ARRAY_START(0x1000)) {
+			unsigned cnt = slzr->type - _ARRAY_START(0);
+
+			slzr++;
+			rc = serializer_get_field_offset(&slzr, name);
+			offset += rc;
+			if (name && rc >= 0) {
+				return offset;
+			}
+		} else if (slzr->type == _OBJECT_START) {
+			struct serializer *nested_slzr = slzr->ctx;
+
+			slzr++;
+			if (nested_slzr) {
+				rc = serializer_get_field_offset(&nested_slzr, name);
+			} else {
+				rc = serializer_get_field_offset(&slzr, name);
+			}
+
+			offset += rc;
+			if (name && rc >= 0) {
+				return offset;
+			}
+		} else if (slzr->type == _CUSTOM) {
+			data += slzr->fn(g_nullfile, g_zeroes);
+		} else if (slzr->type == _ARRAY_END) {
+			break;
+		} else if (slzr->type == _OBJECT_END) {
+			break;
+		} else if (slzr->type == _TYPE_END) {
+			break;
+		}
+		slzr++;
+	}
+
+	if (name) {
+		return -1;
+	} else {
+		return offset;
+	}
+}
+
+void *
+serializer_get_field(struct serializer *slzr, const char *name, void *data)
+{
+	return data + serializer_get_offset(slzr, "");
 }
 
 static void
