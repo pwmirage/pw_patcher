@@ -1,4 +1,4 @@
-OBJECTS = common.o pw_elements.o cjson.o idmap.o pw_npc.o
+OBJECTS = common.o pw_elements.o cjson.o idmap.o pw_npc.o pw_tasks.o
 ALL_OBJECTS := $(OBJECTS) export.o srv_patcher.o
 CFLAGS := -O0 -g -MD -MP -fno-strict-aliasing -Wall -Wno-format-truncation $(CFLAGS)
 

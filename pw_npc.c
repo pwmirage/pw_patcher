@@ -54,7 +54,7 @@ const struct map_name g_map_names[PW_MAX_MAPS] = {
 };
 
 static size_t
-serialize_spawner_type_fn(FILE *fp, void *data)
+serialize_spawner_type_fn(FILE *fp, struct serializer *f, void *data)
 {
 	uint32_t is_npc = *(uint32_t *)data;
 
@@ -63,7 +63,7 @@ serialize_spawner_type_fn(FILE *fp, void *data)
 }
 
 static size_t
-deserialize_spawner_type_fn(struct cjson *f, void *data)
+deserialize_spawner_type_fn(struct cjson *f, struct serializer *slzr, void *data)
 {
 	uint32_t is_npc = 0;
 	const char *name = JSs(f);
@@ -76,7 +76,7 @@ deserialize_spawner_type_fn(struct cjson *f, void *data)
 }
 
 static size_t
-deserialize_spawner_groups_fn(struct cjson *f, void *data)
+deserialize_spawner_groups_fn(struct cjson *f, struct serializer *slzr, void *data)
 {
 	struct pw_spawner_set *set = data;
 
@@ -144,7 +144,7 @@ deserialize_spawner_groups_fn(struct cjson *f, void *data)
 }
 
 static size_t
-deserialize_id_removed_fn(struct cjson *f, void *data)
+deserialize_id_removed_fn(struct cjson *f, struct serializer *slzr, void *data)
 {
 	uint32_t is_removed = !!(*(uint32_t *)(data) & (1 << 31));
 
@@ -167,7 +167,7 @@ deserialize_elements_id_field_async_fn(void *data, void *target_data)
 }
 
 static size_t
-deserialize_elements_id_field_fn(struct cjson *f, void *data)
+deserialize_elements_id_field_fn(struct cjson *f, struct serializer *slzr, void *data)
 {
 	int64_t val = JSi(f);
 
@@ -186,7 +186,7 @@ deserialize_elements_id_field_fn(struct cjson *f, void *data)
 }
 
 static size_t
-serialize_elements_id_field_fn(FILE *fp, void *data)
+serialize_elements_id_field_fn(FILE *fp, struct serializer *f, void *data)
 {
 	/* TODO */
 	return 4;

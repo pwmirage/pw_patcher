@@ -129,6 +129,21 @@ main(int argc, char *argv[])
 
 	setlocale(LC_ALL, "en_US.UTF-8");
 
+	struct pw_task_file taskf;
+	rc = pw_tasks_load(&taskf, "tasks.data");
+	if (rc) {
+		PWLOG(LOG_ERROR, "pw_tasks_load() failed: %d\n", rc);
+		return 1;
+	}
+
+	rc = pw_tasks_serialize(&taskf, "tasks.json");
+	if (rc) {
+		PWLOG(LOG_ERROR, "pw_tasks_serialize() failed: %d\n", rc);
+		return 1;
+	}
+	return 0;
+
+
 	if (argc < 2) {
 		printf("./%s branch_name\n", argv[0]);
 		return 0;
@@ -236,6 +251,7 @@ main(int argc, char *argv[])
 			rc = patch(tmpbuf);
 			if (rc) {
 				PWLOG(LOG_ERROR, "Failed to patch\n");
+				return 1;
 			}
 		}
 

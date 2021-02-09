@@ -16,16 +16,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#ifndef MIN
-#ifndef MIN(a, b) ((a) < (b) ? (a) : (b))
-#endif
-
-#ifndef MAX
-#ifndef MAX(a, b) ((a) > (b) ? (a) : (b))
-#endif
-
-extern char g_zeroes[4096];
-
 /* XXX MinGW bug? */
 #define truncate(filepath, sz) \
 	({ int fd = open(filepath, O_WRONLY); \
@@ -34,14 +24,24 @@ extern char g_zeroes[4096];
 	   rc; })
 #endif
 
+#ifndef MIN
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#endif
+
+#ifndef MAX
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#endif
+
+extern const char g_zeroes[4096];
+
 struct cjson;
 struct serializer {
 	const char *name;
 	unsigned type;
 	/* custom parser. returns number of bytes processed */
-	size_t (*fn)(FILE *fp, void *data);
+	size_t (*fn)(FILE *fp, struct serializer *slzr, void *data);
 	/* custom deserializer. returns number of bytes processed */
-	size_t (*des_fn)(struct cjson *f, void *data);
+	size_t (*des_fn)(struct cjson *f, struct serializer *slzr, void *data);
 	/* user context */
 	void *ctx;
 };
@@ -71,12 +71,21 @@ struct pw_version {
 	char cur_hash[64];
 };
 
+struct pw_task_file {
+	uint32_t magic;
+	uint32_t version;
+	struct pw_chain_table *tasks;
+	unsigned max_arr_idx;
+	unsigned max_dialogue_id;
+};
+
 #define PW_CHAIN_TABLE_FOREACH(_var, _chain, _table) \
 	for ((_chain) = (_table)->chain; (_chain); (_chain) = (_chain)->next) \
 	for ((_var) = (void *)(_chain)->data; (_var) != (void *)(_chain)->data + (_chain)->count * (_table)->el_size; (_var) += (_table)->el_size)
 
 int pw_chain_table_init(struct pw_chain_table *table, const char *name, struct serializer *serializer, size_t el_size, size_t count);
 struct pw_chain_table *pw_chain_table_alloc(const char *name, struct serializer *serializer, size_t el_size, size_t count);
+struct pw_chain_table *pw_chain_table_fread(FILE *fp, const char *name, size_t el_count, struct serializer *el_serializer);
 void *pw_chain_table_new_el(struct pw_chain_table *table);
 
 #define _TYPE_END 0
@@ -103,12 +112,16 @@ void fwsprint(FILE *fp, const uint16_t *buf, int maxlen);
 void fwsprintf(FILE *fp, const char *fmt, const uint16_t *buf, int maxlen);
 void wsnprintf(uint16_t *dst, size_t dstsize, const char *src);
 
+int change_charset(char *src_charset, char *dst_charset, char *src, long srclen, char *dst, long dstlen);
+void normalize_json_string(char *str);
+
 long serialize(FILE *fp, struct serializer *slzr_table,
 		void *data, unsigned data_cnt);
 long _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 		unsigned data_cnt, bool skip_empty_objs, bool newlines, bool force_object);
-size_t serializer_get_size(struct serializer *slzr_table);
-size_t serializer_get_field_offset(struct serializer *slzr_table, void *data, const char *name);
+int serializer_get_size(struct serializer *slzr_table);
+int serializer_get_offset(struct serializer *slzr_table, const char *name);
+void *serializer_get_field(struct serializer *slzr, const char *name, void *data);
 
 void deserialize(struct cjson *obj, struct serializer *slzr_table, void *data);
 void deserialize_log(struct cjson *json_f, void *data);
@@ -136,4 +149,6 @@ int pw_idmap_save(struct pw_idmap *map);
 int pw_version_load(struct pw_version *ver);
 int pw_version_save(struct pw_version *ver);
 
+int pw_tasks_load(struct pw_task_file *taskf, const char *path);
+int pw_tasks_serialize(struct pw_task_file *taskf, const char *filename);
 #endif /* PW_COMMON_H */

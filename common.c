@@ -92,11 +92,11 @@ pw_chain_table_fread(FILE *fp, const char *name, size_t el_count, struct seriali
 	uint32_t el_size = serializer_get_size(el_serializer);
 	size_t i;
 
-	uint32_t el_cap = MIN(8, el_count);
-	tbl = pw_chain_table_alloc(name, el_serializer, el_size, el_count);
+	uint32_t el_cap = MAX(8, el_count);
+	tbl = pw_chain_table_alloc(name, el_serializer, el_size, el_cap);
 	if (!tbl) {
 		PWLOG(LOG_ERROR, "pw_chain_table_alloc() failed\n");
-		return -1;
+		return NULL;
 	}
 
 	for (i = 0; i < el_count; i++) {
@@ -230,7 +230,7 @@ download_mem(const char *url, char **buf, size_t *len)
 	return rc;
 }
 
-static void
+void
 normalize_json_string(char *str)
 {
 	char *read_b = str;
@@ -250,7 +250,7 @@ normalize_json_string(char *str)
 	*write_b = 0;
 }
 
-static int
+int
 change_charset(char *src_charset, char *dst_charset, char *src, long srclen, char *dst, long dstlen)
 {
 	iconv_t cd;
@@ -273,7 +273,7 @@ fwsprint(FILE *fp, const uint16_t *buf, int maxlen)
 	char *b = out;
 
 	change_charset("UTF-16LE", "UTF-8", (char *)buf, maxlen * 2, out, sizeof(out));
-	while (*b) {
+	while (*b && maxlen--) {
 		if (*b == '\\') {
 			fputs("\\\\", fp);
 		} else if (*b == '"') {
@@ -302,7 +302,7 @@ fsprint(FILE *fp, const char *buf, int maxlen)
 	char *b = out;
 
 	sprint(out, sizeof(out), buf, maxlen);
-	while (*b) {
+	while (*b && maxlen--) {
 		if (*b == '\\') {
 			fputs("\\\\", fp);
 		} else {
@@ -399,7 +399,7 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 						fprintf(fp, "\"%s\":", slzr->name);
 					}
 					fprintf(fp, "%u,", *(uint8_t *)data);
-					nonzero = *(uint8_t *)data != 0;
+					nonzero = nonzero || *(uint8_t *)data != 0;
 				}
 				data += 1;
 			} else if (slzr->type == _INT16) {
@@ -408,7 +408,7 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 						fprintf(fp, "\"%s\":", slzr->name);
 					}
 					fprintf(fp, "%u,", *(uint16_t *)data);
-					nonzero = *(uint16_t *)data != 0;
+					nonzero = nonzero || *(uint16_t *)data != 0;
 				}
 				data += 2;
 			} else if (slzr->type == _INT32) {
@@ -417,7 +417,7 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 						fprintf(fp, "\"%s\":", slzr->name);
 					}
 					fprintf(fp, "%u,", *(uint32_t *)data);
-					nonzero = *(uint32_t *)data != 0;
+					nonzero = nonzero || *(uint32_t *)data != 0;
 				}
 				data += 4;
 			} else if (slzr->type > _CONST_INT(0) && slzr->type <= _CONST_INT(0x1000)) {
@@ -428,7 +428,7 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 						fprintf(fp, "\"%s\":", slzr->name);
 					}
 					fprintf(fp, "%u,", num);
-					nonzero = num != 0;
+					nonzero = nonzero || num != 0;
 				}
 			} else if (slzr->type == _FLOAT) {
 				if (!obj_printed || (*(float *)data != 0 && slzr->name[0] != '_')) {
@@ -436,7 +436,7 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 						fprintf(fp, "\"%s\":", slzr->name);
 					}
 					fprintf(fp, "%.8f,", *(float *)data);
-					nonzero = *(float *)data != 0;
+					nonzero = nonzero || *(float *)data != 0;
 				}
 				data += 4;
 			} else if (slzr->type > _WSTRING(0) && slzr->type <= _WSTRING(0x1000)) {
@@ -449,7 +449,7 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 					fprintf(fp, "\"");
 					fwsprint(fp, (const uint16_t *)data, len);
 					fprintf(fp, "\",");
-					nonzero = *(uint16_t *)data != 0;
+					nonzero = nonzero || *(uint16_t *)data != 0;
 				}
 				data += len * 2;
 			} else if (slzr->type > _STRING(0) && slzr->type <= _STRING(0x1000)) {
@@ -462,37 +462,58 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 					fprintf(fp, "\"");
 					fsprint(fp, (const char *)data, len);
 					fprintf(fp, "\",");
-					nonzero = *(char *)data != 0;
+					nonzero = nonzero || *(char *)data != 0;
 				}
 				data += len;
 			} else if (slzr->type > _ARRAY_START(0) && slzr->type <= _ARRAY_START(0x1000)) {
 				unsigned cnt = slzr->type - _ARRAY_START(0);
+				size_t pre_name_pos = ftell(fp);
+				const char *slzr_name = slzr->name;
 
-				if (slzr->name[0] != '_') {
-					if (slzr->name[0] != 0) {
-						fprintf(fp, "\"%s\":", slzr->name);
-					}
-					slzr++;
-					_serialize(fp, &slzr, &data, cnt, true, false, false);
+				if (slzr->name[0] != 0) {
+					fprintf(fp, "\"%s\":", slzr->name);
+				}
+
+				size_t pre_pos = ftell(fp);
+				slzr++;
+				_serialize(fp, &slzr, &data, cnt, true, false, false);
+
+				if (ftell(fp) == pre_pos || slzr_name[0] == '_') {
+					fseek(fp, pre_name_pos, SEEK_SET);
+				} else {
 					fprintf(fp, ",");
+					nonzero = true;
 				}
 			} else if (slzr->type == _OBJECT_START) {
+				/* FIXME need to advance slzr for inline objs even if its _prefixed */
 				if (slzr->name[0] != '_') {
+					size_t pre_name_pos = ftell(fp);
+
 					struct serializer *nested_slzr = slzr->ctx;
 					if (slzr->name[0] != 0) {
 						fprintf(fp, "\"%s\":", slzr->name);
 					}
-					slzr++;
+
+
+					size_t pre_pos = ftell(fp);
 					if (nested_slzr) {
 						_serialize(fp, &nested_slzr, &data, 1, true, false, true);
 					} else {
+						slzr++;
 						_serialize(fp, &slzr, &data, 1, true, false, true);
 					}
-					fprintf(fp, ",");
+					if (ftell(fp) == pre_pos) {
+						/* nothing printed in the object, skip its name */
+						fseek(fp, pre_name_pos, SEEK_SET);
+					} else {
+						fprintf(fp, ",");
+						nonzero = true;
+					}
 				}
 			} else if (slzr->type == _CUSTOM) {
-				data += slzr->fn(fp, data);
-				nonzero = true;
+				size_t pre_pos = ftell(fp);
+				data += slzr->fn(fp, slzr, data);
+				nonzero = nonzero || ftell(fp) != pre_pos;
 			} else if (slzr->type == _ARRAY_END) {
 				break;
 			} else if (slzr->type == _OBJECT_END) {
@@ -576,10 +597,10 @@ deserialize_log(struct cjson *json_f, void *data)
 	}
 }
 
-size_t
+int
 serializer_get_size(struct serializer *slzr_table)
 {
-	return serializer_get_field_offset(slzr_table, NULL);
+	return serializer_get_offset(slzr_table, NULL);
 }
 
 int
@@ -613,27 +634,27 @@ serializer_get_offset(struct serializer *slzr, const char *name)
 			unsigned cnt = slzr->type - _ARRAY_START(0);
 
 			slzr++;
-			rc = serializer_get_field_offset(&slzr, name);
-			offset += rc;
-			if (name && rc >= 0) {
-				return offset;
+			rc = serializer_get_offset(slzr, NULL);
+			offset += rc * cnt;
+			while (slzr->type != _ARRAY_END) {
+				slzr++;
 			}
 		} else if (slzr->type == _OBJECT_START) {
 			struct serializer *nested_slzr = slzr->ctx;
 
-			slzr++;
 			if (nested_slzr) {
-				rc = serializer_get_field_offset(&nested_slzr, name);
+				rc = serializer_get_offset(nested_slzr, NULL);
 			} else {
-				rc = serializer_get_field_offset(&slzr, name);
+				slzr++;
+				rc = serializer_get_offset(slzr, NULL);
+				while (slzr->type != _OBJECT_END) {
+					slzr++;
+				}
 			}
 
 			offset += rc;
-			if (name && rc >= 0) {
-				return offset;
-			}
 		} else if (slzr->type == _CUSTOM) {
-			data += slzr->fn(g_nullfile, g_zeroes);
+			offset += slzr->fn(g_nullfile, slzr, (void *)g_zeroes);
 		} else if (slzr->type == _ARRAY_END) {
 			break;
 		} else if (slzr->type == _OBJECT_END) {
@@ -654,7 +675,7 @@ serializer_get_offset(struct serializer *slzr, const char *name)
 void *
 serializer_get_field(struct serializer *slzr, const char *name, void *data)
 {
-	return data + serializer_get_offset(slzr, "");
+	return data + serializer_get_offset(slzr, name);
 }
 
 static void
@@ -795,15 +816,15 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p,
 			slzr = tmp_slzr;
 		} else if (slzr->type == _OBJECT_START) {
 			struct serializer *nested_slzr = slzr->ctx;
-			slzr++;
 			if (nested_slzr) {
 				_deserialize(json_f, &nested_slzr, &data, false);
 			} else {
+				slzr++;
 				_deserialize(json_f, &slzr, &data, false);
 			}
 		} else if (slzr->type == _CUSTOM) {
 			if (slzr->des_fn) {
-				data += slzr->des_fn(json_f, data);
+				data += slzr->des_fn(json_f, data, slzr->ctx);
 			}
 		}
 

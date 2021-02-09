@@ -10,6 +10,8 @@
 #include <errno.h>
 #include <assert.h>
 #include <stdbool.h>
+#include <unistd.h>
+#include <sys/types.h>
 
 #include "cjson.h"
 #include "cjson_ext.h"
@@ -19,7 +21,6 @@
 extern struct pw_idmap *g_elements_map;
 
 #define TASK_FILE_MAGIC 0x93858361
-#define TASK_MAX_COUNT 131072
 
 enum pw_task_service_type
 {
@@ -65,113 +66,104 @@ xor_bytes(uint16_t *str, uint32_t len, uint32_t id) {
 	}
 }
 
-static struct serializer pw_task_location_serializer[] = {
-	{ "east", _FLOAT },
-	{ "bottom", _FLOAT },
-	{ "south", _FLOAT },
-	{ "west", _FLOAT },
-	{ "top", _FLOAT },
-	{ "north", _FLOAT },
-	{ "", _TYPE_END },
-};
+static size_t
+serialize_pascal_wstr_fn(FILE *fp, struct serializer *f, void *data)
+{
+	uint32_t len = *(uint32_t *)data;
+	const uint16_t *wstr = *(void **)(data + 4);
 
-static struct serializer pw_task_point_serializer[] = {
-	{ "world", _INT32 },
-	{ "x", _FLOAT },
-	{ "y", _FLOAT },
-	{ "z", _FLOAT },
-	{ "", _TYPE_END },
-};
+	fprintf(fp, "\"%s\":", f->name);
+	fprintf(fp, "\"");
+	fwsprint(fp, wstr, len);
+	fprintf(fp, "\",");
 
-static struct serializer pw_task_date_serializer[] = {
-	{ "year", _INT32 },
-	{ "month", _INT32 },
-	{ "day", _INT32 },
-	{ "hour", _INT32 },
-	{ "minute", _INT32 },
-	{ "weekday", _INT32 },
-	{ "", _TYPE_END },
-};
-
-static struct serializer pw_task_date_span_serializer[] = {
-	{ "start", _OBJECT_START, pw_task_date_serializer },
-	{ "end", _OBJECT_START, pw_task_date_serializer },
-	{ "", _TYPE_END },
-};
-
-static struct serializer pw_task_item_serializer[] = {
-	{ "id", _INT32 },
-	{ "is_common", _INT8 },
-	{ "amount", _INT32 },
-	{ "probability", _FLOAT },
-	{ "", _TYPE_END },
-};
-
-static struct serializer pw_task_player_serializer[] = {
-	{ "level_min", _INT32 },
-	{ "level_max", _INT32 },
-	{ "race", _INT32 },
-	{ "occupation", _INT32 },
-	{ "gender", _INT32 },
-	{ "amount_min", _INT32 },
-	{ "amount_max", _INT32 },
-	{ "quest", _INT32 },
-	{ "", _TYPE_END },
-};
-
-static struct serializer pw_task_mob_serializer[] = {
-	{ "id", _INT32 },
-	{ "count", _INT32 },
-	{ "drop_item_id", _INT32 },
-	{ "drop_item_cnt", _INT32 },
-	{ "drop_item_is_common", _INT8 },
-	{ "drop_item_probability", _FLOAT },
-	{ "lvl_diff_gt8_doesnt_cnt", _INT8 },
-	{ "", _TYPE_END },
-};
-
-static struct serializer pw_task_data_serializer[] = {
-};
+	return 4 + sizeof(wstr);
+}
 
 static size_t
-serialize_chunked_table_fn(FILE *fp, struct serializer *f, void *data, void *ctx)
+deserialize_pascal_wstr_fn(struct cjson *f, struct serializer *slzr, void *data)
 {
-	struct pw_chain_table *table = *(void **)data;
-	struct serializer *slzr = ctx;
+	uint32_t len = *(uint32_t *)data;
+	uint16_t *wstr = *(void **)(data + 4);
+	int rc;
 
-	if (!table) {
-		return 8;
+	if (f->type == CJSON_TYPE_NONE) {
+		return 4 + sizeof(wstr);
 	}
 
+	normalize_json_string(f->s);
+	uint32_t newlen = strlen(f->s);
+	deserialize_log(f, data);
+	memset(wstr, 0, len * 2);
+	rc = change_charset("UTF-8", "UTF-16LE", f->s, strlen(f->s), (char *)wstr, len * 2);
+	while (rc < 0) {
+		newlen *= 2;
+
+		free(wstr);
+		wstr = *(void **)(data + 4) = calloc(1, len);
+		if (!wstr) {
+			PWLOG(LOG_ERROR, "calloc() failed\n");
+			return 4 + sizeof(wstr);
+		}
+		rc = change_charset("UTF-8", "UTF-16LE", f->s, strlen(f->s), (char *)wstr, newlen);
+		if (rc >= 0) {
+			break;
+		}
+	}
+
+	return 4 + sizeof(wstr);
+}
+
+static size_t
+serialize_chunked_table_fn(FILE *fp, struct serializer *f, void *data)
+{
+	struct pw_chain_table *table = *(void **)data;
+	struct serializer *slzr;
+	struct pw_chain_el *chain;
+
+	if (!table) {
+		return sizeof(void *);
+	}
+	slzr = table->serializer;
+	chain = table->chain;
+
+	size_t ftell_begin = ftell(fp);
 	fprintf(fp, "\"%s\":[", f->name);
-	bool is_first = true;
+	bool obj_printed = false;
 	while (chain) {
 		size_t i;
 
 		for (i = 0; i < chain->count; i++) {
-			void *el = chain->data + remaining_idx * table->el_size;
+			void *el = chain->data + i * table->el_size;
+			struct serializer *tmp_slzr = slzr;
+			size_t pos_begin = ftell(fp);
 
-			if (!is_first) {
+			_serialize(fp, &tmp_slzr, &el, 1, true, false, true);
+			if (ftell(fp) > pos_begin) {
 				fprintf(fp, ",");
+				obj_printed = true;
 			}
-
-			_serialize(fp, table->slzr, el, 1, true, false, true);
-			is_first = false;
 		}
 
 		chain = chain->next;
 	}
-	
-	fprintf(fp, "],");
+
+	if (!obj_printed) {
+		fseek(fp, ftell_begin, SEEK_SET);
+	} else {
+		/* override last comma */
+		fseek(fp, -1, SEEK_CUR);
+		fprintf(fp, "],");
+	}
 
 	return sizeof(void *);
 }
 
 static size_t
-deserialize_chunked_table_fn(struct cjson *f, void *data, void *ctx)
+deserialize_chunked_table_fn(struct cjson *f, struct serializer *_slzr, void *data)
 {
 	struct pw_chain_table *table = *(void **)data;
-	struct serializer *slzr = ctx;
+	struct serializer *slzr = _slzr->ctx;
 
 	if (f->type == CJSON_TYPE_NONE) {
 		return 8;
@@ -184,7 +176,7 @@ deserialize_chunked_table_fn(struct cjson *f, void *data, void *ctx)
 
 	if (!table) {
 		size_t el_size = serializer_get_size(slzr);
-		table = *(void **)data = pw_chain_table_alloc("", slzr, el_size);
+		table = *(void **)data = pw_chain_table_alloc("", slzr, el_size, 8);
 		if (!table) {
 			PWLOG(LOG_ERROR, "pw_chain_table_alloc() failed\n");
 			return 8;
@@ -243,7 +235,7 @@ deserialize_chunked_table_fn(struct cjson *f, void *data, void *ctx)
 			}
 		}
 
-		deserialize(json_el, slzr, el);
+		deserialize(json_el, slzr, &el);
 		json_el = json_el->next;
 	}
 
@@ -252,9 +244,74 @@ deserialize_chunked_table_fn(struct cjson *f, void *data, void *ctx)
 
 #define _CHAIN_TABLE _CUSTOM, serialize_chunked_table_fn, deserialize_chunked_table_fn
 
+static struct serializer pw_task_location_serializer[] = {
+	{ "east", _FLOAT },
+	{ "bottom", _FLOAT },
+	{ "south", _FLOAT },
+	{ "west", _FLOAT },
+	{ "top", _FLOAT },
+	{ "north", _FLOAT },
+	{ "", _TYPE_END },
+};
+
+static struct serializer pw_task_point_serializer[] = {
+	{ "world", _INT32 },
+	{ "x", _FLOAT },
+	{ "y", _FLOAT },
+	{ "z", _FLOAT },
+	{ "", _TYPE_END },
+};
+
+static struct serializer pw_task_date_serializer[] = {
+	{ "year", _INT32 },
+	{ "month", _INT32 },
+	{ "day", _INT32 },
+	{ "hour", _INT32 },
+	{ "minute", _INT32 },
+	{ "weekday", _INT32 },
+	{ "", _TYPE_END },
+};
+
+static struct serializer pw_task_date_span_serializer[] = {
+	{ "start", _OBJECT_START, NULL, NULL, pw_task_date_serializer },
+	{ "end", _OBJECT_START, NULL, NULL, pw_task_date_serializer },
+	{ "", _TYPE_END },
+};
+
+static struct serializer pw_task_item_serializer[] = {
+	{ "id", _INT32 },
+	{ "is_common", _INT8 },
+	{ "amount", _INT32 },
+	{ "probability", _FLOAT },
+	{ "", _TYPE_END },
+};
+
+static struct serializer pw_task_player_serializer[] = {
+	{ "level_min", _INT32 },
+	{ "level_max", _INT32 },
+	{ "race", _INT32 },
+	{ "occupation", _INT32 },
+	{ "gender", _INT32 },
+	{ "amount_min", _INT32 },
+	{ "amount_max", _INT32 },
+	{ "quest", _INT32 },
+	{ "", _TYPE_END },
+};
+
+static struct serializer pw_task_mob_serializer[] = {
+	{ "id", _INT32 },
+	{ "count", _INT32 },
+	{ "drop_item_id", _INT32 },
+	{ "drop_item_cnt", _INT32 },
+	{ "drop_item_is_common", _INT8 },
+	{ "drop_item_probability", _FLOAT },
+	{ "lvl_diff_gt8_doesnt_cnt", _INT8 },
+	{ "", _TYPE_END },
+};
+
 static struct serializer pw_task_item_group_serializer[] = {
 	{ "chosen_randomly", _INT8 },
-	{ "item_cnt", _INT32 },
+	{ "_items_cnt", _INT32 },
 	{ "items", _CHAIN_TABLE, pw_task_item_serializer },
 	{ "", _TYPE_END },
 };
@@ -271,14 +328,12 @@ static struct serializer pw_task_award_serializer[] = {
 	{ "inventory_slots", _INT32 },
 	{ "petbag_slots", _INT32 },
 	{ "chi", _INT32 },
-	{ "tp", _OBJECT_START, pw_task_point_serializer },
+	{ "tp", _OBJECT_START, NULL, NULL, pw_task_point_serializer },
 	{ "ai_trigger", _INT32 },
 	{ "ai_trigger_enable", _INT8 },
 	{ "level_multiplier", _INT8 },
 	{ "divorce", _INT8 },
-	{ "m_bSendMsg", _INT8 },
-	{ "m_nMsgChannel", _INT32 },
-	{ "item_groups_cnt", _INT32 },
+	{ "_item_groups_cnt", _INT32 },
 	{ "ptr", _INT32 },
 	{ "item_groups", _CHAIN_TABLE, pw_task_item_group_serializer },
 	{ "", _TYPE_END },
@@ -286,7 +341,7 @@ static struct serializer pw_task_award_serializer[] = {
 
 static struct serializer pw_task_award_timed_serializer[] = {
 	{ "_awards_cnt", _INT32 },
-	{ "time_spent_ratio", _FLOAT },
+	{ "time_spent_ratio", _ARRAY_START(5) },
 		{ "", _FLOAT },
 	{ "", _ARRAY_END },
 	{ "awards", _CHAIN_TABLE, pw_task_award_serializer },
@@ -325,56 +380,7 @@ static struct serializer pw_task_talk_proc_serializer[] = {
 	{ "", _TYPE_END },
 };
 
-static size_t
-serialize_pascal_wstr_fn(FILE *fp, struct serializer *f, void *data, void *ctx)
-{
-	uint32_t len = *(uint32_t *)data;
-	const uint16_t *wstr = *(void **)(data + 4);
-
-	fprintf(fp, "\"%s\":", f->name);
-	fprintf(fp, "\"");
-	fwsprint(fp, wstr, len);
-	fprintf(fp, "\",");
-
-	return 4 + sizeof(wstr);
-}
-
-static size_t
-deserialize_pascal_wstr_fn(struct cjson *f, void *data, void *ctx)
-{
-	uint32_t len = *(uint32_t *)data;
-	uint16_t *wstr = *(void **)(data + 4);
-	int rc;
-
-	if (f->type == CJSON_TYPE_NONE) {
-		return 4 + sizeof(wstr);
-	}
-
-	normalize_json_string(f->s);
-	uint32_t newlen = strlen(f->s);
-	deserialize_log(f, data);
-	memset(wstr, 0, len * 2);
-	rc = change_charset("UTF-8", "UTF-16LE", f->s, strlen(f->s), (char *)wstr, len * 2);
-	while (rc < 0) {
-		newlen *= 2;
-
-		free(wstr);
-		wstr = *(void **)(data + 4) = calloc(1, len);
-		if (!wstr) {
-			PWLOG(LOG_ERROR, "calloc() failed\n");
-			return 4 + sizeof(wstr);
-		}
-		rc = change_charset("UTF-8", "UTF-16LE", f->s, strlen(f->s), (char *)wstr, newlen);
-		if (rc >= 0) {
-			break;
-		}
-	}
-
-	return 4 + sizeof(wstr);
-}
-
-
-static struct serializer pw_task_serializer {
+static struct serializer pw_task_serializer[] = {
 	{ "id", _INT32 },
 	{ "name", _WSTRING(30) },
 	{ "_has_signature", _INT8 }, /* we'll be always setting this to 0 */
@@ -404,9 +410,9 @@ static struct serializer pw_task_serializer {
 	{ "simultaneous_player_limit", _INT32 },
 	{ "start_on_enter", _INT8 },
 	{ "start_on_enter_world_id", _INT32 },
-	{ "start_on_enter_location", _OBJECT_START, pw_task_location_serializer },
+	{ "start_on_enter_location", _OBJECT_START, NULL, NULL, pw_task_location_serializer },
 	{ "instant_teleport", _INT8 },
-	{ "instant_teleport_point", _OBJECT_START, pw_task_point_serializer },
+	{ "instant_teleport_point", _OBJECT_START, NULL, NULL, pw_task_point_serializer },
 	{ "ai_trigger", _INT32 },
 	{ "ai_trigger_enable", _INT8 },
 	{ "auto_trigger", _INT8 },
@@ -496,7 +502,7 @@ static struct serializer pw_task_serializer {
 	{ "m_ulProtectTimeLen", _INT32 },
 	{ "m_ulNPCMoving", _INT32 },
 	{ "m_ulNPCDestSite", _INT32 },
-	{ "reach_location", _OBJECT_START, pw_task_location_serializer },
+	{ "reach_location", _OBJECT_START, NULL, NULL, pw_task_location_serializer },
 	{ "reach_location_world_id", _INT32 },
 	{ "req_wait_time", _INT32 },
 	{ "m_ulAwardType_S", _INT32 },
@@ -516,22 +522,22 @@ static struct serializer pw_task_serializer {
 	{ "req_squad", _CHAIN_TABLE, pw_task_player_serializer },
 	{ "req_monsters", _CHAIN_TABLE, pw_task_mob_serializer },
 	{ "req_items", _CHAIN_TABLE, pw_task_item_serializer },
-	{ "success_award", _OBJECT_START, pw_task_award_serializer },
-	{ "failure_award", _OBJECT_START, pw_task_award_serializer },
-	{ "success_timed_award", _OBJECT_START, pw_task_award_timed_serializer },
-	{ "failure_timed_award", _OBJECT_START, pw_task_award_timed_serializer },
-	{ "success_scaled_award", _OBJECT_START, pw_task_award_scaled_serializer },
-	{ "failure_scaled_award", _OBJECT_START, pw_task_award_serializer },
+	{ "success_award", _OBJECT_START, NULL, NULL, pw_task_award_serializer },
+	{ "failure_award", _OBJECT_START, NULL, NULL, pw_task_award_serializer },
+	{ "success_timed_award", _OBJECT_START, NULL, NULL, pw_task_award_timed_serializer },
+	{ "failure_timed_award", _OBJECT_START, NULL, NULL, pw_task_award_timed_serializer },
+	{ "success_scaled_award", _OBJECT_START, NULL, NULL, pw_task_award_scaled_serializer },
+	{ "failure_scaled_award", _OBJECT_START, NULL, NULL, pw_task_award_scaled_serializer },
 	{ "briefing", _CUSTOM, serialize_pascal_wstr_fn, deserialize_pascal_wstr_fn },
 	{ "unk1_text", _CUSTOM, serialize_pascal_wstr_fn, deserialize_pascal_wstr_fn },
 	{ "unk2_text", _CUSTOM, serialize_pascal_wstr_fn, deserialize_pascal_wstr_fn },
 	{ "description", _CUSTOM, serialize_pascal_wstr_fn, deserialize_pascal_wstr_fn },
 	{ "dialogue", _OBJECT_START },
-		{ "initial", _OBJECT_START, pw_task_talk_proc_serializer },
-		{ "notqualified", _OBJECT_START, pw_task_talk_proc_serializer },
-		{ "unknown", _OBJECT_START, pw_task_talk_proc_serializer },
-		{ "unfinished", _OBJECT_START, pw_task_talk_proc_serializer },
-		{ "ready", _OBJECT_START, pw_task_talk_proc_serializer },
+		{ "initial", _OBJECT_START, NULL, NULL, pw_task_talk_proc_serializer },
+		{ "notqualified", _OBJECT_START, NULL, NULL, pw_task_talk_proc_serializer },
+		{ "unknown", _OBJECT_START, NULL, NULL, pw_task_talk_proc_serializer },
+		{ "unfinished", _OBJECT_START, NULL, NULL, pw_task_talk_proc_serializer },
+		{ "ready", _OBJECT_START, NULL, NULL, pw_task_talk_proc_serializer },
 	{ "", _OBJECT_END },
 	{ "_sub_tasks_cnt", _INT32 },
 	{ "sub_tasks", _CHAIN_TABLE, pw_task_serializer },
@@ -541,21 +547,16 @@ static struct serializer pw_task_serializer {
 static int
 read_award(void **buf_p, FILE *fp)
 {
-	void *buf, *ptr;
+	void *data, *buf, *ptr;
 	size_t i, item_groups_count; 
-	uint32_t award_size = serializer_get_size(pw_task_award_serializer);
+	struct serializer *slzr = pw_task_award_serializer;
 
-	buf = calloc(1, award_size);
-	if (!buf) {
-		PWLOG(LOG_ERROR, "calloc() failed\n");
-		return -1;
-	}
-
+	buf = data = *buf_p;
 	fread(buf, 75, 1, fp);
 	buf += 75;
 
-	item_groups_count = *(uint32_t *)serializer_get_field(slzr, "item_groups_cnt", data);
-	*(void **)buf = ptr = pw_chain_table_fread(fp, "item_groups", chain_tbl_count, pw_task_item_group_serializer);
+	item_groups_count = *(uint32_t *)serializer_get_field(slzr, "_item_groups_cnt", data);
+	*(void **)buf = ptr = pw_chain_table_fread(fp, "item_groups", 0, pw_task_item_group_serializer);
 	if (!ptr) {
 		return -1;
 	}
@@ -564,10 +565,15 @@ read_award(void **buf_p, FILE *fp)
 
 	for (i = 0; i < item_groups_count; i++) {
 		buf = pw_chain_table_new_el(ptr);
-		size_t item_count = *(uint32_t *)serializer_get_field(slzr, "item_count", buf);
-		void *items = serializer_get_field(slzr, "items", data);
 
-		*(void **)items = ptr pw_chain_table_fread(fp, "item_groups", item_count, pw_task_item_serializer);
+		void *data_start = buf;
+		fread(buf, 5, 1, fp);
+		buf += 5;
+
+		size_t item_count = *(uint32_t *)serializer_get_field(pw_task_item_group_serializer, "_items_cnt", data_start);
+		void *items = serializer_get_field(pw_task_item_group_serializer, "items", data_start);
+
+		*(void **)items = ptr = pw_chain_table_fread(fp, "items", item_count, pw_task_item_serializer);
 		if (!ptr) {
 			return -1;
 		}
@@ -585,18 +591,19 @@ read_award(void **buf_p, FILE *fp)
 	buf += sizeof(void *)
 
 #define LOAD_CHAIN_TBL(fp, name, data_slzr, data_start, tbl_slzr) \
-	count = *(uint32_t *)serializer_get_field((slzr), "_" #name "_cnt", (data_start)); \
+	count = *(uint32_t *)serializer_get_field((data_slzr), "_" name "_cnt", (data_start)); \
 	LOAD_CHAIN_TBL_CNT(fp, name, data_slzr, data_start, tbl_slzr, count)
 
 
 static int
 read_task(void *data, FILE *fp)
 {
-	uint32_t size = serializer_get_size(pw_task_serializer);
 	void *buf = data;
 	struct pw_chain_table *tbl_p;
 	uint32_t id;
 	size_t count;
+	int rc, i;
+	struct serializer *slzr = pw_task_serializer;
 
 	if (!data) {
 		PWLOG(LOG_ERROR, "data ptr is NULL\n");
@@ -608,10 +615,10 @@ read_task(void *data, FILE *fp)
 	buf += 534;
 
 	id = *(uint32_t *)data;
-	xor_bytes(serializer_get_field(pw_task_serializer, "name", data), 30, id);
+	xor_bytes(serializer_get_field(slzr, "name", data), 30, id);
 
-	uint8_t *has_signature = (uint8_t *)serializer_get_field(pw_task_serializer, "_has_signature", data);
-	if(has_signature) {
+	uint8_t *has_signature = (uint8_t *)serializer_get_field(slzr, "_has_signature", data);
+	if(*has_signature) {
 		fseek(fp, 60, SEEK_CUR);
 	}
 	/* who needs this? */
@@ -679,52 +686,63 @@ read_task(void *data, FILE *fp)
 		*(uint32_t *)buf = len;
 		buf += 4;
 
-		uint16_t *wstr = *(void **)buf = calloc(1, len * 2);
+		uint16_t *wstr = *(void **)buf = calloc(1, len * 2 + 2);
 		if (!wstr) {
 			PWLOG(LOG_ERROR, "calloc() failed\n");
 			return -1;
 		}
 		fread(wstr, len * 2, 1, fp);
 		xor_bytes(wstr, len, id);
+
+		buf += sizeof(void *);
 	}
 
-	/* TODO */
 	for (int p = 0; p < 5; p++) {
 		char *data_start = buf;
 
 		fread(buf, 136, 1, fp);
 		buf += 136;
 
-		count = *(uint32_t *)serializer_get_field(pw_talk_proc_question_serializer, "_questions_cnt", data_start);
-		LOAD_CHAIN_TBL_CNT(fp, "questions", slzr, data_start, pw_talk_proc_question_serializer, 0);
+		xor_bytes(serializer_get_field(pw_task_talk_proc_serializer, "name", data_start), 64, id);
+
+		count = *(uint32_t *)serializer_get_field(pw_task_talk_proc_serializer, "_questions_cnt", data_start);
+		LOAD_CHAIN_TBL_CNT(fp, "questions", slzr, data_start, pw_task_talk_proc_question_serializer, 0);
 
 		for (int q = 0; q < count; q++) {
 			void *el = pw_chain_table_new_el(tbl_p);
-			void *data_start = el;
+			void *buf = el;
 			uint32_t wstr_len;
 
-			fread(el, 8, 1, fp);
-			el += 8;
+			fread(buf, 8, 1, fp);
+			buf += 8;
 
 			fread(&wstr_len, 4, 1, fp);
-			*(uint32_t *)el = wstr_len;
-			el += 4;
+			*(uint32_t *)buf = wstr_len;
+			buf += 4;
 
-			uint16_t *wstr = *(void **)(data + 4) = calloc(1, wstr_len * 2);
+			uint16_t *wstr = *(void **)buf = calloc(1, wstr_len * 2 + 2);
+			buf += sizeof(void *);
 			if (!wstr) {
 				PWLOG(LOG_ERROR, "calloc() failed\n");
 				return -1;
 			}
-			fread(wstr, len * 2, 1, fp);
-			xor_bytes(wstr, len, id);
+			fread(wstr, wstr_len * 2, 1, fp);
+			xor_bytes(wstr, wstr_len, id);
 
-			LOAD_CHAIN_TBL(fp, "choices", pw_talk_proc_question_serializer, data_start, pw_talk_proc_choice_serializer);
+			fread(buf, 4, 1, fp);
+			buf += 4;
 
+			{
+				struct pw_chain_table *tbl_p;
+				struct pw_chain_el *chain;
+				void *c;
+				size_t count;
 
-			struct pw_chain_el *chain;
-			void *c
-			PW_CHAIN_TABLE_FOREACH(c, chain, &tbl_p) {
-				xor_bytes(serializer_get_field(pw_talk_proc_choice_serializer, "text", c), 64, id);
+				LOAD_CHAIN_TBL(fp, "choices", pw_task_talk_proc_question_serializer, el, pw_task_talk_proc_choice_serializer);
+
+				PW_CHAIN_TABLE_FOREACH(c, chain, tbl_p) {
+					xor_bytes(serializer_get_field(pw_task_talk_proc_choice_serializer, "text", c), 64, id);
+				}
 			}
 
 		}
@@ -742,7 +760,84 @@ read_task(void *data, FILE *fp)
 		}
 	}
 
-	*data_p = data;
+	return 0;
+}
+
+int
+pw_tasks_load(struct pw_task_file *taskf, const char *path)
+{
+	uint32_t *jmp_offsets;
+	FILE* fp;
+	uint32_t count;
+
+	memset(taskf, 0, sizeof(*taskf));
+
+	fp = fopen(path, "rb");
+	if (!fp) {
+		return -errno;
+	}
+
+	fread(&taskf->magic, sizeof(taskf->magic), 1, fp);
+	if (taskf->magic != TASK_FILE_MAGIC) {
+		return -ENOEXEC;
+	}
+
+	fread(&taskf->version, sizeof(taskf->version), 1, fp);
+	if (taskf->version != 55 && taskf->version != 56) {
+		return -ENOEXEC;
+	}
+  
+	fread(&count, sizeof(count), 1, fp);
+	if (count == 0) {
+		return -ENODATA;
+	}
+
+	jmp_offsets = malloc(count * sizeof (*jmp_offsets));
+	if (!jmp_offsets) {
+		fclose(fp);
+		return -ENOMEM;
+	}
+
+	fread(jmp_offsets, sizeof(*jmp_offsets), count, fp);
+	taskf->tasks = pw_chain_table_alloc("quests", pw_task_serializer, serializer_get_size(pw_task_serializer), count);
+	if (!taskf->tasks) {
+		free(jmp_offsets);
+		fclose(fp);
+		return -ENOMEM;
+	}
+
+	for (uint32_t t = 0; t < count; t++) {
+		if (fseek(fp, jmp_offsets[t], SEEK_SET) != 0) {
+			/* invalid task, skip it just like the game does */
+			continue;
+		}
+
+		void *task_el = pw_chain_table_new_el(taskf->tasks);
+
+		read_task(task_el, fp);
+		/* dont care about failure, we skip invalid tasks anyway */
+	}
+
+	free(jmp_offsets);
+	fclose(fp);
+	return 0;
+}
+
+int
+pw_tasks_serialize(struct pw_task_file *taskf, const char *filename)
+{
+	FILE *fp = fopen(filename, "wb");
+
+	if (fp == NULL) {
+		PWLOG(LOG_ERROR, "cant open %s\n", filename);
+		return 1;
+	}
+
+	struct pw_chain_el *chain = taskf->tasks->chain;
+	size_t sz = serialize(fp, pw_task_serializer, chain->data, chain->count);
+
+	fclose(fp);
+	truncate(filename, sz);
 	return 0;
 }
 

@@ -142,7 +142,7 @@ load_descriptions(void)
 
 
 static size_t
-icon_serialize_fn(FILE *fp, void *data)
+icon_serialize_fn(FILE *fp, struct serializer *f, void *data)
 {
 	unsigned len = 128;
 	char out[1024] = {};
@@ -173,7 +173,7 @@ icon_serialize_fn(FILE *fp, void *data)
 }
 
 static size_t
-float_or_int_fn(FILE *fp, void *data)
+float_or_int_fn(FILE *fp, struct serializer *f, void *data)
 {
 	uint32_t u = *(uint32_t *)data;
 
@@ -187,7 +187,7 @@ float_or_int_fn(FILE *fp, void *data)
 }
 
 static size_t
-serialize_item_id_fn(FILE *fp, void *data)
+serialize_item_id_fn(FILE *fp, struct serializer *f, void *data)
 {
 	uint32_t id = *(uint32_t *)data;
 	uint32_t color;
@@ -215,7 +215,7 @@ deserialize_elements_id_field_async_fn(void *data, void *target_data)
 }
 
 static size_t
-deserialize_elements_id_field_fn(struct cjson *f, void *data)
+deserialize_elements_id_field_fn(struct cjson *f, struct serializer *slzr, void *data)
 {
 	int64_t val = JSi(f);
 
@@ -234,7 +234,7 @@ deserialize_elements_id_field_fn(struct cjson *f, void *data)
 }
 
 static size_t
-serialize_elements_id_field_fn(FILE *fp, void *data)
+serialize_elements_id_field_fn(FILE *fp, struct serializer *f, void *data)
 {
 	/* TODO */
 	return 4;
@@ -1619,7 +1619,9 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 	}
 
 	if (i == elements->tables_count) {
-		PWLOG(LOG_ERROR, "unknown obj type\n");
+		if (strcmp(table->name, "metadata") != 0) {
+			PWLOG(LOG_ERROR, "unknown obj type\n");
+		}
 		return -1;
 	}
 
