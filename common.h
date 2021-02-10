@@ -151,4 +151,5 @@ int pw_version_save(struct pw_version *ver);
 
 int pw_tasks_load(struct pw_task_file *taskf, const char *path);
 int pw_tasks_serialize(struct pw_task_file *taskf, const char *filename);
+int pw_tasks_save(struct pw_task_file *taskf, const char *path, bool is_client);
 #endif /* PW_COMMON_H */

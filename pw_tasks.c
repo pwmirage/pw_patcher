@@ -83,7 +83,8 @@ serialize_pascal_wstr_fn(FILE *fp, struct serializer *f, void *data)
 static size_t
 deserialize_pascal_wstr_fn(struct cjson *f, struct serializer *slzr, void *data)
 {
-	uint32_t len = *(uint32_t *)data;
+	uint32_t *len_p = (uint32_t *)data;
+	uint32_t len = *len_p;
 	uint16_t *wstr = *(void **)(data + 4);
 	int rc;
 
@@ -95,22 +96,32 @@ deserialize_pascal_wstr_fn(struct cjson *f, struct serializer *slzr, void *data)
 	uint32_t newlen = strlen(f->s);
 	deserialize_log(f, data);
 	memset(wstr, 0, len * 2);
-	rc = change_charset("UTF-8", "UTF-16LE", f->s, strlen(f->s), (char *)wstr, len * 2);
+	if (newlen == 0) {
+		*len_p = 0;
+		return 4 + sizeof(wstr);
+	}
+
+	rc = change_charset("UTF-8", "UTF-16LE", f->s, newlen, (char *)wstr, len * 2);
 	while (rc < 0) {
 		newlen *= 2;
 
 		free(wstr);
-		wstr = *(void **)(data + 4) = calloc(1, len);
+		wstr = *(void **)(data + 4) = calloc(1, newlen * 2);
 		if (!wstr) {
 			PWLOG(LOG_ERROR, "calloc() failed\n");
 			return 4 + sizeof(wstr);
 		}
-		rc = change_charset("UTF-8", "UTF-16LE", f->s, strlen(f->s), (char *)wstr, newlen);
+		rc = change_charset("UTF-8", "UTF-16LE", f->s, strlen(f->s), (char *)wstr, newlen * 2);
 		if (rc >= 0) {
 			break;
 		}
 	}
 
+	newlen = 0;
+	while (*wstr) {
+		newlen++;
+	}
+	*len_p = newlen;
 	return 4 + sizeof(wstr);
 }
 
@@ -493,7 +504,7 @@ static struct serializer pw_task_serializer[] = {
 	{ "show_req_squad", _INT8 },
 	{ "req_success_type", _INT32 },
 	{ "req_npc_type", _INT32 },
-	{ "_req_mobs_cnt", _INT32 },
+	{ "_req_monsters_cnt", _INT32 },
 	{ "_ptr8", _INT32 },
 	{ "_req_items_cnt", _INT32 },
 	{ "_ptr9", _INT32 },
@@ -582,6 +593,82 @@ read_award(void **buf_p, FILE *fp)
 	return 0;
 }
 
+static uint32_t
+pw_chain_table_size(struct pw_chain_table *tbl)
+{
+	struct pw_chain_el *chain;
+	uint32_t cnt = 0;
+
+	chain = tbl->chain;
+	while (chain) {
+		cnt += chain->count;
+		chain = chain->next;
+	}
+
+	return cnt;
+}
+
+#define SAVE_TBL_CNT(name, slzr, data) \
+	({ \
+		struct pw_chain_table *tbl = *(void **)serializer_get_field(slzr, name, data); \
+		struct pw_chain_el *chain = tbl->chain; \
+		uint32_t cnt = 0; \
+		while (chain) { \
+			cnt += chain->count; \
+			chain = chain->next; \
+		} \
+		*(uint32_t *)serializer_get_field(slzr, "_" name "_cnt", data) = cnt; \
+	})
+
+static void
+write_award(void **buf_p, FILE *fp, bool is_client)
+{
+	void *data, *buf;
+	struct serializer *slzr = pw_task_award_serializer;
+	struct pw_chain_table *table;
+	struct pw_chain_el *chain;
+	void *_el;
+
+	buf = data = *buf_p;
+	SAVE_TBL_CNT("item_groups", slzr, data);
+
+	if (is_client) {
+		fwrite(buf, 67, 1, fp);
+		buf += 67;
+		fwrite(g_zeroes, 5, 1, fp);
+		/* groups count */
+		fwrite(buf, 8, 1, fp);
+		buf += 8;
+	} else {
+		fwrite(buf, 75, 1, fp);
+		buf += 75;
+	}
+
+	table = *(void **)buf;
+	buf += sizeof(void *);
+
+	PW_CHAIN_TABLE_FOREACH(_el, chain, table) {
+		struct pw_chain_table *item_table;
+		struct pw_chain_el *chain;
+		void *el = _el;
+		void *el_start = el;
+		void *item;
+
+		SAVE_TBL_CNT("items", table->serializer, el_start);
+
+		fwrite(el, 5, 1, fp);
+		el += 5;
+
+		item_table = *(void **)serializer_get_field(table->serializer, "items", el_start);
+		PW_CHAIN_TABLE_FOREACH(item, chain, item_table) {
+			fwrite(item, item_table->el_size, 1, fp);
+		}
+	}
+
+	*buf_p = buf;
+}
+
+
 #define LOAD_CHAIN_TBL_CNT(fp, name, data_slzr, data_start, tbl_slzr, cnt) \
 	*(void **)(buf) = tbl_p = pw_chain_table_fread((fp), #name, cnt, tbl_slzr); \
 	if (!(tbl_p)) { \
@@ -593,7 +680,6 @@ read_award(void **buf_p, FILE *fp)
 #define LOAD_CHAIN_TBL(fp, name, data_slzr, data_start, tbl_slzr) \
 	count = *(uint32_t *)serializer_get_field((data_slzr), "_" name "_cnt", (data_start)); \
 	LOAD_CHAIN_TBL_CNT(fp, name, data_slzr, data_start, tbl_slzr, count)
-
 
 static int
 read_task(void *data, FILE *fp)
@@ -628,7 +714,7 @@ read_task(void *data, FILE *fp)
 	LOAD_CHAIN_TBL(fp, "premise_items", slzr, data, pw_task_item_serializer);
 	LOAD_CHAIN_TBL(fp, "free_given_items", slzr, data, pw_task_item_serializer);
 	LOAD_CHAIN_TBL(fp, "req_squad", slzr, data, pw_task_player_serializer);
-	LOAD_CHAIN_TBL(fp, "req_mobs", slzr, data, pw_task_mob_serializer);
+	LOAD_CHAIN_TBL(fp, "req_monsters", slzr, data, pw_task_mob_serializer);
 	LOAD_CHAIN_TBL(fp, "req_items", slzr, data, pw_task_item_serializer);
 
 	rc = read_award(&buf, fp);
@@ -763,6 +849,166 @@ read_task(void *data, FILE *fp)
 	return 0;
 }
 
+static void
+save_chain_tbl(FILE *fp, void **buf)
+{
+	void **tbl_ptr = *(void ***)buf;
+	struct pw_chain_table *tbl = *tbl_ptr;
+	struct pw_chain_el *chain;
+	void *el;
+
+	PW_CHAIN_TABLE_FOREACH(el, chain, tbl) {
+		fwrite(el, tbl->el_size, 1, fp);
+	}
+
+	*buf += sizeof(void *);
+}
+
+static void
+write_task(void *data, FILE *fp, bool is_client)
+{
+	void *buf = data;
+	struct pw_chain_table *tbl_p;
+	uint32_t id;
+	struct serializer *slzr = pw_task_serializer;
+
+	id = *(uint32_t *)data;
+	xor_bytes(serializer_get_field(slzr, "name", data), 30, id);
+
+	SAVE_TBL_CNT("date_spans", slzr, data);
+	SAVE_TBL_CNT("premise_items", slzr, data);
+	SAVE_TBL_CNT("free_given_items", slzr, data);
+	SAVE_TBL_CNT("req_squad", slzr, data);
+	SAVE_TBL_CNT("req_monsters", slzr, data);
+	SAVE_TBL_CNT("req_items", slzr, data);
+
+	fwrite(buf, 534, 1, fp);
+	buf += 534;
+
+	save_chain_tbl(fp, &buf);
+	save_chain_tbl(fp, &buf);
+	save_chain_tbl(fp, &buf);
+	save_chain_tbl(fp, &buf);
+	save_chain_tbl(fp, &buf);
+	save_chain_tbl(fp, &buf);
+
+	write_award(&buf, fp, is_client);
+	write_award(&buf, fp, is_client);
+
+	for (int a = 0; a < 2; a++) {
+		void *data_start = buf;
+		void *el;
+		struct pw_chain_el *chain;
+
+		SAVE_TBL_CNT("awards", pw_task_award_timed_serializer, data_start);
+
+		fwrite(buf, 24, 1, fp);
+		buf += 24;
+
+		tbl_p = *(void **)serializer_get_field(pw_task_award_timed_serializer, "awards", data_start);
+		buf += sizeof(void *);
+		PW_CHAIN_TABLE_FOREACH(el, chain, tbl_p) {
+			void *_el = el;
+			write_award(&_el, fp, is_client);
+		}
+	}
+
+	for (int a = 0; a < 2; a++) {
+		void *data_start = buf;
+		void *el;
+		struct pw_chain_el *chain;
+
+		SAVE_TBL_CNT("awards", pw_task_award_scaled_serializer, data_start);
+
+		fwrite(buf, 12, 1, fp);
+		buf += 12;
+
+		tbl_p = *(void **)serializer_get_field(pw_task_award_scaled_serializer, "awards", data_start);
+		buf += sizeof(void *);
+		PW_CHAIN_TABLE_FOREACH(el, chain, tbl_p) {
+			void *_el = el;
+			write_award(&_el, fp, is_client);
+		}
+	}
+
+	/* always zeroes */
+	fseek(fp, 32, SEEK_CUR);
+
+	for (int x = 0; x < 4; x++) {
+		uint32_t len = *(uint32_t *)buf;
+
+		fwrite(buf, sizeof(uint32_t), 1, fp);
+		buf += 4;
+
+		uint16_t *wstr = *(void **)buf;
+		xor_bytes(wstr, len, id);
+		fwrite(wstr, len * 2, 1, fp);
+
+		buf += sizeof(void *);
+	}
+
+	for (int p = 0; p < 5; p++) {
+		char *data_start = buf;
+		struct pw_chain_el *chain;
+		void *el;
+
+		xor_bytes(serializer_get_field(pw_task_talk_proc_serializer, "name", data_start), 64, id);
+		SAVE_TBL_CNT("questions", pw_task_talk_proc_serializer, data_start);
+
+		fwrite(buf, 136, 1, fp);
+		buf += 136;
+
+		tbl_p = *(void **)serializer_get_field(pw_task_talk_proc_serializer, "questions", data_start);
+		buf += sizeof(void *);
+		PW_CHAIN_TABLE_FOREACH(el, chain, tbl_p) {
+			char *data_start = el;
+			void *buf = el;
+
+			fwrite(buf, 8, 1, fp);
+			buf += 8;
+
+			uint32_t len = *(uint32_t *)buf;
+			fwrite(&len, sizeof(uint32_t), 1, fp);
+			buf += sizeof(uint32_t);
+
+			uint16_t *wstr = *(void **)buf;
+			xor_bytes(wstr, len, id);
+			fwrite(wstr, len * 2, 1, fp);
+
+			buf += sizeof(void *);
+
+			SAVE_TBL_CNT("choices", pw_task_talk_proc_question_serializer, data_start);
+			fwrite(buf, 4, 1, fp);
+			buf += 4;
+
+			{
+				struct pw_chain_table *tbl_p = *(void **)buf;
+				buf += sizeof(void *);
+				struct pw_chain_el *chain;
+				void *c;
+
+				PW_CHAIN_TABLE_FOREACH(c, chain, tbl_p) {
+					xor_bytes(serializer_get_field(pw_task_talk_proc_choice_serializer, "text", c), 64, id);
+					fwrite(c, tbl_p->el_size, 1, fp);
+				}
+			}
+		}
+	}
+
+	SAVE_TBL_CNT("sub_tasks", slzr, data);
+
+	fwrite(buf, 4, 1, fp);
+	buf += 4;
+
+	tbl_p = *(void **)serializer_get_field(slzr, "sub_tasks", data);
+	struct pw_chain_el *chain;
+	void *el;
+
+	PW_CHAIN_TABLE_FOREACH(el, chain, tbl_p) {
+		write_task(el, fp, is_client);
+	}
+}
+
 int
 pw_tasks_load(struct pw_task_file *taskf, const char *path)
 {
@@ -841,3 +1087,48 @@ pw_tasks_serialize(struct pw_task_file *taskf, const char *filename)
 	return 0;
 }
 
+int
+pw_tasks_save(struct pw_task_file *taskf, const char *path, bool is_client)
+{
+	uint32_t *jmp_offsets;
+	FILE* fp;
+	uint32_t count;
+	struct pw_chain_el *chain;
+	void *el;
+
+	fp = fopen(path, "wb");
+	if (!fp) {
+		return -errno;
+	}
+
+	taskf->version = is_client ? 56 : 55;
+	fwrite(&taskf->magic, sizeof(taskf->magic), 1, fp);
+	fwrite(&taskf->version, sizeof(taskf->version), 1, fp);
+  
+	count = pw_chain_table_size(taskf->tasks);
+	fwrite(&count, sizeof(count), 1, fp);
+
+	jmp_offsets = malloc(count * sizeof (*jmp_offsets));
+	if (!jmp_offsets) {
+		fclose(fp);
+		return -ENOMEM;
+	}
+
+	/* skip offset, we'll get back to them */
+	size_t jmp_table_pos = ftell(fp);
+	fseek(fp, count * sizeof (*jmp_offsets), SEEK_CUR);
+
+	uint32_t i = 0;
+	PW_CHAIN_TABLE_FOREACH(el, chain, taskf->tasks) {
+		jmp_offsets[i++] = ftell(fp);
+		write_task(el, fp, is_client);
+	}
+
+	assert(i == count);
+	fseek(fp, jmp_table_pos, SEEK_SET);
+	fwrite(jmp_offsets, sizeof(uint32_t) * count, 1, fp);
+
+	free(jmp_offsets);
+	fclose(fp);
+	return 0;
+}

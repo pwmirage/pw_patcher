@@ -136,9 +136,15 @@ main(int argc, char *argv[])
 		return 1;
 	}
 
-	rc = pw_tasks_serialize(&taskf, "tasks.json");
+	//rc = pw_tasks_serialize(&taskf, "tasks.json");
 	if (rc) {
 		PWLOG(LOG_ERROR, "pw_tasks_serialize() failed: %d\n", rc);
+		return 1;
+	}
+
+	rc = pw_tasks_save(&taskf, "newtasks.data", true);
+	if (rc) {
+		PWLOG(LOG_ERROR, "pw_tasks_save() failed: %d\n", rc);
 		return 1;
 	}
 	return 0;
