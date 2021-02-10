@@ -272,6 +272,47 @@ on_init(int argc, char *argv[])
 	enable_button(g_repair_button, true);
 }
 
+static int
+save_serverlist(void)
+{
+	FILE *fp = fopen("element/userdata/server/serverlist.txt", "wb");
+	char buf[128];
+	uint16_t wbuf[64] = {0};
+	const char *srv_name;
+	const char *srv_ip;
+
+	if (!fp) {
+		return -errno;
+	}
+
+
+	uint16_t bom = 0xfeff;
+	fwrite(&bom, sizeof(bom), 1, fp);
+
+	if (strcmp(g_branch_name, "public") == 0) {
+		srv_name = "Mirage France";
+		srv_ip = "29000:91.121.91.123";
+	} else {
+		srv_name = "Mirage Test1";
+		srv_ip = "29000:miragetest.ddns.net";
+	}
+	snprintf(buf, sizeof(buf), "\r\n%s\t%s\t1", srv_name, srv_ip);
+
+	change_charset("UTF-8", "UTF-16LE", buf, sizeof(buf), (char *)wbuf, sizeof(wbuf));
+	fwrite(wbuf, strlen(buf) * 2, 1, fp);
+	fclose(fp);
+
+	fp = fopen("element/userdata/currentserver.ini", "w");
+	if (!fp) {
+		/* ignore it */
+		return 0;
+	}
+
+	fprintf(fp, "[Server]\nCurrentServer=%s\nCurrentServerAddress=%s\nCurrentLine=\n", srv_name, srv_ip);
+	fclose(fp);
+	return 0;
+}
+
 void
 on_fini(void)
 {
@@ -489,6 +530,13 @@ patch_cb(void *arg1, void *arg2)
 	set_progress(10 + 80);
 	PWLOG(LOG_INFO, "Saving.\n");
 	set_text(g_status_right_lbl, "Saving files...");
+
+	rc = save_serverlist();
+	if (rc) {
+		set_text(g_status_right_lbl, "Saving failed. No permission to access game directories?");
+		return;
+	}
+
 	rc = pw_elements_save(&elements, "element/data/elements.data", false);
 	if (rc) {
 		set_text(g_status_right_lbl, "Saving failed. No permission to access game directories?");
