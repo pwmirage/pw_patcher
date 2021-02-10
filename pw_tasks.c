@@ -22,6 +22,10 @@ extern struct pw_idmap *g_elements_map;
 
 #define TASK_FILE_MAGIC 0x93858361
 
+#ifndef ENODATA
+#define ENODATA 87
+#endif
+
 enum pw_task_service_type
 {
   NPC_TALK = 0x80000000,

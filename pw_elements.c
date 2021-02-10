@@ -1593,7 +1593,7 @@ pw_elements_serialize(struct pw_elements *elements)
 int
 pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 {
-	struct pw_chain_table *table;
+	struct pw_chain_table *table = NULL;
 	void **table_el;
 	const char *obj_type;
 	int64_t id;
@@ -1619,7 +1619,7 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 	}
 
 	if (i == elements->tables_count) {
-		if (strcmp(table->name, "metadata") != 0) {
+		if (table && strcmp(table->name, "metadata") != 0) {
 			PWLOG(LOG_ERROR, "unknown obj type\n");
 		}
 		return -1;
