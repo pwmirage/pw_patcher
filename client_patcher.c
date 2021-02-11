@@ -28,6 +28,8 @@ struct task_ctx {
 	void *arg2;
 };
 
+int calc_sha1_hash(const char *path, char *hash_buf, size_t buflen);
+
 DWORD __stdcall
 task_cb(void *arg)
 {
@@ -133,12 +135,13 @@ check_deps(void)
 	return nResult == 0 ? -1 : 0;
 }
 
+
 void
 on_init(int argc, char *argv[])
 {
 	char tmpbuf[1024];
 	size_t len;
-	int rc;
+	int i, rc;
 
 	if (argc >= 3) {
 		if (strcmp(argv[1], "-b") == 0) {
@@ -191,11 +194,47 @@ on_init(int argc, char *argv[])
 	}
 	set_text(g_changelog_lbl, motd);
 
-	if (g_version.version != JSi(g_latest_version, "version")) {
-		rc = download("https://raw.githubusercontent.com/pwmirage/version/master/banner.bmp", "patcher/banner");
-		if (rc == 0) {
-			set_banner("patcher/banner");
+	set_text(g_status_left_lbl, "Checking prerequisites ...");
+
+	struct cjson *files = JS(g_latest_version, "files");
+	for (i = 0; i < files->count; i++) {
+		struct cjson *file = JS(files, i);
+		const char *name = JSs(file, "name");
+		const char *sha = JSs(file, "sha256");
+		const char *url = JSs(file, "url");
+
+		/* no hidden files and no directories (also no ../) */
+		if (name[0] == '.' || strstr(name, "/")) {
+			PWLOG(LOG_ERROR, "Invalid characters in the filename of a patcher file: %s\n", name);
+			continue;
 		}
+
+		char namebuf[280];
+		snprintf(namebuf, sizeof(namebuf), "patcher/%s", name);
+		rc = calc_sha1_hash(namebuf, tmpbuf, sizeof(tmpbuf));
+		if (rc || strcmp(tmpbuf, sha) != 0) {
+			rc = download(url, namebuf);
+			if (rc != 0) {
+				char errmsg[512];
+				snprintf(errmsg, sizeof(errmsg), "Failed to download \"%s\" from the server. Do you want to retry?", namebuf);
+
+				rc = MessageBox(0, errmsg, "Error", MB_YESNO);
+				if (rc == IDYES) {
+					i--;
+					continue;
+				} else {
+					snprintf(errmsg, sizeof(errmsg), "Failed to download \"%s\".", namebuf);
+					set_text(g_status_right_lbl, errmsg);
+					return;
+				}
+			}
+		}
+
+		if (strcmp(namebuf, "patcher/banner") == 0) {
+			set_banner(namebuf);
+		}
+
+		file = file->next;
 	}
 
 	if (JSi(g_latest_version, "patcher_version") >= 11) {
@@ -213,7 +252,6 @@ on_init(int argc, char *argv[])
 		return;
 	}
 
-	set_text(g_status_left_lbl, "Checking prerequisites ...");
 	if (access("element/d3d8.dll", F_OK) != 0) {
 		rc = download("https://github.com/crosire/d3d8to9/releases/latest/download/d3d8.dll", "element/d3d8.dll");
 		if (rc != 0) {
