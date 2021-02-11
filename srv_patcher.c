@@ -129,25 +129,27 @@ main(int argc, char *argv[])
 
 	setlocale(LC_ALL, "en_US.UTF-8");
 
-	struct pw_task_file taskf;
-	rc = pw_tasks_load(&taskf, "tasks.data");
-	if (rc) {
-		PWLOG(LOG_ERROR, "pw_tasks_load() failed: %d\n", rc);
-		return 1;
-	}
+	while (0) {
+		struct pw_task_file taskf;
+		rc = pw_tasks_load(&taskf, "tasks.data");
+		if (rc) {
+			PWLOG(LOG_ERROR, "pw_tasks_load() failed: %d\n", rc);
+			return 1;
+		}
 
-	//rc = pw_tasks_serialize(&taskf, "tasks.json");
-	if (rc) {
-		PWLOG(LOG_ERROR, "pw_tasks_serialize() failed: %d\n", rc);
-		return 1;
-	}
+		//rc = pw_tasks_serialize(&taskf, "tasks.json");
+		if (rc) {
+			PWLOG(LOG_ERROR, "pw_tasks_serialize() failed: %d\n", rc);
+			return 1;
+		}
 
-	rc = pw_tasks_save(&taskf, "newtasks.data", true);
-	if (rc) {
-		PWLOG(LOG_ERROR, "pw_tasks_save() failed: %d\n", rc);
-		return 1;
+		rc = pw_tasks_save(&taskf, "newtasks.data", true);
+		if (rc) {
+			PWLOG(LOG_ERROR, "pw_tasks_save() failed: %d\n", rc);
+			return 1;
+		}
+		return 0;
 	}
-	return 0;
 
 
 	if (argc < 2) {
