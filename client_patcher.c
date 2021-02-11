@@ -188,15 +188,7 @@ on_init(int argc, char *argv[])
 	}
 
 	char *motd = JSs(g_latest_version, "message");
-	char *c = motd;
-
-	while (*c) {
-		if (*c == '\\' && *(c + 1) == 'n') {
-			*c = '\r';
-			*(c + 1) = '\n';
-		}
-		c++;
-	}
+	normalize_json_string(motd);
 	set_text(g_changelog_lbl, motd);
 
 	set_text(g_status_left_lbl, "Checking prerequisites ...");
@@ -208,6 +200,8 @@ on_init(int argc, char *argv[])
 		const char *sha = JSs(file, "sha256");
 		const char *url = JSs(file, "url");
 
+		set_progress(100 * i / files->count);
+
 		/* no hidden files and no directories (also no ../) */
 		if (name[0] == '.' || strstr(name, "/")) {
 			PWLOG(LOG_ERROR, "Invalid characters in the filename of a patcher file: %s\n", name);
@@ -216,31 +210,39 @@ on_init(int argc, char *argv[])
 
 		char namebuf[280];
 		snprintf(namebuf, sizeof(namebuf), "patcher/%s", name);
+		tmpbuf[0] = 0;
 		rc = calc_sha1_hash(namebuf, tmpbuf, sizeof(tmpbuf));
-		if (rc || strcmp(tmpbuf, sha) != 0) {
-			rc = download(url, namebuf);
-			if (rc != 0) {
-				char errmsg[512];
-				snprintf(errmsg, sizeof(errmsg), "Failed to download \"%s\" from the server. Do you want to retry?", namebuf);
+		if (rc == 0 && strcmp(tmpbuf, sha) == 0) {
+			/* nothing to update */
+			continue;
+		}
 
-				rc = MessageBox(0, errmsg, "Error", MB_YESNO);
-				if (rc == IDYES) {
-					i--;
-					continue;
-				} else {
-					snprintf(errmsg, sizeof(errmsg), "Failed to download \"%s\".", namebuf);
-					set_text(g_status_right_lbl, errmsg);
-					return;
-				}
+		PWLOG(LOG_INFO, "sha mismatch on %s. expected=%s, got=%s\n", name, sha, tmpbuf);
+		snprintf(tmpbuf, sizeof(tmpbuf), "Downloading %s", name);
+		set_text(g_status_right_lbl, tmpbuf);
+
+		rc = download(url, namebuf);
+		if (rc != 0) {
+			char errmsg[512];
+			snprintf(errmsg, sizeof(errmsg), "Failed to download \"%s\" from the server. Do you want to retry?", namebuf);
+
+			rc = MessageBox(0, errmsg, "Error", MB_YESNO);
+			if (rc == IDYES) {
+				i--;
+				continue;
+			} else {
+				snprintf(errmsg, sizeof(errmsg), "Failed to download \"%s\".", namebuf);
+				set_text(g_status_right_lbl, errmsg);
+				return;
 			}
 		}
 
 		if (strcmp(namebuf, "patcher/banner") == 0) {
 			set_banner(namebuf);
 		}
-
-		file = file->next;
 	}
+
+	set_text(g_status_right_lbl, "");
 
 	if (JSi(g_latest_version, "patcher_version") >= 11) {
 		g_patcher_outdated = true;

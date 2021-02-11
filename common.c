@@ -237,14 +237,36 @@ normalize_json_string(char *str)
 	char *write_b = str;
 
 	while (*read_b) { /* write_b is slacking behind */
-		*write_b = *read_b;
-		read_b++;
-		write_b++;
+		char c = *read_b;
+
+		if (*read_b == '\\' && *(read_b + 1) == 'r') {
+			/* skip \r entirely */
+			read_b++;
+			read_b++;
+			continue;
+		}
+
+		if (*read_b == '\\' && *(read_b + 1) == 'n') {
+			/* replace first \\ with newline, skip second \\ */
+			c = '\n';
+			read_b++;
+		}
+
+		if (*read_b == '\\' && *(read_b + 1) == '"') {
+			/* skip first \\ */
+			read_b++;
+			c = *read_b;
+		}
 
 		if (*read_b == '\\' && *(read_b + 1) == '\\') {
 			/* skip second \ in strings */
 			read_b++;
 		}
+
+		*write_b = c;
+		read_b++;
+		write_b++;
+
 	}
 
 	*write_b = 0;
