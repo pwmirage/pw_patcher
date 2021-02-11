@@ -167,7 +167,7 @@ on_init(int argc, char *argv[])
 
 	set_text(g_status_left_lbl, "Fetching latest version ...");
 
-	snprintf(tmpbuf, sizeof(tmpbuf), "http://miragetest.ddns.net/editor/project/fetch/%s/since/%s/%u",
+	snprintf(tmpbuf, sizeof(tmpbuf), "https://pwmirage.com/editor/project/fetch/%s/since/%s/%u",
 			g_branch_name, g_version.cur_hash, g_version.version);
 
 	rc = download_mem(tmpbuf, &g_latest_version_str, &len);
@@ -612,7 +612,7 @@ repair_cb(void *arg1, void *arg2)
 
 	set_text(g_status_left_lbl, "Fetching latest version ...");
 
-	snprintf(tmpbuf, sizeof(tmpbuf), "http://miragetest.ddns.net/editor/project/fetch/%s/since/0/%u",
+	snprintf(tmpbuf, sizeof(tmpbuf), "https://pwmirage.com/editor/project/fetch/%s/since/0/%u",
 			g_branch_name, g_version.version);
 
 	cjson_free(g_latest_version);

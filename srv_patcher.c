@@ -185,7 +185,7 @@ main(int argc, char *argv[])
 		return 1;
 	}
 
-	snprintf(tmpbuf, sizeof(tmpbuf), "http://miragetest.ddns.net/editor/project/fetch/%s/since/%s/%u",
+	snprintf(tmpbuf, sizeof(tmpbuf), "https://pwmirage.com/editor/project/fetch/%s/since/%s/%u",
 			branch_name, version.cur_hash, version.version);
 
 	rc = download_mem(tmpbuf, &buf, &num_bytes);
