@@ -165,6 +165,11 @@ on_init(int argc, char *argv[])
 		snprintf(g_version.cur_hash, sizeof(g_version.cur_hash), "0");
 	}
 
+	if (access("patcher", F_OK) != 0) {
+		MessageBox(0, "Can't find the \"patcher\" directory. Please redownload a full client.", "Error", MB_OK);
+		exit(0);
+	}
+
 	set_text(g_status_left_lbl, "Fetching latest version ...");
 
 	snprintf(tmpbuf, sizeof(tmpbuf), "https://pwmirage.com/editor/project/fetch/%s/since/%s/%u",
