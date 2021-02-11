@@ -15,131 +15,12 @@
 #include "cjson_ext.h"
 #include "pw_elements.h"
 
-static char g_icon_names[4096 / 32 * 2048 / 32 + 1][64] = {};
-static char g_item_colors[65536] = {};
-static char *g_item_descs[65536] = {};
+char g_icon_names[4096 / 32 * 2048 / 32 + 1][64] = {};
+char g_item_colors[65536] = {};
+char *g_item_descs[65536] = {};
 
 uint32_t g_elements_last_id;
 struct pw_idmap *g_elements_map;
-
-static int
-load_icons(void)
-{
-	FILE *fp = fopen("patcher/iconlist_ivtrm.txt", "r");
-	char *line = NULL;
-	size_t len = 64;
-	ssize_t read;
-	char *tmp = calloc(1, len);
-
-	if (fp == NULL) {
-		PWLOG(LOG_ERROR, "Can't open iconlist_ivtrm.txt\n");
-		free(tmp);
-		return -1;
-	}
-
-	/* skip header */
-	for (int i = 0; i < 4; i++) {
-		getline(&line, &len, fp);
-	}
-
-	unsigned i = 0;
-	while ((read = getline(&tmp, &len, fp)) != -1) {
-		sprint(g_icon_names[i], 64, tmp, strlen(tmp));
-		i++;
-	}
-
-	PWLOG(LOG_INFO, "Parsed %u icons\n", i);
-	fclose(fp);
-	free(tmp);
-	return 0;
-}
-
-static int
-load_colors(void)
-{
-	FILE *fp = fopen("patcher/item_color.txt", "r");
-	size_t len = 64;
-	ssize_t read;
-	char *line= calloc(1, len);
-
-	if (fp == NULL) {
-		PWLOG(LOG_ERROR, "Can't open item_color.txt\n");
-		return -1;
-	}
-
-	unsigned i = 0;
-	while ((read = getline(&line, &len, fp)) != -1) {
-		char *id, *color;
-
-		id = strtok(line, "\t");
-		if (id == NULL || strlen(id) == 0) {
-			break;
-		}
-
-		color = strtok(NULL, "\t");
-		g_item_colors[atoi(id)] = (char)atoi(color);
-
-		i++;
-	}
-
-	PWLOG(LOG_INFO, "Parsed %u item colors\n", i);
-	fclose(fp);
-	return 0;
-}
-
-static int
-load_descriptions(void)
-{
-	FILE *fp = fopen("patcher/item_ext_desc.txt", "r");
-	size_t len = 0;
-	ssize_t read;
-	char *line = NULL;
-
-	if (fp == NULL) {
-		PWLOG(LOG_ERROR, "Can't open item_ext_desc.txt\n");
-		return -1;
-	}
-
-	/* skip header */
-	for (int i = 0; i < 5; i++) {
-		getline(&line, &len, fp);
-	}
-
-	unsigned i = 0;
-
-	len = 2048;
-	line = malloc(len);
-	if (!line) {
-		PWLOG(LOG_ERROR, "malloc() failed\n");
-		return -1;
-	}
-	while ((read = getline(&line, &len, fp)) != -1) {
-		char *id, *txt;
-
-		id = strtok(line, " ");
-		if (id == NULL || strlen(id) == 0) {
-			break;
-		}
-
-		txt = strtok(NULL, "\"");
-		txt = strtok(NULL, "\"");
-		g_item_descs[atoi(id)] = txt;
-		/* FIXME: line is technically leaked */
-
-		len = 2048;
-		line = malloc(len);
-		if (!line) {
-			PWLOG(LOG_ERROR, "malloc() failed\n");
-			return -1;
-		}
-		i++;
-	}
-
-	PWLOG(LOG_INFO, "Parsed %u item descriptions\n", i);
-	fclose(fp);
-	return 0;
-}
-
 
 static size_t
 icon_serialize_fn(FILE *fp, struct serializer *f, void *data)
@@ -1808,7 +1689,6 @@ int
 pw_elements_load(struct pw_elements *el, const char *filename, bool clean_load)
 {
 	FILE *fp = fopen(filename, "rb");
-	int rc;
 
 	if (fp == NULL) {
 		PWLOG(LOG_ERROR, "cant open %s\n", filename);
@@ -1963,10 +1843,7 @@ pw_elements_load(struct pw_elements *el, const char *filename, bool clean_load)
 
 	fclose(fp);
 
-	rc = load_icons();
-	rc = rc || load_colors();
-	rc = rc || load_descriptions();
-	return rc;
+	return 0;
 }
 
 static void

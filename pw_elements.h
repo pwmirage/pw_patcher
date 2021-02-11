@@ -23,6 +23,10 @@ struct pw_idmap;
 extern uint32_t g_elements_last_id;
 extern struct pw_idmap *g_elements_map;
 
+extern char g_icon_names[][64];
+extern char g_item_colors[];
+extern char *g_item_descs[];
+
 int pw_elements_load(struct pw_elements *el, const char *filename, bool clean_load);
 int pw_elements_save(struct pw_elements *el, const char *filename, bool is_server);
 void pw_elements_serialize(struct pw_elements *elements);
