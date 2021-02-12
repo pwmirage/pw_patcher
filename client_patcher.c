@@ -167,7 +167,8 @@ on_init(int argc, char *argv[])
 
 	if (access("patcher", F_OK) != 0) {
 		MessageBox(0, "Can't find the \"patcher\" directory. Please redownload a full client.", "Error", MB_OK);
-		exit(0);
+		ui_thread(quit_cb, NULL, NULL);
+		return;
 	}
 
 	set_text(g_status_left_lbl, "Fetching latest version ...");
@@ -244,7 +245,7 @@ on_init(int argc, char *argv[])
 
 	set_text(g_status_right_lbl, "");
 
-	if (JSi(g_latest_version, "patcher_version") >= 11) {
+	if (JSi(g_latest_version, "patcher_version") >= 13) {
 		g_patcher_outdated = true;
 		set_text(g_patch_button, "Update");
 		enable_button(g_patch_button, true);
