@@ -34,8 +34,6 @@ calc_sha1_hash(const char *path, char *hash_buf, size_t buflen)
 	if (INVALID_HANDLE_VALUE == hFile)
 	{
 		dwStatus = GetLastError();
-		printf("Error opening file %s\nError: %d\n", path,
-			dwStatus);
 		return dwStatus;
 	}
 
@@ -47,7 +45,6 @@ calc_sha1_hash(const char *path, char *hash_buf, size_t buflen)
 		CRYPT_VERIFYCONTEXT))
 	{
 		dwStatus = GetLastError();
-		printf("CryptAcquireContext failed: %d\n", dwStatus);
 		CloseHandle(hFile);
 		return dwStatus;
 	}
@@ -56,14 +53,12 @@ calc_sha1_hash(const char *path, char *hash_buf, size_t buflen)
 	if (!CryptCreateHash(hProv, 0x0000800c, 0, 0, &hHash))
 	{
 		dwStatus = GetLastError();
-		printf("CryptAcquireContext failed: %d\n", dwStatus);
 		CloseHandle(hFile);
 		CryptReleaseContext(hProv, 0);
 		return dwStatus;
 	}
 
-	while (bResult = ReadFile(hFile, rgbFile, BUFSIZE,
-		&cbRead, NULL))
+	while ((bResult = ReadFile(hFile, rgbFile, BUFSIZE, &cbRead, NULL)))
 	{
 		if (0 == cbRead)
 		{
@@ -73,7 +68,6 @@ calc_sha1_hash(const char *path, char *hash_buf, size_t buflen)
 		if (!CryptHashData(hHash, rgbFile, cbRead, 0))
 		{
 			dwStatus = GetLastError();
-			printf("CryptHashData failed: %d\n", dwStatus);
 			CryptReleaseContext(hProv, 0);
 			CryptDestroyHash(hHash);
 			CloseHandle(hFile);
@@ -84,7 +78,6 @@ calc_sha1_hash(const char *path, char *hash_buf, size_t buflen)
 	if (!bResult)
 	{
 		dwStatus = GetLastError();
-		printf("ReadFile failed: %d\n", dwStatus);
 		CryptReleaseContext(hProv, 0);
 		CryptDestroyHash(hHash);
 		CloseHandle(hFile);
@@ -95,7 +88,6 @@ calc_sha1_hash(const char *path, char *hash_buf, size_t buflen)
 	if (!CryptGetHashParam(hHash, HP_HASHVAL, rgbHash, &cbHash, 0))
 	{
 		dwStatus = GetLastError();
-		printf("CryptGetHashParam failed: %d\n", dwStatus);
 	} else {
 		DWORD i;
 
