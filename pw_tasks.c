@@ -331,6 +331,22 @@ static struct serializer pw_task_item_group_serializer[] = {
 	{ "", _TYPE_END },
 };
 
+struct __attribute__((packed)) pw_task_award {
+	uint32_t coins;
+	uint32_t xp;
+	uint32_t new_quest;
+	uint32_t sp;
+	uint32_t rep;
+	uint32_t culti;
+	uint32_t new_waypoint;
+	uint32_t storage_slots;
+
+	uint32_t inventory_slots;
+	uint32_t petbag_slots;
+	uint32_t chi;
+	/* ... and more */
+};
+
 static struct serializer pw_task_award_serializer[] = {
 	{ "coins", _INT32 },
 	{ "xp", _INT32 },
@@ -1092,7 +1108,7 @@ pw_tasks_serialize(struct pw_task_file *taskf, const char *filename)
 }
 
 int
-pw_tasks_save(struct pw_task_file *taskf, const char *path, bool is_client)
+pw_tasks_save(struct pw_task_file *taskf, const char *path, bool is_server)
 {
 	uint32_t *jmp_offsets;
 	FILE* fp;
@@ -1105,7 +1121,7 @@ pw_tasks_save(struct pw_task_file *taskf, const char *path, bool is_client)
 		return -errno;
 	}
 
-	taskf->version = is_client ? 56 : 55;
+	taskf->version = is_server ? 55 : 56;
 	fwrite(&taskf->magic, sizeof(taskf->magic), 1, fp);
 	fwrite(&taskf->version, sizeof(taskf->version), 1, fp);
   
@@ -1125,7 +1141,7 @@ pw_tasks_save(struct pw_task_file *taskf, const char *path, bool is_client)
 	uint32_t i = 0;
 	PW_CHAIN_TABLE_FOREACH(el, chain, taskf->tasks) {
 		jmp_offsets[i++] = ftell(fp);
-		write_task(el, fp, is_client);
+		write_task(el, fp, !is_server);
 	}
 
 	assert(i == count);
@@ -1135,4 +1151,65 @@ pw_tasks_save(struct pw_task_file *taskf, const char *path, bool is_client)
 	free(jmp_offsets);
 	fclose(fp);
 	return 0;
+}
+
+void
+pw_tasks_adjust_rates(struct pw_task_file *taskf, struct cjson *rates)
+{
+	void *task;
+	struct pw_chain_el *chain;
+
+	double xp_rate = JSf(rates, "quest", "xp");
+	double sp_rate = JSf(rates, "quest", "sp");
+	double coins_rate = JSf(rates, "quest", "coin");
+
+	fprintf(stderr, "Adjusting rates:\n");
+	fprintf(stderr, "  quest xp:   %8.4f\n", xp_rate);
+	fprintf(stderr, "  quest sp:   %8.4f\n", sp_rate);
+	fprintf(stderr, "  quest coin: %8.4f\n", coins_rate);
+
+	void adjust_award_rates(struct pw_task_award *award) {
+		award->xp *= xp_rate;
+		award->sp *= sp_rate;
+		award->coins *= coins_rate;
+	}
+
+	struct serializer *slzr = taskf->tasks->serializer;
+	int success_award_off = serializer_get_offset(slzr, "success_award");
+	int failure_award_off = serializer_get_offset(slzr, "failure_award");
+	struct serializer *timed_award_slzr;
+	int success_timed_awards_tbl_off = serializer_get_offset_slzr(slzr, "success_timed_award", &timed_award_slzr);
+	int failure_timed_awards_tbl_off = serializer_get_offset_slzr(slzr, "failure_timed_award", &timed_award_slzr);
+
+	success_timed_awards_tbl_off += serializer_get_offset(timed_award_slzr->ctx, "awards");
+	failure_timed_awards_tbl_off += serializer_get_offset(timed_award_slzr->ctx, "awards");
+
+	struct serializer *scaled_award_slzr;
+	int success_scaled_awards_tbl_off = serializer_get_offset_slzr(slzr, "success_scaled_award", &scaled_award_slzr);
+	int failure_scaled_awards_tbl_off = serializer_get_offset_slzr(slzr, "failure_scaled_award", &scaled_award_slzr);
+	success_scaled_awards_tbl_off += serializer_get_offset(scaled_award_slzr->ctx, "awards");
+	failure_scaled_awards_tbl_off += serializer_get_offset(scaled_award_slzr->ctx, "awards");
+
+	PW_CHAIN_TABLE_FOREACH(task, chain, taskf->tasks) {
+		void *el;
+		struct pw_chain_el *chain;
+		int i;
+
+		adjust_award_rates(task + success_award_off);
+		adjust_award_rates(task + failure_award_off);
+
+		struct pw_chain_table *success_timed = *(void **)(task + success_timed_awards_tbl_off);
+		struct pw_chain_table *failure_timed = *(void **)(task + failure_timed_awards_tbl_off);
+		struct pw_chain_table *success_scaled = *(void **)(task + success_scaled_awards_tbl_off);
+		struct pw_chain_table *failure_scaled = *(void **)(task + failure_scaled_awards_tbl_off);
+		struct pw_chain_table *tables[] = { success_timed, failure_timed, success_scaled, failure_scaled };
+
+		for (i = 0; i < sizeof(tables) / sizeof(tables[0]); i++) {
+			struct pw_chain_table *table = tables[i];
+
+			PW_CHAIN_TABLE_FOREACH(el, chain, table) {
+				adjust_award_rates(el);
+			}
+		}
+	}
 }

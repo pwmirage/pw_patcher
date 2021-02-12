@@ -619,20 +619,16 @@ deserialize_log(struct cjson *json_f, void *data)
 	}
 }
 
-int
-serializer_get_size(struct serializer *slzr_table)
+static int
+_serializer_get_offset(struct serializer **slzr_p, const char *name)
 {
-	return serializer_get_offset(slzr_table, NULL);
-}
-
-int
-serializer_get_offset(struct serializer *slzr, const char *name)
-{
+	struct serializer *slzr = *slzr_p;
 	int offset = 0;
 	int rc;
 
 	while (true) {
 		if (name && strcmp(slzr->name, name) == 0) {
+			*slzr_p = slzr;
 			return offset;
 		}
 
@@ -687,11 +683,33 @@ serializer_get_offset(struct serializer *slzr, const char *name)
 		slzr++;
 	}
 
+	*slzr_p = slzr;
 	if (name) {
 		return -1;
 	} else {
 		return offset;
 	}
+}
+
+int
+serializer_get_offset(struct serializer *slzr, const char *name)
+{
+	return _serializer_get_offset(&slzr, name);
+}
+
+int
+serializer_get_size(struct serializer *slzr_table)
+{
+	return serializer_get_offset(slzr_table, NULL);
+}
+
+int
+serializer_get_offset_slzr(struct serializer *slzr_table, const char *name, struct serializer **slzr)
+{
+	int rc = _serializer_get_offset(&slzr_table, name);
+
+	*slzr = slzr_table;
+	return rc;
 }
 
 void *

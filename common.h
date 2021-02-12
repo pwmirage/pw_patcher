@@ -121,7 +121,8 @@ long _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 		unsigned data_cnt, bool skip_empty_objs, bool newlines, bool force_object);
 int serializer_get_size(struct serializer *slzr_table);
 int serializer_get_offset(struct serializer *slzr_table, const char *name);
-void *serializer_get_field(struct serializer *slzr, const char *name, void *data);
+void *serializer_get_field(struct serializer *slzr_table, const char *name, void *data);
+int serializer_get_offset_slzr(struct serializer *slzr_table, const char *name, struct serializer **slzr);
 
 void deserialize(struct cjson *obj, struct serializer *slzr_table, void *data);
 void deserialize_log(struct cjson *json_f, void *data);
@@ -151,5 +152,7 @@ int pw_version_save(struct pw_version *ver);
 
 int pw_tasks_load(struct pw_task_file *taskf, const char *path);
 int pw_tasks_serialize(struct pw_task_file *taskf, const char *filename);
-int pw_tasks_save(struct pw_task_file *taskf, const char *path, bool is_client);
+int pw_tasks_save(struct pw_task_file *taskf, const char *path, bool is_server);
+void pw_tasks_adjust_rates(struct pw_task_file *taskf, struct cjson *rates);
+
 #endif /* PW_COMMON_H */

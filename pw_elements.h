@@ -31,6 +31,7 @@ int pw_elements_load(struct pw_elements *el, const char *filename, bool clean_lo
 int pw_elements_save(struct pw_elements *el, const char *filename, bool is_server);
 void pw_elements_serialize(struct pw_elements *elements);
 int pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj);
+void pw_elements_adjust_rates(struct pw_elements *elements, struct cjson *rates);
 
 struct talk_proc {
 	int32_t id;

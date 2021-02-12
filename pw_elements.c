@@ -1282,6 +1282,55 @@ static struct serializer armor_sets_serializer[] = {
 	{ "", _TYPE_END },
 };
 
+struct __attribute__((packed)) param_adjust_config {
+	int32_t id;
+	uint16_t name[32];
+	struct {
+		int32_t level_diff;
+		float exp;
+		float sp;
+		float money;
+		float matter;
+		float attack;
+	} adjust[16];
+	struct {
+		float adjust_xp;
+		float adjust_sp;
+	} team_adjust[11];
+	struct {
+		float adjust_xp;
+		float adjust_sp;
+	} team_profession_adjust[9];
+};
+
+static struct serializer param_adjust_config_serializer[] = {
+	{ "id", _INT32 },
+	{ "name", _WSTRING(32) },
+	{ "adjust", _ARRAY_START(16) },
+		{ "level_diff", _INT32 },
+		{ "exp", _FLOAT },
+		{ "sp", _FLOAT },
+		{ "money", _FLOAT },
+		{ "matter", _FLOAT },
+		{ "attack", _FLOAT },
+	{ "", _ARRAY_END },
+	{ "team_adjust", _ARRAY_START(11) },
+		{ "exp", _FLOAT },
+		{ "sp", _FLOAT },
+	{ "", _ARRAY_END },
+	{ "team_profession_adjust", _ARRAY_START(9) },
+		{ "exp", _FLOAT },
+		{ "sp", _FLOAT },
+	{ "", _ARRAY_END },
+	{ "", _TYPE_END },
+};
+
+struct __attribute__((packed)) player_levelexp_config {
+	int32_t id;
+	uint16_t name[32];
+	int32_t exp[150];
+};
+
 static struct serializer damagerune_sub_type_serializer[] = { { "", _TYPE_END } };
 static struct serializer armorrune_sub_type_serializer[] = { { "", _TYPE_END } };
 static struct serializer skilltome_sub_type_serializer[] = { { "", _TYPE_END } };
@@ -1316,7 +1365,6 @@ static struct serializer recipe_major_type_serializer[] = { { "", _TYPE_END } };
 static struct serializer recipe_sub_type_serializer[] = { { "", _TYPE_END } };
 static struct serializer enemy_faction_config_serializer[] = { { "", _TYPE_END } };
 static struct serializer charracter_class_config_serializer[] = { { "", _TYPE_END } };
-static struct serializer param_adjust_config_serializer[] = { { "", _TYPE_END } };
 static struct serializer player_action_info_config_serializer[] = { { "", _TYPE_END } };
 static struct serializer face_faling_essence_serializer[] = { { "", _TYPE_END } };
 static struct serializer player_levelexp_config_serializer[] = { { "", _TYPE_END } };
@@ -1948,4 +1996,64 @@ pw_elements_save(struct pw_elements *el, const char *filename, bool is_server)
 	fclose(fp);
 
 	return pw_idmap_save(g_elements_map);
+}
+
+static struct pw_chain_table *
+get_chain_table(struct pw_elements *elements, const char *name)
+{
+	struct pw_chain_table *table;
+	int i;
+
+	for (i = 0; i < elements->tables_count; i++) {
+		table = elements->tables[i];
+		if (strcmp(table->name, name) == 0) {
+			return table;
+		}
+	}
+
+	return NULL;
+}
+
+void
+pw_elements_adjust_rates(struct pw_elements *elements, struct cjson *rates)
+{
+	double xp_rate = JSf(rates, "mob", "xp");
+	double sp_rate = JSf(rates, "mob", "sp");
+	double coin_rate = JSf(rates, "mob", "coin");
+	double pet_xp = JSf(rates, "pet_xp");
+
+	fprintf(stderr, "Adjusting rates:\n");
+	fprintf(stderr, "  mob xp:   %8.4f\n", xp_rate);
+	fprintf(stderr, "  mob sp:   %8.4f\n", sp_rate);
+	fprintf(stderr, "  mob coin: %8.4f\n", coin_rate);
+	fprintf(stderr, "  pet xp:   %8.4f\n", pet_xp);
+
+	struct pw_chain_table *tbl = get_chain_table(elements, "param_adjust_config");
+	struct param_adjust_config *exp_penalty_cfg = pw_idmap_get(g_elements_map, 10, tbl->idmap_type);
+
+	for (int i = 0; i < 16; i++) {
+		exp_penalty_cfg->adjust[i].matter = 1.0f;
+	}
+
+	void *el;
+	struct pw_chain_el *chain;
+
+	tbl = get_chain_table(elements, "monsters");
+	int monster_xp_off = serializer_get_offset(tbl->serializer, "exp");
+	int monster_sp_off = serializer_get_offset(tbl->serializer, "sp");
+	int monster_money_average_off = serializer_get_offset(tbl->serializer, "money_average");
+	int monster_money_var_off = serializer_get_offset(tbl->serializer, "money_var");
+
+	PW_CHAIN_TABLE_FOREACH(el, chain, tbl) {
+		*(uint32_t *)(el + monster_xp_off) *= xp_rate;
+		*(uint32_t *)(el + monster_sp_off) *= sp_rate;
+		*(uint32_t *)(el + monster_money_average_off) *= coin_rate;
+		*(uint32_t *)(el + monster_money_var_off) *= coin_rate;
+	}
+
+	tbl = get_chain_table(elements, "player_levelexp_config");
+	struct player_levelexp_config *pet_exp_cfg = pw_idmap_get(g_elements_map, 592, tbl->idmap_type);
+	for (int i = 0; i < 150; i++) {
+		pet_exp_cfg->exp[i] /= pet_xp;
+	}
 }

@@ -26,6 +26,7 @@
 #include "pw_npc.h"
 
 static struct pw_elements *g_elements;
+static struct pw_task_file *g_tasks;
 static struct pw_npc_file g_npc_files[PW_MAX_MAPS];
 
 static int
@@ -305,6 +306,12 @@ main(int argc, char *argv[])
 		return 1;
 	}
 
+	g_tasks = calloc(1, sizeof(*g_tasks));
+	if (!g_tasks) {
+		PWLOG(LOG_ERROR, "calloc() failed\n");
+		return 1;
+	}
+
 	snprintf(tmpbuf, sizeof(tmpbuf), "https://pwmirage.com/editor/project/fetch/%s/since/%s/%u",
 			branch_name, version.cur_hash, version.version);
 
@@ -324,13 +331,16 @@ main(int argc, char *argv[])
 	struct cjson *updates = JS(ver_cjson, "updates");
 	bool is_cumulative = JSi(ver_cjson, "cumulative") && !force_fresh_update;
 	const char *elements_path;
+	const char *tasks_path;
 	const char *last_hash = NULL;
 
 	if (updates->count) {
 		if (is_cumulative) {
 			elements_path = "config/elements.data";
+			tasks_path = "config/tasks.data";
 		} else {
-			elements_path = "patcher/elements.data";
+			elements_path = "patcher/elements.data.src";
+			tasks_path = "patcher/tasks.data.src";
 		}
 
 		rc = load_icons();
@@ -338,6 +348,12 @@ main(int argc, char *argv[])
 		rc = rc || load_descriptions();
 		if (rc != 0) {
 			PWLOG(LOG_ERROR, "loading icons/colors/descriptions failed: %d\n", rc);
+			return 1;
+		}
+
+		rc = pw_tasks_load(g_tasks, tasks_path);
+		if (rc != 0) {
+			PWLOG(LOG_ERROR, "pw_tasks_load(\"%s\") failed: %d\n", elements_path, rc);
 			return 1;
 		}
 
@@ -366,6 +382,25 @@ main(int argc, char *argv[])
 			}
 		}
 
+		if (!is_cumulative) {
+			char *buf;
+			size_t num_bytes = 0;
+
+			snprintf(tmpbuf, sizeof(tmpbuf), "https://pwmirage.com/editor/project/cache/%s/rates.json",
+					branch_name);
+
+			rc = download_mem(tmpbuf, &buf, &num_bytes);
+			if (rc) {
+				PWLOG(LOG_ERROR, "download_mem failed for %s\n", tmpbuf);
+				return 1;
+			}
+
+			struct cjson *rates = cjson_parse(buf);
+			pw_elements_adjust_rates(g_elements, rates);
+			pw_tasks_adjust_rates(g_tasks, rates);
+			cjson_free(rates);
+			free(buf);
+		}
 
 		const char *origin = JSs(ver_cjson, "origin");
 
@@ -390,6 +425,7 @@ main(int argc, char *argv[])
 		}
 
 		pw_elements_save(g_elements, "config/elements.data", true);
+		pw_tasks_save(g_tasks, "config/tasks.data", true);
 
 		for (i = 0; i < PW_MAX_MAPS; i++) {
 			const struct map_name *map = &g_map_names[i];
