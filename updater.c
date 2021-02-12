@@ -67,6 +67,6 @@ main(void)
     }
 
     SetCurrentDirectory("..");
-    ShellExecute(NULL, NULL, "mgpatcher.exe", NULL, NULL, SW_SHOW);
+    ShellExecute(NULL, NULL, "pwmirage.exe", NULL, NULL, SW_SHOW);
     return 0;
 }
