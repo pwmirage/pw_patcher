@@ -508,9 +508,11 @@ void
 patch_cb(void *arg1, void *arg2)
 {
 	struct pw_elements elements = {0};
+	struct pw_task_file tasks = {0};
 	char tmpbuf[1024];
 	int i, rc;
 
+	enable_button(g_play_button, false);
 	if (g_patcher_outdated) {
 		rc = MessageBox(0, "New version of the patcher is available! "
 				"Would you like to download it now?", "Patcher Update", MB_YESNO);
@@ -527,22 +529,64 @@ patch_cb(void *arg1, void *arg2)
 	enable_button(g_patch_button, false);
 	set_text(g_status_right_lbl, "Loading local files");
 
-	if (!g_force_update && JSi(g_latest_version, "cumulative")) {
-		rc = pw_elements_load(&elements, "element/data/elements.data", false);
-	} else {
-		rc = pw_elements_load(&elements, "patcher/elements.data.src", true);
+	if (!JSi(g_latest_version, "cumulative")) {
+		g_force_update = true;
 	}
+
+	const char *elements_path;
+	const char *tasks_path;
+
+	if (g_force_update) {
+		elements_path = "patcher/elements.data.src";
+		tasks_path = "patcher/tasks.data.src";
+	} else {
+		elements_path = "element/data/elements.data";
+		tasks_path = "element/data/tasks.data";
+	}
+
+	set_progress(5);
+
+	rc = pw_elements_load(&elements, elements_path, !g_force_update);
 	if (rc != 0) {
 		set_text(g_status_right_lbl, "elements file not found. Please redownload the client");
 		goto err_retry;
 	}
 
-	set_progress(5);
+	set_progress(10);
+
+	rc = pw_tasks_load(&tasks, tasks_path);
+	if (rc != 0) {
+		set_text(g_status_right_lbl, "tasks file not found. Please redownload the client");
+		goto err_retry;
+	}
+
+	set_progress(15);
 	set_text(g_status_right_lbl, "Updating...");
 
 	const char *origin = JSs(g_latest_version, "origin");
 	struct cjson *updates = JS(g_latest_version, "updates");
 	const char *last_hash = NULL;
+
+	if (updates->count && g_force_update) {
+		char *buf;
+		size_t num_bytes = 0;
+
+		snprintf(tmpbuf, sizeof(tmpbuf), "https://pwmirage.com/editor/project/cache/%s/rates.json",
+				g_branch_name);
+
+		rc = download_mem(tmpbuf, &buf, &num_bytes);
+		if (rc) {
+			set_text(g_status_right_lbl, "failed to fetch server information");
+			goto err_retry;
+		}
+
+		struct cjson *rates = cjson_parse(buf);
+		pw_elements_adjust_rates(&elements, rates);
+		pw_tasks_adjust_rates(&tasks, rates);
+		cjson_free(rates);
+		free(buf);
+	}
+
 	for (i = 0; i < updates->count; i++) {
 		struct cjson *update = JS(updates, i);
 		bool is_cached = JSi(update, "cached");
@@ -578,17 +622,23 @@ patch_cb(void *arg1, void *arg2)
 
 	rc = save_serverlist();
 	if (rc) {
-		set_text(g_status_right_lbl, "Saving failed. No permission to access game directories?");
+		set_text(g_status_right_lbl, "Saving failed (1). No permission to access game directories?");
 		return;
 	}
 
 	rc = pw_elements_save(&elements, "element/data/elements.data", false);
 	if (rc) {
-		set_text(g_status_right_lbl, "Saving failed. No permission to access game directories?");
+		set_text(g_status_right_lbl, "Saving failed (2). No permission to access game directories?");
 		return;
 	}
 
-	
+	rc = pw_tasks_save(&tasks, "element/data/tasks.data", false);
+	if (rc) {
+		PWLOG(LOG_ERROR, "err: %d\n", rc);
+		set_text(g_status_right_lbl, "Saving failed (3). No permission to access game directories?");
+		return;
+	}
+
 	set_text(g_status_right_lbl, "Ready to launch");
 	PWLOG(LOG_INFO, "All done\n");
 
