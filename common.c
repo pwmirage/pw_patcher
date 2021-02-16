@@ -864,7 +864,7 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p,
 			}
 		} else if (slzr->type == _CUSTOM) {
 			if (slzr->des_fn) {
-				data += slzr->des_fn(json_f, data, slzr->ctx);
+				data += slzr->des_fn(json_f, slzr->ctx, data);
 			}
 		}
 
