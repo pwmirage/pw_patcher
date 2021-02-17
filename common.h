@@ -13,6 +13,8 @@
 
 #include "serializer.h"
 #include "chain_arr.h"
+#include "idmap.h"
+#include "pw_tasks.h"
 
 #ifdef __MINGW32__
 #include <sys/types.h>
@@ -48,14 +50,6 @@ struct pw_version {
 	char cur_hash[64];
 };
 
-struct pw_task_file {
-	uint32_t magic;
-	uint32_t version;
-	struct pw_chain_table *tasks;
-	unsigned max_arr_idx;
-	unsigned max_dialogue_id;
-};
-
 int download(const char *url, const char *filename);
 int readfile(const char *path, char **buf, size_t *len);
 int download_mem(const char *url, char **buf, size_t *len);
@@ -80,10 +74,5 @@ void pwlog(int type, const char *filename, unsigned lineno, const char *fnname, 
 
 int pw_version_load(struct pw_version *ver);
 int pw_version_save(struct pw_version *ver);
-
-int pw_tasks_load(struct pw_task_file *taskf, const char *path);
-int pw_tasks_serialize(struct pw_task_file *taskf, const char *filename);
-int pw_tasks_save(struct pw_task_file *taskf, const char *path, bool is_server);
-void pw_tasks_adjust_rates(struct pw_task_file *taskf, struct cjson *rates);
 
 #endif /* PW_COMMON_H */
