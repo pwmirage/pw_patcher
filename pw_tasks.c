@@ -576,15 +576,24 @@ static struct serializer pw_task_serializer[] = {
 };
 
 static int
-read_award(void **buf_p, FILE *fp)
+read_award(void **buf_p, FILE *fp, bool is_server)
 {
 	void *data, *buf, *ptr;
 	size_t i, item_groups_count; 
 	struct serializer *slzr = pw_task_award_serializer;
 
 	buf = data = *buf_p;
-	fread(buf, 75, 1, fp);
-	buf += 75;
+
+	if (is_server) {
+		fread(buf, 75, 1, fp);
+		buf += 75;
+	} else {
+		fread(buf, 67, 1, fp);
+		buf += 67;
+		fseek(fp, 5, SEEK_CUR);
+		fread(buf, 8, 1, fp);
+		buf += 8;
+	}
 
 	item_groups_count = *(uint32_t *)serializer_get_field(slzr, "_item_groups_cnt", data);
 	*(void **)buf = ptr = pw_chain_table_fread(fp, "item_groups", 0, pw_task_item_group_serializer);
@@ -702,7 +711,7 @@ write_award(void **buf_p, FILE *fp, bool is_client)
 	LOAD_CHAIN_TBL_CNT(fp, name, data_slzr, data_start, tbl_slzr, count)
 
 static int
-read_task(void *data, FILE *fp)
+read_task(void *data, FILE *fp, bool is_server)
 {
 	void *buf = data;
 	struct pw_chain_table *tbl_p;
@@ -737,12 +746,12 @@ read_task(void *data, FILE *fp)
 	LOAD_CHAIN_TBL(fp, "req_monsters", slzr, data, pw_task_mob_serializer);
 	LOAD_CHAIN_TBL(fp, "req_items", slzr, data, pw_task_item_serializer);
 
-	rc = read_award(&buf, fp);
+	rc = read_award(&buf, fp, is_server);
 	if (rc < 0) {
 		return -1;
 	}
 
-	rc = read_award(&buf, fp);
+	rc = read_award(&buf, fp, is_server);
 	if (rc < 0) {
 		return -1;
 	}
@@ -758,7 +767,7 @@ read_task(void *data, FILE *fp)
 
 		for (i = 0; i < count; i++) {
 			void *el = pw_chain_table_new_el(tbl_p);
-			rc = read_award(&el, fp);
+			rc = read_award(&el, fp, is_server);
 			if (rc) {
 				return -1;
 			}
@@ -776,7 +785,7 @@ read_task(void *data, FILE *fp)
 
 		for (i = 0; i < count; i++) {
 			void *el = pw_chain_table_new_el(tbl_p);
-			rc = read_award(&el, fp);
+			rc = read_award(&el, fp, is_server);
 			if (rc) {
 				return -1;
 			}
@@ -860,7 +869,7 @@ read_task(void *data, FILE *fp)
 	LOAD_CHAIN_TBL_CNT(fp, "sub_tasks", slzr, data, pw_task_serializer, 0);
 	for (int s = 0; s < count; s++) {
 		void *el = pw_chain_table_new_el(tbl_p);
-		rc = read_task(el, fp);
+		rc = read_task(el, fp, is_server);
 		if (rc) {
 			return rc;
 		}
@@ -1052,6 +1061,7 @@ pw_tasks_load(struct pw_task_file *taskf, const char *path)
 	if (taskf->version != 55 && taskf->version != 56) {
 		return -ENOEXEC;
 	}
+	bool is_server = taskf->version == 55;
   
 	fread(&count, sizeof(count), 1, fp);
 	if (count == 0) {
@@ -1080,7 +1090,7 @@ pw_tasks_load(struct pw_task_file *taskf, const char *path)
 
 		void *task_el = pw_chain_table_new_el(taskf->tasks);
 
-		read_task(task_el, fp);
+		read_task(task_el, fp, is_server);
 		/* dont care about failure, we skip invalid tasks anyway */
 	}
 
