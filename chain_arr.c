@@ -61,22 +61,29 @@ void *
 pw_chain_table_new_el(struct pw_chain_table *table)
 {
 	struct pw_chain_el *chain = table->chain_last;
+	void *el = NULL;
 
 	if (chain->count < chain->capacity) {
-		return &chain->data[chain->count++ * table->el_size];
+		 el = &chain->data[chain->count++ * table->el_size];
+	} else {
+		size_t table_count = 16;
+		chain->next = table->chain_last = calloc(1, sizeof(struct pw_chain_el) + table_count * table->el_size);
+		if (!chain->next) {
+			return NULL;
+		}
+
+		chain = table->chain_last;
+		chain->capacity = table_count;
+		chain->count = 1;
+
+		el = chain->data;
 	}
 
-	size_t table_count = 16;
-	chain->next = table->chain_last = calloc(1, sizeof(struct pw_chain_el) + table_count * table->el_size);
-	if (!chain->next) {
-		return NULL;
+	if (table->new_el_fn) {
+		table->new_el_fn(el, table->new_el_ctx);
 	}
 
-	chain = table->chain_last;
-	chain->capacity = table_count;
-	chain->count = 1;
-
-	return chain->data;
+	return el;
 }
 
 struct pw_chain_table *
