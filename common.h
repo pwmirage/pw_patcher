@@ -11,6 +11,8 @@
 #include <stdarg.h>
 #include <stdbool.h>
 
+#include "serializer.h"
+
 #ifdef __MINGW32__
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -32,20 +34,12 @@
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #endif
 
+#define _CHAIN_TABLE _CUSTOM, serialize_chunked_table_fn, deserialize_chunked_table_fn
+
 extern const char g_zeroes[4096];
+extern FILE *g_nullfile;
 
 struct cjson;
-struct serializer {
-	const char *name;
-	unsigned type;
-	/* custom parser. returns number of bytes processed */
-	size_t (*fn)(FILE *fp, struct serializer *slzr, void *data);
-	/* custom deserializer. returns number of bytes processed */
-	size_t (*des_fn)(struct cjson *f, struct serializer *slzr, void *data);
-	/* user context */
-	void *ctx;
-};
-
 struct pw_chain_el;
 struct pw_chain_table {
 	const char *name;
@@ -88,23 +82,9 @@ struct pw_chain_table *pw_chain_table_alloc(const char *name, struct serializer 
 struct pw_chain_table *pw_chain_table_fread(FILE *fp, const char *name, size_t el_count, struct serializer *el_serializer);
 void *pw_chain_table_new_el(struct pw_chain_table *table);
 
-#define _TYPE_END 0
-#define _INT8 1
-#define _INT16 1
-#define _INT32 2
-#define _FLOAT 3
-#define _ARRAY_END 4
-#define _CUSTOM 5
-#define _OBJECT_END 6
-#define _WSTRING(n) (0x1000 + (n))
-#define _STRING(n) (0x2000 + (n))
-#define _ARRAY_START(n) (0x3000 + (n))
-#define _OBJECT_START 0x4001
-#define _CONST_INT(n) (0x4002 + (n))
-#define _CHAIN_TABLE _CUSTOM, serialize_chunked_table_fn, deserialize_chunked_table_fn
-
 size_t serialize_chunked_table_fn(FILE *fp, struct serializer *f, void *data);
 size_t deserialize_chunked_table_fn(struct cjson *f, struct serializer *_slzr, void *data);
+
 int download(const char *url, const char *filename);
 int readfile(const char *path, char **buf, size_t *len);
 int download_mem(const char *url, char **buf, size_t *len);
@@ -117,18 +97,6 @@ void wsnprintf(uint16_t *dst, size_t dstsize, const char *src);
 
 int change_charset(char *src_charset, char *dst_charset, char *src, long srclen, char *dst, long dstlen);
 void normalize_json_string(char *str);
-
-long serialize(FILE *fp, struct serializer *slzr_table,
-		void *data, unsigned data_cnt);
-long _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
-		unsigned data_cnt, bool skip_empty_objs, bool newlines, bool force_object);
-int serializer_get_size(struct serializer *slzr_table);
-int serializer_get_offset(struct serializer *slzr_table, const char *name);
-void *serializer_get_field(struct serializer *slzr_table, const char *name, void *data);
-int serializer_get_offset_slzr(struct serializer *slzr_table, const char *name, struct serializer **slzr);
-
-void deserialize(struct cjson *obj, struct serializer *slzr_table, void *data);
-void deserialize_log(struct cjson *json_f, void *data);
 
 #define LOG_ERROR 0
 #define LOG_INFO 1
