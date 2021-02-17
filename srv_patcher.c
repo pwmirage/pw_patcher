@@ -19,11 +19,15 @@
 #include <sys/stat.h>
 #include <assert.h>
 
-#include "pw_elements.h"
 #include "common.h"
 #include "cjson.h"
 #include "cjson_ext.h"
+#include "serializer.h"
+#include "chain_arr.h"
+#include "idmap.h"
 #include "pw_npc.h"
+#include "pw_tasks.h"
+#include "pw_elements.h"
 
 static struct pw_elements *g_elements;
 static struct pw_task_file *g_tasks;

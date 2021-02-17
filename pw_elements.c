@@ -13,6 +13,9 @@
 
 #include "common.h"
 #include "cjson_ext.h"
+#include "serializer.h"
+#include "chain_arr.h"
+#include "idmap.h"
 #include "pw_elements.h"
 
 char g_icon_names[4096 / 32 * 2048 / 32 + 1][64] = {};

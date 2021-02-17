@@ -14,6 +14,9 @@
 #include "cjson.h"
 #include "cjson_ext.h"
 #include "common.h"
+#include "serializer.h"
+#include "idmap.h"
+#include "chain_arr.h"
 #include "pw_npc.h"
 
 extern struct pw_idmap *g_elements_map;

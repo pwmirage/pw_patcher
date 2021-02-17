@@ -16,7 +16,10 @@
 #include "cjson.h"
 #include "cjson_ext.h"
 #include "common.h"
+#include "serializer.h"
+#include "chain_arr.h"
 #include "pw_npc.h"
+#include "pw_tasks.h"
 
 extern struct pw_idmap *g_elements_map;
 

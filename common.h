@@ -11,11 +11,6 @@
 #include <stdarg.h>
 #include <stdbool.h>
 
-#include "serializer.h"
-#include "chain_arr.h"
-#include "idmap.h"
-#include "pw_tasks.h"
-
 #ifdef __MINGW32__
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -41,7 +36,6 @@
 extern const char g_zeroes[4096];
 extern FILE *g_nullfile;
 
-struct cjson;
 #define PW_VERSION_MAGIC 0xb78e97a0
 struct pw_version {
 	uint32_t magic;

@@ -21,6 +21,7 @@ struct map_name {
 	const char *dir_name;
 };
 
+struct pw_chain_table;
 struct pw_spawner_set {
 	char data[71];
 	struct pw_chain_table *groups;

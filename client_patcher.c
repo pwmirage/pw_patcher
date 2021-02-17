@@ -10,9 +10,13 @@
 #include <unistd.h>
 
 #include "common.h"
-#include "pw_elements.h"
 #include "cjson.h"
 #include "cjson_ext.h"
+#include "serializer.h"
+#include "chain_arr.h"
+#include "idmap.h"
+#include "pw_tasks.h"
+#include "pw_elements.h"
 #include "gui.h"
 
 static char *g_branch_name = "public";
