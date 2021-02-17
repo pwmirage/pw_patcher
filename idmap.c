@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <inttypes.h>
 
+#include "idmap.h"
 #include "common.h"
 
 struct pw_id_el {
