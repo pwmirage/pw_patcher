@@ -130,6 +130,10 @@ deserialize_spawner_groups_fn(struct cjson *f, struct serializer *slzr, void *da
 					return 0;
 				}
 
+				*(uint8_t *)serializer_get_field(set->groups->serializer, "default_group", grp_el) = 1;
+				*(uint8_t *)serializer_get_field(set->groups->serializer, "default_need", grp_el) = 1;
+				*(uint8_t *)serializer_get_field(set->groups->serializer, "default_help", grp_el) = 1;
+
 				if (remaining_idx == 0) {
 					break;
 				}
@@ -583,8 +587,10 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 			struct pw_spawner_set *set = table_el;
 
 			SPAWNER_ID(table_el) = el_id;
+			*(uint32_t *)serializer_get_field(table->serializer, "type", table_el) = 1;
+			*(uint8_t *)serializer_get_field(table->serializer, "auto_spawn", table_el) = 1;
+			*(uint8_t *)serializer_get_field(table->serializer, "auto_respawn", table_el) = 1;
 			*(uint32_t *)(table_el + 44) = 1; /* NPC */
-			*(uint32_t *)(table_el + 48) = 3214; /* NPC */
 			*(uint8_t *)(table_el + 52) = 1; /* auto spawn */
 			set->groups = pw_chain_table_alloc("spawner_group", spawner_group_serializer, 60, 16);
 		} else if (table == &npc->resources) {

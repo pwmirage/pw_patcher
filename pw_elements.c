@@ -1560,6 +1560,12 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 
 		table_el = pw_chain_table_new_el(table);
 		*(uint32_t *)table_el = el_id;
+
+		if (strcmp(obj_type, "npcs") == 0) {
+			*(uint32_t *)serializer_get_field(table->serializer, "base_monster_id", table_el) = 2111;
+			*(uint32_t *)serializer_get_field(table->serializer, "id_type", table_el) = 3214;
+		}
+
 		pw_idmap_set(g_elements_map, id, el_id, table->idmap_type, table_el);
 	}
 	deserialize(obj, table->serializer, table_el);
