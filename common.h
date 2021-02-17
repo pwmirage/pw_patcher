@@ -101,7 +101,10 @@ void *pw_chain_table_new_el(struct pw_chain_table *table);
 #define _ARRAY_START(n) (0x3000 + (n))
 #define _OBJECT_START 0x4001
 #define _CONST_INT(n) (0x4002 + (n))
+#define _CHAIN_TABLE _CUSTOM, serialize_chunked_table_fn, deserialize_chunked_table_fn
 
+size_t serialize_chunked_table_fn(FILE *fp, struct serializer *f, void *data);
+size_t deserialize_chunked_table_fn(struct cjson *f, struct serializer *_slzr, void *data);
 int download(const char *url, const char *filename);
 int readfile(const char *path, char **buf, size_t *len);
 int download_mem(const char *url, char **buf, size_t *len);
