@@ -33,7 +33,7 @@ struct pw_chain_table {
 	/* size of each el */
 	size_t el_size;
 	/* called when new element is created */
-	chain_arr_new_el_fn *new_el_fn;
+	chain_arr_new_el_fn new_el_fn;
 	void *new_el_ctx;
 	/* first chain */
 	struct pw_chain_el *chain;

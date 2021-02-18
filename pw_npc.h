@@ -22,15 +22,6 @@ struct map_name {
 };
 
 struct pw_chain_table;
-struct pw_spawner_set {
-	char data[71];
-	struct pw_chain_table *groups;
-};
-
-struct pw_resource_set {
-	char data[42];
-	struct pw_chain_table *groups;
-};
 
 #define PW_MAX_MAPS 32
 extern const struct map_name g_map_names[];

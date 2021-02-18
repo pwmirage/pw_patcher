@@ -410,7 +410,11 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p,
 		} else if (slzr->type == _FLOAT) {
 			if (json_f->type != CJSON_TYPE_NONE) {
 				deserialize_log(json_f, data);
-				*(float *)data = json_f->d;
+				if (obj->type == CJSON_TYPE_FLOAT) {
+					*(float *)data = json_f->d;
+				} else {
+					*(float *)data = json_f->i;
+				}
 			}
 			data += 4;
 		} else if (slzr->type > _WSTRING(0) && slzr->type <= _WSTRING(0x1000)) {

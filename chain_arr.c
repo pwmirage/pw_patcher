@@ -154,10 +154,9 @@ serialize_chunked_table_fn(FILE *fp, struct serializer *f, void *data)
 }
 
 size_t
-deserialize_chunked_table_fn(struct cjson *f, struct serializer *_slzr, void *data)
+deserialize_chunked_table_fn(struct cjson *f, struct serializer *slzr, void *data)
 {
 	struct pw_chain_table *table = *(void **)data;
-	struct serializer *slzr = _slzr->ctx;
 
 	if (f->type == CJSON_TYPE_NONE) {
 		return 8;
@@ -171,6 +170,7 @@ deserialize_chunked_table_fn(struct cjson *f, struct serializer *_slzr, void *da
 	if (!table) {
 		size_t el_size = serializer_get_size(slzr);
 		table = *(void **)data = pw_chain_table_alloc("", slzr, el_size, 8);
+		/* FIXME set new_el_fn in here */
 		if (!table) {
 			PWLOG(LOG_ERROR, "pw_chain_table_alloc() failed\n");
 			return 8;

@@ -79,74 +79,9 @@ deserialize_spawner_type_fn(struct cjson *f, struct serializer *slzr, void *data
 }
 
 static size_t
-deserialize_spawner_groups_fn(struct cjson *f, struct serializer *slzr, void *data)
+serialize_id_removed_fn(FILE *fp, struct serializer *f, void *data)
 {
-	struct pw_spawner_set *set = data;
-
-	if (f->type != CJSON_TYPE_NONE && f->type != CJSON_TYPE_OBJECT) {
-		PWLOG(LOG_ERROR, "found json group field that is not an object (type: %d)\n", f->type);
-		return 0;
-	}
-
-	struct cjson *json_el = f->a;
-	while (json_el) {
-		char *end;
-		unsigned idx = strtod(json_el->key, &end);
-		if (end == json_el->key || errno == ERANGE) {
-			/* non-numeric key in array */
-			json_el = json_el->next;
-			assert(false);
-			continue;
-		}
-
-		void *grp_el = NULL;
-		struct pw_chain_el *chain = set->groups->chain;
-		unsigned remaining_idx = idx;
-
-		while (chain) {
-			if (remaining_idx < chain->count) {
-				/* the group exists */
-				grp_el = chain->data + remaining_idx * set->groups->el_size;
-				break;
-			}
-
-			if (remaining_idx < chain->capacity) {
-				remaining_idx -= chain->count;
-				/* the group doesn't exist, but memory for it is already allocated */
-				break;
-			}
-			assert(remaining_idx >= chain->count); /* technically possible if chain->cap == 0 */
-			remaining_idx -= chain->count;
-			chain = chain->next;
-		}
-
-		if (!grp_el) {
-			if (remaining_idx > 8) {
-				/* sane limit - the hole is too big */
-				continue;
-			}
-
-			while (true) {
-				grp_el = pw_chain_table_new_el(set->groups);
-				if (!grp_el) {
-					PWLOG(LOG_ERROR, "pw_chain_table_new_el() failed\n");
-					return 0;
-				}
-
-				*(uint8_t *)serializer_get_field(set->groups->serializer, "default_group", grp_el) = 1;
-				*(uint8_t *)serializer_get_field(set->groups->serializer, "default_need", grp_el) = 1;
-				*(uint8_t *)serializer_get_field(set->groups->serializer, "default_help", grp_el) = 1;
-
-				if (remaining_idx == 0) {
-					break;
-				}
-				remaining_idx--;
-			}
-		}
-
-		deserialize(json_el, set->groups->serializer, grp_el);
-		json_el = json_el->next;
-	}
+	/* TODO? */
 	return 0;
 }
 
@@ -199,32 +134,6 @@ serialize_elements_id_field_fn(FILE *fp, struct serializer *f, void *data)
 	return 4;
 }
 
-static struct serializer spawner_serializer[] = {
-	{ "groups", _CUSTOM, NULL /* FIXME */, deserialize_spawner_groups_fn },
-	{ "fixed_y", _INT32 },
-	{ "groups_count", _INT32 }, 
-	{ "pos", _ARRAY_START(3) },
-		{ "", _FLOAT },
-	{ "", _ARRAY_END },
-	{ "dir", _ARRAY_START(3) },
-		{ "", _FLOAT },
-	{ "", _ARRAY_END },
-	{ "spread", _ARRAY_START(3) },
-		{ "", _FLOAT },
-	{ "", _ARRAY_END },
-	{ "type", _CUSTOM, serialize_spawner_type_fn, deserialize_spawner_type_fn }, /* 4 bytes */
-	{ "mob_type", _INT32 },
-	{ "auto_spawn", _INT8 },
-	{ "auto_respawn", _INT8 },
-	{ "_unused1", _INT8 },
-	{ "_removed", _CUSTOM, NULL /* FIXME */, deserialize_id_removed_fn },
-	{ "id", _INT32 },
-	{ "trigger", _INT32 /* TODO parse high IDs */ },
-	{ "lifetime", _FLOAT },
-	{ "max_num", _INT32 },
-	{ "", _TYPE_END },
-};
-
 static struct serializer spawner_group_serializer[] = {
 	{ "type", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 	{ "count", _INT32 },
@@ -247,28 +156,39 @@ static struct serializer spawner_group_serializer[] = {
 	{ "", _TYPE_END },
 };
 
-/* TODO add CONST_STR type field == "resource"? */
-static struct serializer resource_serializer[] = {
+static struct serializer spawner_serializer[] = {
+	{ "fixed_y", _INT32 },
+	{ "_groups_cnt", _INT32 }, 
 	{ "pos", _ARRAY_START(3) },
 		{ "", _FLOAT },
 	{ "", _ARRAY_END },
-	{ "spread", _ARRAY_START(2) },
+	{ "dir", _ARRAY_START(3) },
 		{ "", _FLOAT },
 	{ "", _ARRAY_END },
-	{ "groups_count", _INT32 },
+	{ "spread", _ARRAY_START(3) },
+		{ "", _FLOAT },
+	{ "", _ARRAY_END },
+	{ "type", _CUSTOM, serialize_spawner_type_fn, deserialize_spawner_type_fn }, /* 4 bytes */
+	{ "mob_type", _INT32 },
 	{ "auto_spawn", _INT8 },
 	{ "auto_respawn", _INT8 },
 	{ "_unused1", _INT8 },
-	{ "_removed", _CUSTOM, NULL /* FIXME */, deserialize_id_removed_fn },
+	{ "_removed", _CUSTOM, serialize_id_removed_fn, deserialize_id_removed_fn },
 	{ "id", _INT32 },
-	{ "dir", _ARRAY_START(2) },
-		{ "", _INT8 },
-	{ "", _ARRAY_END },
-	{ "rad", _INT8 },
-	{ "trigger", _INT32 }, /* TODO */
+	{ "trigger", _INT32 /* TODO parse high IDs */ },
+	{ "lifetime", _FLOAT },
 	{ "max_num", _INT32 },
+	{ "groups", _CHAIN_TABLE, spawner_group_serializer },
 	{ "", _TYPE_END },
 };
+
+static void
+init_spawner_group_fn(void *grp, void *ctx)
+{
+	*(uint8_t *)serializer_get_field(spawner_group_serializer, "default_group", grp) = 1;
+	*(uint8_t *)serializer_get_field(spawner_group_serializer, "default_need", grp) = 1;
+	*(uint8_t *)serializer_get_field(spawner_group_serializer, "default_help", grp) = 1;
+}
 
 static struct serializer resource_group_serializer[] = {
 	{ "_unused_type", _INT32 },
@@ -279,8 +199,31 @@ static struct serializer resource_group_serializer[] = {
 	{ "", _TYPE_END },
 };
 
+/* TODO add CONST_STR type field == "resource"? */
+static struct serializer resource_serializer[] = {
+	{ "pos", _ARRAY_START(3) },
+		{ "", _FLOAT },
+	{ "", _ARRAY_END },
+	{ "spread", _ARRAY_START(2) },
+		{ "", _FLOAT },
+	{ "", _ARRAY_END },
+	{ "_groups_cnt", _INT32 },
+	{ "auto_spawn", _INT8 },
+	{ "auto_respawn", _INT8 },
+	{ "_unused1", _INT8 },
+	{ "_removed", _CUSTOM, serialize_id_removed_fn, deserialize_id_removed_fn },
+	{ "id", _INT32 },
+	{ "dir", _ARRAY_START(2) },
+		{ "", _INT8 },
+	{ "", _ARRAY_END },
+	{ "rad", _INT8 },
+	{ "trigger", _INT32 }, /* TODO */
+	{ "max_num", _INT32 },
+	{ "groups", _CHAIN_TABLE, resource_group_serializer },
+	{ "", _TYPE_END },
+};
 static struct serializer dynamic_serializer[] = {
-	{ "_removed", _CUSTOM, NULL /* FIXME */, deserialize_id_removed_fn },
+	{ "_removed", _CUSTOM, serialize_id_removed_fn, deserialize_id_removed_fn },
 	{ "id", _INT32 },
 	{ "pos", _ARRAY_START(3) },
 		{ "", _FLOAT },
@@ -295,7 +238,7 @@ static struct serializer dynamic_serializer[] = {
 };
 
 static struct serializer trigger_serializer[] = {
-	{ "_removed", _CUSTOM, NULL /* FIXME */, deserialize_id_removed_fn },
+	{ "_removed", _CUSTOM, serialize_id_removed_fn, deserialize_id_removed_fn },
 	{ "id", _INT32 },
 	{ "console_id", _INT32 },
 	{ "name", _WSTRING(64) },
@@ -366,7 +309,7 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 	PWLOG(LOG_DEBUG_5, "dynamics_count: %u\n", npc->hdr.dynamics_count);
 	PWLOG(LOG_DEBUG_5, "triggers_count: %u\n", npc->hdr.triggers_count);
 
-	rc = pw_chain_table_init(&npc->spawners, "spawners", spawner_serializer, sizeof(struct pw_spawner_set), npc->hdr.creature_sets_count);
+	rc = pw_chain_table_init(&npc->spawners, "spawners", spawner_serializer, serializer_get_size(spawner_serializer), npc->hdr.creature_sets_count);
 	if (rc) {
 		PWLOG(LOG_ERROR, "pw_chain_table_init() failed for npc->spawners, count: %u\n", npc->hdr.creature_sets_count);
 		goto err;
@@ -376,35 +319,30 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 	npc->spawners.chain->count = npc->hdr.creature_sets_count;
 	max_id = 0;
 	for (int i = 0;	i < npc->hdr.creature_sets_count; i++) {
-		struct pw_spawner_set *el = (void *)(npc->spawners.chain->data + i * npc->spawners.el_size);
+		void *el = npc->spawners.chain->data + i * npc->spawners.el_size;
 		uint32_t id;
 		size_t off = ftell(fp);
+		struct pw_chain_table *tbl;
 
-		fread(el->data, 1, 59, fp);
+		fread(el, 1, 59, fp);
 		if (npc->hdr.version >= 7) {
-		    fread(el->data + 59, 1, 12, fp); /* trigger, lifetime, max_num */
+		    fread(el + 59, 1, 12, fp); /* trigger, lifetime, max_num */
 		}
 
-		uint32_t groups_count = *(uint32_t *)(el->data + 4);
-
-		el->groups = pw_chain_table_alloc("spawner_group", spawner_group_serializer, 60, groups_count);
-		if (!el->groups) {
+		uint32_t groups_count = *(uint32_t *)serializer_get_field(spawner_serializer, "_groups_cnt", el);
+		tbl = pw_chain_table_fread(fp, "spawner_groups", groups_count, spawner_group_serializer);
+		if (!tbl) {
 			PWLOG(LOG_ERROR, "pw_chain_table_alloc() failed for spawner->groups\n");
 			goto err;
 		}
-		el->groups->chain->count = groups_count;
-
-		for (int j = 0; j < groups_count; j++) {
-			void *grp = el->groups->chain->data + j * el->groups->el_size;
-
-			fread(grp, 1, el->groups->el_size, fp);
-		}
+		tbl->new_el_fn = init_spawner_group_fn;
+		*(void **)serializer_get_field(spawner_serializer, "groups", el) = tbl;
 
 		if (clean_load) {
 			/* set it on the initial npcgen load */
-			SPAWNER_ID(el->data) = i;
+			SPAWNER_ID(el) = i;
 		}
-		id = SPAWNER_ID(el->data) & ~(1UL << 31);
+		id = SPAWNER_ID(el) & ~(1UL << 31);
 		if (id > max_id) {
 			max_id = id;
 		}
@@ -413,7 +351,7 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 	}
 	pw_idmap_end_type_load(npc->idmap, npc->spawners.idmap_type, max_id);
 
-	rc = pw_chain_table_init(&npc->resources, "resources", resource_serializer, sizeof(struct pw_resource_set), npc->hdr.resource_sets_count);
+	rc = pw_chain_table_init(&npc->resources, "resources", resource_serializer, serializer_get_size(resource_serializer), npc->hdr.resource_sets_count);
 	if (rc) {
 		PWLOG(LOG_ERROR, "pw_chain_table_init() failed for npc->recources, count: %u\n", npc->hdr.creature_sets_count);
 		goto err;
@@ -423,38 +361,32 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 	npc->resources.chain->count = npc->hdr.resource_sets_count;
 	max_id = 0;
 	for (int i = 0;	i < npc->hdr.resource_sets_count; i++) {
-		struct pw_resource_set *el = (void *)(npc->resources.chain->data + i * npc->resources.el_size);
+		void *el = npc->resources.chain->data + i * npc->resources.el_size;
 		uint32_t id;
 		size_t off = ftell(fp);
+		struct pw_chain_table *tbl;
 
-		fread(el->data, 1, 31, fp);
+		fread(el, 1, 31, fp);
 		if (npc->hdr.version >= 6) {
-			fread(el->data + 31, 1, 3, fp);
+			fread(el + 31, 1, 3, fp);
 		}
 		if (npc->hdr.version >= 7) {
-			fread(el->data + 34, 1, 8, fp);
+			fread(el + 34, 1, 8, fp);
 		}
 
-		uint32_t groups_count = *(uint32_t *)(el->data + 20);
-
-		el->groups = pw_chain_table_alloc("resource_group", resource_group_serializer, 20, groups_count);
-		if (!el->groups) {
+		uint32_t groups_count = *(uint32_t *)serializer_get_field(resource_serializer, "_groups_cnt", el);
+		tbl = pw_chain_table_fread(fp, "resource_groups", groups_count, resource_group_serializer);
+		if (!tbl) {
 			PWLOG(LOG_ERROR, "pw_chain_table_alloc() failed for resource->groups\n");
 			goto err;
 		}
-		el->groups->chain->count = groups_count;
-
-		for (int j = 0; j < groups_count; j++) {
-			void *grp = el->groups->chain->data + j * el->groups->el_size;
-
-			fread(grp, 1, el->groups->el_size, fp);
-		}
+		*(void **)serializer_get_field(resource_serializer, "groups", el) = tbl;
 
 		if (clean_load) {
 			/* set it on the initial npcgen load */
-			RESOURCE_ID(el->data) = 100000 + i;
+			RESOURCE_ID(el) = 100000 + i;
 		}
-		id = RESOURCE_ID(el->data) & ~(1UL << 31);
+		id = RESOURCE_ID(el) & ~(1UL << 31);
 		if (id > max_id) {
 			max_id = id;
 		}
@@ -587,25 +519,29 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 
 		table_el = pw_chain_table_new_el(table);
 		if (table == &npc->spawners) {
-			struct pw_spawner_set *set = table_el;
+			struct pw_chain_table *grp_tbl;
 
 			SPAWNER_ID(table_el) = el_id;
 			*(uint32_t *)serializer_get_field(table->serializer, "type", table_el) = 1;
 			*(uint8_t *)serializer_get_field(table->serializer, "auto_spawn", table_el) = 1;
 			*(uint8_t *)serializer_get_field(table->serializer, "auto_respawn", table_el) = 1;
-			*(uint32_t *)(table_el + 44) = 1; /* NPC */
-			*(uint8_t *)(table_el + 52) = 1; /* auto spawn */
-			set->groups = pw_chain_table_alloc("spawner_group", spawner_group_serializer, 60, 16);
+			grp_tbl = pw_chain_table_alloc("spawner_group", spawner_group_serializer, serializer_get_size(spawner_group_serializer), 8);
+			if (!grp_tbl) {
+				PWLOG(LOG_ERROR, "pw_chain_table_alloc() failed for spawner->groups\n");
+				return -1;
+			}
+			*(void **)serializer_get_field(table->serializer, "groups", table_el) = grp_tbl;
 		} else if (table == &npc->resources) {
-			struct pw_resource_set *set = table_el;
+			struct pw_chain_table *grp_tbl;
 
 			RESOURCE_ID(table_el) = el_id;
 
-			set->groups = pw_chain_table_alloc("resource_group", resource_group_serializer, 20, 16);
-			if (!set->groups) {
+			grp_tbl = pw_chain_table_alloc("spawner_group", resource_group_serializer, serializer_get_size(resource_group_serializer), 8);
+			if (!grp_tbl) {
 				PWLOG(LOG_ERROR, "pw_chain_table_alloc() failed for resource->groups\n");
 				return -1;
 			}
+			*(void **)serializer_get_field(table->serializer, "groups", table_el) = grp_tbl;
 		}
 
 		pw_idmap_set(npc->idmap, id, el_id, table->idmap_type, table_el);
@@ -640,20 +576,19 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 	
 	uint32_t spawners_count = 0;
 	PW_CHAIN_TABLE_FOREACH(el, chain, &npc->spawners) {
-		struct pw_spawner_set *set = el;
 		size_t off_begin;
 		uint32_t groups_count = 0;
 
-		if (SPAWNER_ID(set->data) & (1 << 31)) {
+		if (SPAWNER_ID(el) & (1 << 31)) {
 			PWLOG(LOG_DEBUG_5, "spawner ignored, off=%u, id=%u\n", ftell(fp), SPAWNER_ID(el));
 			continue;
 		}
 
 		off_begin = ftell(fp);
-		fwrite(&set->data, 1, sizeof(set->data), fp);
+		fwrite(el, 1, npc->spawners.el_size, fp);
 
 		void *grp_el;
-		struct pw_chain_table *grp_table = set->groups;
+		struct pw_chain_table *grp_table = *(void **)serializer_get_field(spawner_serializer, "groups", el);
 		struct pw_chain_el *grp_chain;
 		PW_CHAIN_TABLE_FOREACH(grp_el, grp_chain, grp_table) {
 			if (*(uint32_t *)grp_el & ~(1UL << 31)) {
@@ -679,20 +614,19 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 
 	uint32_t resources_count = 0;
 	PW_CHAIN_TABLE_FOREACH(el, chain, &npc->resources) {
-		struct pw_resource_set *set = el;
 		size_t off_begin;
 		uint32_t groups_count = 0;
 
-		if (RESOURCE_ID(set->data) & (1 << 31)) {
+		if (RESOURCE_ID(el) & (1 << 31)) {
 			PWLOG(LOG_DEBUG_5, "resource ignored, off=%u, id=%u\n", ftell(fp), RESOURCE_ID(el));
 			continue;
 		}
 
 		off_begin = ftell(fp);
-		fwrite(&set->data, 1, sizeof(set->data), fp);
+		fwrite(el, 1, npc->resources.el_size, fp);
 
 		void *grp_el;
-		struct pw_chain_table *grp_table = set->groups;
+		struct pw_chain_table *grp_table = *(void **)serializer_get_field(resource_serializer, "groups", el);
 		struct pw_chain_el *grp_chain;
 		PW_CHAIN_TABLE_FOREACH(grp_el, grp_chain, grp_table) {
 			if (*(uint32_t *)(grp_el + 4) & ~(1UL << 31)) {
