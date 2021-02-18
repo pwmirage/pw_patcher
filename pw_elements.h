@@ -29,6 +29,7 @@ extern char *g_item_descs[];
 
 int pw_elements_load(struct pw_elements *el, const char *filename, bool clean_load);
 int pw_elements_save(struct pw_elements *el, const char *filename, bool is_server);
+int pw_elements_idmap_save(struct pw_elements *el, const char *filename);
 void pw_elements_serialize(struct pw_elements *elements);
 int pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj);
 void pw_elements_adjust_rates(struct pw_elements *elements, struct cjson *rates);

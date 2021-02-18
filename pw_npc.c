@@ -687,6 +687,9 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 
 	fclose(fp);
 
-	return pw_idmap_save(npc->idmap);
+	/* save idmap immediately, it's only used server-side */
+	char tmpbuf[1024];
+	snprintf(tmpbuf, sizeof(tmpbuf), "patcher/%s.imap", npc->name);
+	return pw_idmap_save(npc->idmap, tmpbuf);
 }
 

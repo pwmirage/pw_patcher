@@ -234,7 +234,7 @@ patch(const char *url)
 
 	free(buf);
 	if (rc < 0) {
-		PWLOG(LOG_ERROR, "cjson_parse_arr_stream() failed: %d\n", url, rc);
+		PWLOG(LOG_ERROR, "cjson_parse_arr_stream() failed: %d\n", rc);
 		return 1;
 	}
 

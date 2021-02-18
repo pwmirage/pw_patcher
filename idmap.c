@@ -328,18 +328,16 @@ pw_idmap_end_type_load(struct pw_idmap *map, long type_id, uint32_t max_id)
 }
 
 int
-pw_idmap_save(struct pw_idmap *map)
+pw_idmap_save(struct pw_idmap *map, const char *filename)
 {
 	FILE *fp;
 	struct pw_id_el *el;
 	struct pw_idmap_file_entry entry;
-	char buf[256];
 	int i;
 
-	snprintf(buf, sizeof(buf), "patcher/%s.imap", map->name);
-	fp = fopen(buf, "wb");
+	fp = fopen(filename, "wb");
 	if (fp == NULL) {
-		PWLOG(LOG_ERROR, "Cant open %s\n", map->name);
+		PWLOG(LOG_ERROR, "Cant open %s\n", filename);
 		return -errno;
 	}
 

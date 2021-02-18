@@ -1,5 +1,5 @@
 OBJECTS = common.o serializer.o chain_arr.o pw_elements.o cjson.o idmap.o pw_npc.o pw_tasks.o
-ALL_OBJECTS := $(OBJECTS) export.o srv_patcher.o
+ALL_OBJECTS := $(OBJECTS) export.o srv_patcher.o idmap_gen.o
 CFLAGS := -O0 -g -MD -MP -fno-strict-aliasing -Wall -Wno-format-truncation $(CFLAGS)
 
 ifeq ($(OS),Windows_NT)
@@ -20,6 +20,9 @@ build/export: $(OBJECTS:%.o=build/%.o) build/export.o
 	gcc $(CFLAGS) -o $@ $^
 
 build/srv_patcher: $(OBJECTS:%.o=build/%.o) build/srv_patcher.o
+	gcc $(CFLAGS) -o $@ $^
+
+build/idmap_gen: $(OBJECTS:%.o=build/%.o) build/idmap_gen.o
 	gcc $(CFLAGS) -o $@ $^
 
 build/client_patcher: $(OBJECTS:%.o=build/%.o) build/sha1.o build/client_patcher.o

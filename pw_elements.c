@@ -2004,7 +2004,13 @@ pw_elements_save(struct pw_elements *el, const char *filename, bool is_server)
 
 	fclose(fp);
 
-	return pw_idmap_save(g_elements_map);
+	return 0;
+}
+
+int
+pw_elements_idmap_save(struct pw_elements *el, const char *filename)
+{
+	return pw_idmap_save(g_elements_map, filename);
 }
 
 static struct pw_chain_table *
