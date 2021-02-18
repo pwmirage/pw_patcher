@@ -361,7 +361,7 @@ main(int argc, char *argv[])
 			return 1;
 		}
 
-		rc = pw_elements_load(g_elements, elements_path, !is_cumulative);
+		rc = pw_elements_load(g_elements, elements_path, "patcher/elements.imap");
 		if (rc != 0) {
 			PWLOG(LOG_ERROR, "pw_elements_load(\"%s\") failed: %d\n", elements_path, rc);
 			return 1;

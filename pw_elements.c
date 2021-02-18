@@ -1743,7 +1743,7 @@ save_control_block_1(struct control_block1 *block, FILE *fp)
 }
 
 int
-pw_elements_load(struct pw_elements *el, const char *filename, bool clean_load)
+pw_elements_load(struct pw_elements *el, const char *filename, const char *idmap_filename)
 {
 	FILE *fp = fopen(filename, "rb");
 
@@ -1752,7 +1752,7 @@ pw_elements_load(struct pw_elements *el, const char *filename, bool clean_load)
 		return 1;
 	}
 
-	g_elements_map = pw_idmap_init("elements", clean_load);
+	g_elements_map = pw_idmap_init("elements", idmap_filename);
 	if (!g_elements_map) {
 		PWLOG(LOG_ERROR, "pw_idmap_init() failed\n");
 		fclose(fp);

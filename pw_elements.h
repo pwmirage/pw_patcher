@@ -27,7 +27,7 @@ extern char g_icon_names[][64];
 extern char g_item_colors[];
 extern char *g_item_descs[];
 
-int pw_elements_load(struct pw_elements *el, const char *filename, bool clean_load);
+int pw_elements_load(struct pw_elements *el, const char *filename, const char *idmap_filename);
 int pw_elements_save(struct pw_elements *el, const char *filename, bool is_server);
 int pw_elements_idmap_save(struct pw_elements *el, const char *filename);
 void pw_elements_serialize(struct pw_elements *elements);

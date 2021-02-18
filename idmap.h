@@ -11,7 +11,7 @@
 struct pw_idmap;
 typedef void (*pw_idmap_async_fn)(void *el, void *ctx);
 
-struct pw_idmap *pw_idmap_init(const char *name, bool clean_load);
+struct pw_idmap *pw_idmap_init(const char *name, const char *filename);
 long pw_idmap_register_type(struct pw_idmap *map);
 void *pw_idmap_get(struct pw_idmap *map, long long lid, long type);
 int pw_idmap_get_async(struct pw_idmap *map, long long lid, long type, pw_idmap_async_fn fn, void *fn_ctx);

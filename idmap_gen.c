@@ -96,7 +96,8 @@ main(int argc, char *argv[])
 		return 1;
 	}
 
-	rc = pw_elements_load(g_elements, elements_path, true);
+	snprintf(tmpbuf, sizeof(tmpbuf), "cache/%s/elements.imap", branch_name);
+	rc = pw_elements_load(g_elements, elements_path, tmpbuf);
 	if (rc != 0) {
 		PWLOG(LOG_ERROR, "pw_elements_load(\"%s\") failed: %d\n", elements_path, rc);
 		return 1;

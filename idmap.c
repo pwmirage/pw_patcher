@@ -57,11 +57,10 @@ struct pw_idmap_async_fn_el {
 static struct pw_id_el *_idmap_set(struct pw_idmap *map, long long lid, long id, long type, void *data);
 
 struct pw_idmap *
-pw_idmap_init(const char *name, bool clean_load)
+pw_idmap_init(const char *name, const char *filename)
 {
 	struct pw_idmap *map;
 	FILE *fp;
-	char buf[256];
 	int i;
 
 	map = calloc(1, sizeof(*map));
@@ -76,12 +75,11 @@ pw_idmap_init(const char *name, bool clean_load)
 	}
 	memcpy(map->name, name, strlen(name));
 
-	if (clean_load) {
+	if (!filename) {
 		return map;
 	}
 
-	snprintf(buf, sizeof(buf), "patcher/%s.imap", map->name);
-	fp = fopen(buf, "rb");
+	fp = fopen(filename, "rb");
 	if (fp == NULL) {
 		/* we'll create it on pw_idmap_save(), no problem */
 		return map;

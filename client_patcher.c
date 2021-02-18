@@ -551,7 +551,7 @@ patch_cb(void *arg1, void *arg2)
 
 	set_progress(5);
 
-	rc = pw_elements_load(&elements, elements_path, !g_force_update);
+	rc = pw_elements_load(&elements, elements_path, "patcher/elements.imap");
 	if (rc != 0) {
 		set_text(g_status_right_lbl, "elements file not found. Please redownload the client");
 		goto err_retry;

@@ -273,13 +273,15 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 	FILE *fp;
 	int rc;
 	char buf[128];
+	char buf2[256];
 	uint32_t max_id;
 
 	memset(npc, 0, sizeof(*npc));
 	snprintf(buf, sizeof(buf), "npcgen_%s", name);
 
 	npc->name = name;
-	npc->idmap = pw_idmap_init(buf, clean_load);
+	snprintf(buf2, sizeof(buf2), "patcher/%s.imap", buf);
+	npc->idmap = pw_idmap_init(buf, clean_load ? NULL : buf2);
 	if (!npc->idmap) {
 		PWLOG(LOG_ERROR, "pw_idmap_init() failed\n");
 		return 1;
