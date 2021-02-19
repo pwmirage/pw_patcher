@@ -229,7 +229,7 @@ deserialize_chunked_table_fn(struct cjson *f, struct serializer *slzr, void *dat
 			}
 		}
 
-		deserialize(json_el, slzr, &el);
+		deserialize(json_el, slzr, el);
 		json_el = json_el->next;
 	}
 
