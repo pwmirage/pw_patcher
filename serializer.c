@@ -457,7 +457,7 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p,
 			if (json_f->type != CJSON_TYPE_NONE) {
 				normalize_json_string(json_f->s);
 				deserialize_log(json_f, data);
-				memset(data, 0, len * 2);
+				memset(data, 0, len);
 				change_charset("UTF-8", "GB2312", json_f->s, strlen(json_f->s), (char *)data, len);
 			}
 			data += len;
