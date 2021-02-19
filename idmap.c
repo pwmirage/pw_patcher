@@ -295,7 +295,11 @@ _idmap_set(struct pw_idmap *map, long long lid, long id, long type, void *data)
 
 					if (tmp_el->is_async_fn || tmp_el->is_dummy_mapping) {
 						/* replace tmp_el with el */
-						last_el->next = el;
+						if (last_el) {
+							last_el->next = el;
+						} else {
+							map->lists[lid % PW_IDMAP_ARR_SIZE] = el;
+						}
 						el->next = tmp_el->next;
 						free(tmp_el);
 						return el;
