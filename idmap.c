@@ -29,11 +29,6 @@ struct pw_id_el {
 
 struct pw_idmap_file_hdr {
 	uint32_t version;
-	uint32_t type_count;
-};
-
-struct pw_idmap_type {
-	uint32_t max_natural_id;
 };
 
 struct pw_idmap_file_entry {
@@ -44,7 +39,6 @@ struct pw_idmap_file_entry {
 
 struct pw_idmap {
 	char *name;
-	struct pw_idmap_type types[128];
 	long registered_types_cnt;
 	struct pw_id_el *lists[PW_IDMAP_ARR_SIZE];
 };
@@ -89,8 +83,10 @@ pw_idmap_init(const char *name, const char *filename)
 	struct pw_idmap_file_hdr hdr;
 	fread(&hdr, 1, sizeof(hdr), fp);
 
-	for (i = 0; i < hdr.type_count; i++) {
-		fread(&map->types[i], 1, sizeof(map->types[i]), fp);
+	if (hdr.version != 2) {
+		/* pretend it's not even there */
+		fclose(fp);
+		return map;
 	}
 
 	size_t fpos = ftell(fp);
@@ -104,11 +100,6 @@ pw_idmap_init(const char *name, const char *filename)
 		struct pw_id_el *id_el;
 
 		fread(&entry, 1, sizeof(entry), fp);
-		if (entry.type >= hdr.type_count) {
-			PWLOG(LOG_ERROR, "found invalid saved idmap entry (type=%d > %d)\n",
-					entry.type, hdr.type_count);
-			continue;
-		}
 
 		PWLOG(LOG_INFO, "loaded mapping. lid=0x%llx, id=%u\n", entry.lid, entry.id);
 
@@ -357,18 +348,6 @@ pw_idmap_set(struct pw_idmap *map, long long lid, long id, long type, void *data
 void
 pw_idmap_end_type_load(struct pw_idmap *map, long type_id, uint32_t max_id)
 {
-	struct pw_idmap_type *type;
-	int max_types = sizeof(map->types) / sizeof(map->types[0]);
-
-	if (type_id >= max_types) {
-		PWLOG(LOG_ERROR, "can't find given type: %s->%d\n", map->name, type_id);
-		return;
-	}
-
-	type = &map->types[type_id];
-	if (type->max_natural_id == 0) {
-		type->max_natural_id = max_id;
-	}
 }
 
 int
@@ -386,21 +365,13 @@ pw_idmap_save(struct pw_idmap *map, const char *filename)
 	}
 
 	struct pw_idmap_file_hdr hdr;
-	hdr.version = 1;
-	hdr.type_count = map->registered_types_cnt;
-
+	hdr.version = 2;
 	fwrite(&hdr, 1, sizeof(hdr), fp);
-	for (i = 0; i < hdr.type_count; i++) {
-		fwrite(&map->types[i], 1, sizeof(map->types[i]), fp);
-	}
 
 	for (i = 0; i < PW_IDMAP_ARR_SIZE; i++) {
 		el = map->lists[i];
 		while (el) {
-			struct pw_idmap_type *type = &map->types[el->type];
-
-			/* XXX is the first condition redundant? */
-			if (el->lid <= type->max_natural_id) {
+			if (el->lid == el->id) {
 				el = el->next;
 				continue;
 			}
