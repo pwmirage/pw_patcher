@@ -532,6 +532,7 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 				PWLOG(LOG_ERROR, "pw_chain_table_alloc() failed for spawner->groups\n");
 				return -1;
 			}
+			grp_tbl->new_el_fn = init_spawner_group_fn;
 			*(void **)serializer_get_field(table->serializer, "groups", table_el) = grp_tbl;
 		} else if (table == &npc->resources) {
 			struct pw_chain_table *grp_tbl;
@@ -560,6 +561,18 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 	return 0;
 }
 
+#define SAVE_TBL_CNT(name, slzr, data) \
+	({ \
+		struct pw_chain_table *tbl = *(void **)serializer_get_field(slzr, name, data); \
+		struct pw_chain_el *chain = tbl->chain; \
+		uint32_t cnt = 0; \
+		while (chain) { \
+			cnt += chain->count; \
+			chain = chain->next; \
+		} \
+		*(uint32_t *)serializer_get_field(slzr, "_" name "_cnt", data) = cnt; \
+	})
+
 int
 pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 {
@@ -586,8 +599,10 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 			continue;
 		}
 
+		SAVE_TBL_CNT("groups", spawner_serializer, el);
+
 		off_begin = ftell(fp);
-		fwrite(el, 1, npc->spawners.el_size, fp);
+		fwrite(el, 1, 71, fp);
 
 		void *grp_el;
 		struct pw_chain_table *grp_table = *(void **)serializer_get_field(spawner_serializer, "groups", el);
@@ -624,8 +639,10 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 			continue;
 		}
 
+		SAVE_TBL_CNT("groups", resource_serializer, el);
+
 		off_begin = ftell(fp);
-		fwrite(el, 1, npc->resources.el_size, fp);
+		fwrite(el, 1, 42, fp);
 
 		void *grp_el;
 		struct pw_chain_table *grp_table = *(void **)serializer_get_field(resource_serializer, "groups", el);
