@@ -103,6 +103,10 @@ deserialize_elements_id_field_fn(struct cjson *f, struct serializer *slzr, void 
 {
 	int64_t val = JSi(f);
 
+	if (f->type == CJSON_TYPE_NONE) {
+		return 4;
+	}
+
 	if (val >= 0x80000000) {
 		int rc = pw_idmap_get_async(g_elements_map, val, 0, deserialize_elements_id_field_async_fn, data);
 

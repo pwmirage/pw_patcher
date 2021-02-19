@@ -71,6 +71,10 @@ deserialize_spawner_type_fn(struct cjson *f, struct serializer *slzr, void *data
 	uint32_t is_npc = 0;
 	const char *name = JSs(f);
 
+	if (f->type == CJSON_TYPE_NONE) {
+		return 4;
+	}
+
 	if (name && strcmp(name, "npc") == 0) {
 		is_npc = 1;
 	}
@@ -89,6 +93,10 @@ static size_t
 deserialize_id_removed_fn(struct cjson *f, struct serializer *slzr, void *data)
 {
 	uint32_t is_removed = !!(*(uint32_t *)(data) & (1 << 31));
+
+	if (f->type == CJSON_TYPE_NONE) {
+		return 0;
+	}
 
 	deserialize_log(f, &is_removed);
 
@@ -112,6 +120,10 @@ static size_t
 deserialize_elements_id_field_fn(struct cjson *f, struct serializer *slzr, void *data)
 {
 	int64_t val = JSi(f);
+
+	if (f->type == CJSON_TYPE_NONE) {
+		return 4;
+	}
 
 	if (val >= 0x80000000) {
 		int rc = pw_idmap_get_async(g_elements_map, val, 0, deserialize_elements_id_field_async_fn, data);
