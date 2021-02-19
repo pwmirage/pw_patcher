@@ -17,6 +17,7 @@ struct pw_id_el {
 	long id;
 	short type;
 	uint8_t is_lid_mapping : 1;
+	uint8_t is_dummy_mapping : 1;
 	uint8_t is_async_fn : 1;
 	uint8_t _unused1: 6;
 	char _unused2;
@@ -116,10 +117,36 @@ pw_idmap_init(const char *name, const char *filename)
 		id_el = _idmap_set(map, entry.id, entry.id, entry.type, NULL);
 		id_el->is_lid_mapping = 1;
 		id_el->data = (void *)(uintptr_t)entry.lid;
+
+		/* another dummy in case the entry is not loaded with id, but created at
+		 * runtime and the mapping is specifically requested via pw_idmap_get_mapped_id() */
+		id_el = _idmap_set(map, entry.lid, entry.id, entry.type, NULL);
+		id_el->is_dummy_mapping = 1;
 	}
 
 	fclose(fp);
 	return map;
+}
+
+uint32_t
+pw_idmap_get_mapped_id(struct pw_idmap *map, uint64_t lid, long type)
+{
+	struct pw_id_el *el;
+
+	el = map->lists[lid % PW_IDMAP_ARR_SIZE];
+	while (el) {
+		if (el->lid == lid && (type == 0 || el->type == 0 || el->type == type)) {
+			break;
+		}
+
+		el = el->next;
+	}
+
+	if (el) {
+		return el->id;
+	}
+
+	return 0;
 }
 
 long
@@ -137,7 +164,15 @@ pw_idmap_get(struct pw_idmap *map, long long lid, long type)
 
 	while (el) {
 		if (el->lid == lid && (type == 0 || el->type == 0 || el->type == type)) {
-			assert(!el->is_lid_mapping);
+			if (el->is_dummy_mapping) {
+				return NULL;
+			}
+			if (el->is_lid_mapping) {
+				PWLOG(LOG_ERROR, "Trying to get an object that's not initialized! lid=0x%llx, id=%u\n", (int64_t)(uintptr_t)el->data, el->id);
+
+				assert(false);
+				return NULL;
+			}
 			if (el->is_async_fn) {
 				return NULL;
 			}
@@ -168,7 +203,7 @@ pw_idmap_get_async(struct pw_idmap *map, long long lid, long type, pw_idmap_asyn
 		el = el->next;
 	}
 
-	if (el && !el->is_async_fn) {
+	if (el && !el->is_async_fn && !el->is_dummy_mapping) {
 		fn(el->data, fn_ctx);
 		return 0;
 	}
@@ -186,10 +221,10 @@ pw_idmap_get_async(struct pw_idmap *map, long long lid, long type, pw_idmap_asyn
 		el = _idmap_set(map, lid, 0, type, NULL);
 		el->is_async_fn = 1;
 		el->data = async_el;
+	} else if (!el->is_async_fn) {
+		el->is_async_fn = 1;
+		el->data = async_el;
 	} else {
-		assert(!el->is_lid_mapping);
-		assert(el->is_async_fn);
-
 		/* put it to the front */
 		async_el->next = el->data;
 		el->data = async_el;
@@ -227,6 +262,10 @@ _idmap_set(struct pw_idmap *map, long long lid, long id, long type, void *data)
 	}
 
 	if (el) {
+		if (data && el->is_dummy_mapping) {
+			el->is_dummy_mapping = 0;
+		}
+
 		if (el->is_lid_mapping) {
 			struct pw_id_el *tmp_el;
 
@@ -243,7 +282,7 @@ _idmap_set(struct pw_idmap *map, long long lid, long id, long type, void *data)
 			el->data = data;
 			el->next = NULL;
 
-			PWLOG(LOG_INFO, "found temporary at lid=0x%x, reloacting to 0x%llx\n", el->id, el->lid);
+			PWLOG(LOG_INFO, "found temporary at lid=0x%x, relocating to 0x%llx\n", el->id, el->lid);
 
 			tmp_el = map->lists[lid % PW_IDMAP_ARR_SIZE];
 			last_el = NULL;
@@ -252,6 +291,9 @@ _idmap_set(struct pw_idmap *map, long long lid, long id, long type, void *data)
 					/* target lid already set */
 					if (tmp_el->is_async_fn) {
 						call_async_arr(tmp_el->data, data);
+					}
+
+					if (tmp_el->is_async_fn || tmp_el->is_dummy_mapping) {
 						/* replace tmp_el with el */
 						last_el->next = el;
 						el->next = tmp_el->next;
@@ -353,6 +395,7 @@ pw_idmap_save(struct pw_idmap *map, const char *filename)
 		while (el) {
 			struct pw_idmap_type *type = &map->types[el->type];
 
+			/* XXX is the first condition redundant? */
 			if (el->lid <= type->max_natural_id) {
 				el = el->next;
 				continue;

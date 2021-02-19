@@ -1560,6 +1560,12 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 	table_el = pw_idmap_get(g_elements_map, id, table->idmap_type);
 	if (!table_el) {
 		uint32_t el_id = ++g_elements_last_id;
+		uint32_t mapped_id;
+
+		mapped_id = pw_idmap_get_mapped_id(g_elements_map, id, table->idmap_type);
+		if (mapped_id) {
+			el_id = mapped_id;
+		}
 
 		table_el = pw_chain_table_new_el(table);
 		*(uint32_t *)table_el = el_id;
