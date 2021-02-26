@@ -332,6 +332,7 @@ main(int argc, char *argv[])
 		return 1;
 	}
 
+	struct cjson *files = JS(ver_cjson, "files");
 	struct cjson *updates = JS(ver_cjson, "updates");
 	bool is_cumulative = JSi(ver_cjson, "cumulative") && !force_fresh_update;
 	const char *elements_path;
@@ -339,6 +340,22 @@ main(int argc, char *argv[])
 	const char *last_hash = NULL;
 
 	if (updates->count) {
+		for (i = 0; i < files->count; i++) {
+			struct cjson *file = JS(files, i);
+			const char *name = JSs(file, "name");
+			const char *url = JSs(file, "url");
+
+			if (strcmp(name, "elements.imap") != 0) {
+				continue;
+			}
+
+			rc = download(url, "patcher/elements.imap");
+			if (rc != 0) {
+				PWLOG(LOG_ERROR, "elements.imap download failed: %d", rc);
+				return 1;
+			}
+		}
+
 		if (is_cumulative) {
 			elements_path = "config/elements.data";
 			tasks_path = "config/tasks.data";
