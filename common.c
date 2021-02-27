@@ -223,6 +223,8 @@ fwsprint(FILE *fp, const uint16_t *buf, int maxlen)
 			fputs("\\\"", fp);
 		} else if (*b == '\r') {
 			/* do nothing */
+		} else if (*b == '\t') {
+			fputs("\\t", fp);
 		} else if (*b == '\n') {
 			fputs("\\n", fp);
 		} else {
