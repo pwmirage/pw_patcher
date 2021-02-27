@@ -1338,6 +1338,37 @@ struct __attribute__((packed)) player_levelexp_config {
 	int32_t exp[150];
 };
 
+static struct serializer npc_task_in_service_serializer[] = {
+	{ "id", _INT32 },
+	{ "name", _WSTRING(32) },
+	{ "tasks", _ARRAY_START(32) },
+		{ "", _INT32 },
+	{ "", _ARRAY_END },
+	{ "", _TYPE_END },
+};
+
+static struct serializer npc_task_out_service_serializer[] = {
+	{ "id", _INT32 },
+	{ "name", _WSTRING(32) },
+	{ "tasks", _ARRAY_START(32) },
+		{ "", _INT32 },
+	{ "", _ARRAY_END },
+	{ "", _TYPE_END },
+};
+
+static struct serializer npc_task_matter_service_serializer[] = {
+	{ "id", _INT32 },
+	{ "name", _WSTRING(32) },
+	{ "tasks", _ARRAY_START(16) },
+		{ "id", _INT32 },
+		{ "items", _ARRAY_START(4) },
+			{ "id", _INT32 },
+			{ "num", _INT32 },
+		{ "", _ARRAY_END },
+	{ "", _ARRAY_END },
+	{ "", _TYPE_END },
+};
+
 static struct serializer damagerune_sub_type_serializer[] = { { "", _TYPE_END } };
 static struct serializer armorrune_sub_type_serializer[] = { { "", _TYPE_END } };
 static struct serializer skilltome_sub_type_serializer[] = { { "", _TYPE_END } };
@@ -1349,9 +1380,6 @@ static struct serializer npc_buy_service_serializer[] = { { "", _TYPE_END } };
 static struct serializer npc_repair_service_serializer[] = { { "", _TYPE_END } };
 static struct serializer npc_install_service_serializer[] = { { "", _TYPE_END } };
 static struct serializer npc_uninstall_service_serializer[] = { { "", _TYPE_END } };
-static struct serializer npc_task_in_service_serializer[] = { { "", _TYPE_END } };
-static struct serializer npc_task_out_service_serializer[] = { { "", _TYPE_END } };
-static struct serializer npc_task_matter_service_serializer[] = { { "", _TYPE_END } };
 static struct serializer npc_skill_service_serializer[] = { { "", _TYPE_END } };
 static struct serializer npc_heal_service_serializer[] = { { "", _TYPE_END } };
 static struct serializer npc_transmit_service_serializer[] = { { "", _TYPE_END } };
@@ -1452,11 +1480,15 @@ pw_elements_serialize(struct pw_elements *elements)
 	EXPORT_TABLE(elements, material_sub_type, "material_minor_types.json");
 
 	EXPORT_TABLE(elements, projectile_types, "projectile_typess.json");
-	EXPORT_TABLE(elements, quiver_sub_type, "quiver_typess.json");
+	EXPORT_TABLE(elements, quiver_sub_type, "quiver_types.json");
 	EXPORT_TABLE(elements, stone_types, "stone_types.json");
 
 	EXPORT_TABLE(elements, armor_sets, "armor_sets.json");
 	EXPORT_TABLE(elements, equipment_addon, "equipment_addon.json");
+
+	EXPORT_TABLE(elements, npc_task_in_service, "npc_tasks_in.json");
+	EXPORT_TABLE(elements, npc_task_out_service, "npc_tasks_out.json");
+	EXPORT_TABLE(elements, npc_task_matter_service, "npc_tasks_matter.json");
 
 	FILE *fp = fopen("items.json", "wb");
 	if (fp == NULL) {
