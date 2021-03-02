@@ -50,7 +50,7 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 
 		while (true) {
 			if (slzr->type == _INT8) {
-				if (!obj_printed || (*(uint16_t *)data != 0 && slzr->name[0] != '_')) {
+				if (!obj_printed || (*(uint8_t *)data != 0 && slzr->name[0] != '_')) {
 					if (slzr->name[0] != 0) {
 						fprintf(fp, "\"%s\":", slzr->name);
 					}
