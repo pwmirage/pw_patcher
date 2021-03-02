@@ -134,7 +134,7 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 				slzr++;
 				_serialize(fp, &slzr, &data, cnt, true, false, false);
 
-				if (ftell(fp) == pre_pos || slzr_name[0] == '_') {
+				if (ftell(fp) <= pre_pos + 2 || slzr_name[0] == '_') {
 					fseek(fp, pre_name_pos, SEEK_SET);
 				} else {
 					fprintf(fp, ",");
@@ -158,7 +158,7 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 						slzr++;
 						_serialize(fp, &slzr, &data, 1, true, false, true);
 					}
-					if (ftell(fp) == pre_pos) {
+					if (ftell(fp) <= pre_pos + 2) {
 						/* nothing printed in the object, skip its name */
 						fseek(fp, pre_name_pos, SEEK_SET);
 					} else {
