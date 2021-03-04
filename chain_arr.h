@@ -42,8 +42,8 @@ struct pw_chain_table {
 
 #define _CHAIN_TABLE _CUSTOM, serialize_chunked_table_fn, deserialize_chunked_table_fn
 #define PW_CHAIN_TABLE_FOREACH(_var, _table) \
-	for (struct pw_chain_el *_pw_chain_internal_chain = (_table)->chain; _pw_chain_internal_chain; _pw_chain_internal_chain = _pw_chain_internal_chain->next) \
-	for ((_var) = (void *)_pw_chain_internal_chain->data; (_var) != (void *)_pw_chain_internal_chain->data + _pw_chain_internal_chain->count * (_table)->el_size; (_var) += (_table)->el_size)
+	for (struct { struct pw_chain_el *chain; uint32_t i; } _pw_chain_internal = { (_table)->chain, 0 }; _pw_chain_internal.chain; _pw_chain_internal.chain = _pw_chain_internal.chain->next, _pw_chain_internal.i = 0) \
+	for ((_var) = (void *)_pw_chain_internal.chain->data; _pw_chain_internal.i < _pw_chain_internal.chain->count; (_var) += (_table)->el_size, _pw_chain_internal.i++)
 
 int pw_chain_table_init(struct pw_chain_table *table, const char *name, struct serializer *serializer, size_t el_size, size_t count);
 struct pw_chain_table *pw_chain_table_alloc(const char *name, struct serializer *serializer, size_t el_size, size_t count);
