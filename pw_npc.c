@@ -589,7 +589,6 @@ int
 pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 {
 	FILE *fp;
-	struct pw_chain_el *chain;
 	void *el;
 
 	fp = fopen(file_path, "wb");
@@ -602,7 +601,7 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 	fwrite(&npc->hdr, 1, sizeof(npc->hdr), fp);
 	
 	uint32_t spawners_count = 0;
-	PW_CHAIN_TABLE_FOREACH(el, chain, &npc->spawners) {
+	PW_CHAIN_TABLE_FOREACH(el, &npc->spawners) {
 		size_t off_begin;
 		uint32_t groups_count = 0;
 
@@ -618,8 +617,7 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 
 		void *grp_el;
 		struct pw_chain_table *grp_table = *(void **)serializer_get_field(spawner_serializer, "groups", el);
-		struct pw_chain_el *grp_chain;
-		PW_CHAIN_TABLE_FOREACH(grp_el, grp_chain, grp_table) {
+		PW_CHAIN_TABLE_FOREACH(grp_el, grp_table) {
 			if (*(uint32_t *)grp_el & ~(1UL << 31)) {
 				fwrite(grp_el, 1, grp_table->el_size, fp);
 				groups_count++;
@@ -642,7 +640,7 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 	}
 
 	uint32_t resources_count = 0;
-	PW_CHAIN_TABLE_FOREACH(el, chain, &npc->resources) {
+	PW_CHAIN_TABLE_FOREACH(el, &npc->resources) {
 		size_t off_begin;
 		uint32_t groups_count = 0;
 
@@ -658,8 +656,7 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 
 		void *grp_el;
 		struct pw_chain_table *grp_table = *(void **)serializer_get_field(resource_serializer, "groups", el);
-		struct pw_chain_el *grp_chain;
-		PW_CHAIN_TABLE_FOREACH(grp_el, grp_chain, grp_table) {
+		PW_CHAIN_TABLE_FOREACH(grp_el, grp_table) {
 			if (*(uint32_t *)(grp_el + 4) & ~(1UL << 31)) {
 				fwrite(grp_el, 1, grp_table->el_size, fp);
 				groups_count++;
@@ -682,7 +679,7 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 	}
 
 	uint32_t dynamics_count = 0;
-	PW_CHAIN_TABLE_FOREACH(el, chain, &npc->dynamics) {
+	PW_CHAIN_TABLE_FOREACH(el, &npc->dynamics) {
 		if (DYNAMIC_ID(el) & (1 << 31)) {
 			PWLOG(LOG_DEBUG_5, "dynamic ignored, off=%u, id=%u\n", ftell(fp), DYNAMIC_ID(el));
 			continue;
@@ -693,7 +690,7 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 	}
 
 	uint32_t triggers_count = 0;
-	PW_CHAIN_TABLE_FOREACH(el, chain, &npc->triggers) {
+	PW_CHAIN_TABLE_FOREACH(el, &npc->triggers) {
 		if (TRIGGER_ID(el) & (1 << 31)) {
 			PWLOG(LOG_DEBUG_5, "trigger ignored, off=%u, id=%u\n", ftell(fp), TRIGGER_ID(el));
 			continue;

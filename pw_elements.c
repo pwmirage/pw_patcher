@@ -2093,7 +2093,6 @@ pw_elements_adjust_rates(struct pw_elements *elements, struct cjson *rates)
 	}
 
 	void *el;
-	struct pw_chain_el *chain;
 
 	tbl = get_chain_table(elements, "monsters");
 	int monster_xp_off = serializer_get_offset(tbl->serializer, "exp");
@@ -2101,7 +2100,7 @@ pw_elements_adjust_rates(struct pw_elements *elements, struct cjson *rates)
 	int monster_money_average_off = serializer_get_offset(tbl->serializer, "money_average");
 	int monster_money_var_off = serializer_get_offset(tbl->serializer, "money_var");
 
-	PW_CHAIN_TABLE_FOREACH(el, chain, tbl) {
+	PW_CHAIN_TABLE_FOREACH(el, tbl) {
 		*(uint32_t *)(el + monster_xp_off) *= xp_rate;
 		*(uint32_t *)(el + monster_sp_off) *= sp_rate;
 		*(uint32_t *)(el + monster_money_average_off) *= coin_rate;
