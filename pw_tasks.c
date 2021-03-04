@@ -284,7 +284,61 @@ static struct serializer pw_task_talk_proc_serializer[] = {
 	{ "", _TYPE_END },
 };
 
+static struct serializer pw_task_serializer[];
+
+static size_t
+serialize_start_by_fn(FILE *fp, struct serializer *f, void *data)
+{
+	struct serializer *slzr = pw_task_serializer;
+	void *task = data;
+	int val = 0;
+
+	if (fp == g_nullfile) {
+		return 0;
+	}
+
+	if (*(uint8_t *)serializer_get_field(slzr, "_auto_trigger", task)) val = 1;
+	if (*(uint32_t *)serializer_get_field(slzr, "start_npc", task) & ~(1 << 31)) val = 2;
+	if (*(uint8_t *)serializer_get_field(slzr, "_start_on_enter", task)) val = 3;
+	if (*(uint8_t *)serializer_get_field(slzr, "_trigger_on_death", task)) val = 4;
+
+	fprintf(fp, "\"%s\":%d,", f->name, val);
+	return 0;
+}
+
+static size_t
+deserialize_start_by(struct cjson *f, struct serializer *slzr, void *data)
+{
+	void *task = data;
+
+	if (f->type == CJSON_TYPE_NONE) {
+		return 0;
+	}
+
+	*(uint8_t *)serializer_get_field(slzr, "_auto_trigger", task) = 0;
+	*(uint32_t *)serializer_get_field(slzr, "start_npc", task) |= (1 << 31);
+	*(uint8_t *)serializer_get_field(slzr, "_start_on_enter", task) = 0;
+	*(uint8_t *)serializer_get_field(slzr, "_trigger_on_death", task) = 0;
+	switch (JSi(f)) {
+		case 1:
+			*(uint8_t *)serializer_get_field(slzr, "_auto_trigger", task) = 1;
+			break;
+		case 2:
+			*(uint32_t *)serializer_get_field(slzr, "start_npc", task) &= ~(1 << 31);
+			break;
+		case 3:
+			*(uint8_t *)serializer_get_field(slzr, "_start_on_enter", task) = 1;
+			break;
+		case 4:
+			*(uint8_t *)serializer_get_field(slzr, "_trigger_on_death", task) = 1;
+			break;
+	}
+
+	return 0;
+}
+
 static struct serializer pw_task_serializer[] = {
+	{ "_start_by", _CUSTOM, serialize_start_by_fn, deserialize_start_by },
 	{ "id", _INT32 },
 	{ "name", _WSTRING(30) },
 	{ "_has_signature", _INT8 }, /* we'll be always setting this to 0 */
@@ -311,16 +365,16 @@ static struct serializer pw_task_serializer[] = {
 	{ "need_record", _INT8 },
 	{ "fail_on_death", _INT8 },
 	{ "simultaneous_player_limit", _INT32 },
-	{ "start_on_enter", _INT8 },
+	{ "_start_on_enter", _INT8 },
 	{ "start_on_enter_world_id", _INT32 },
 	{ "start_on_enter_location", _OBJECT_START, NULL, NULL, pw_task_location_serializer },
 	{ "instant_teleport", _INT8 },
 	{ "instant_teleport_point", _OBJECT_START, NULL, NULL, pw_task_point_serializer },
 	{ "ai_trigger", _INT32 },
 	{ "ai_trigger_enable", _INT8 },
-	{ "auto_trigger", _INT8 },
-	{ "trigger_on_death", _INT8 },
-	{ "remove_obtained_items", _INT8 },
+	{ "_auto_trigger", _INT8 },
+	{ "_trigger_on_death", _INT8 },
+	{ "remove_premise_items", _INT8 },
 	{ "recommended_level", _INT32 },
 	{ "show_quest_title", _INT8 },
 	{ "show_as_gold_quest", _INT8 },
@@ -329,9 +383,9 @@ static struct serializer pw_task_serializer[] = {
 	{ "is_craft_skill_quest", _INT8 },
 	{ "can_be_found", _INT8 },
 	{ "show_direction", _INT8 },
-	{ "m_bMarriage", _INT8 },
-	{ "level_min", _INT32 },
-	{ "level_max", _INT32 },
+	{ "is_marriage_quest", _INT8 },
+	{ "premise_level_min", _INT32 },
+	{ "premise_level_max", _INT32 },
 	{ "dontshow_under_level_min", _INT8 },
 	{ "_premise_items_cnt", _INT32 },
 	{ "_ptr5", _INT32 },
@@ -342,39 +396,39 @@ static struct serializer pw_task_serializer[] = {
 	{ "_ptr6", _INT32 },
 	{ "premise_coins", _INT32 },
 	{ "dontshow_without_premise_coins", _INT8 },
-	{ "req_reputation_min", _INT32 },
-	{ "req_reputation_max", _INT32 },
-	{ "dontshow_without_req_reputation", _INT8 },
+	{ "premise_reputation_min", _INT32 },
+	{ "premise_reputation_max", _INT32 },
+	{ "dontshow_without_premise_reputation", _INT8 },
 	{ "_req_quests_done_cnt", _INT32 },
-	{ "req_quests_done", _ARRAY_START(5) },
+	{ "premise_quests", _ARRAY_START(5) },
 		{ "", _INT32 },
 	{ "", _ARRAY_END },
-	{ "dontshow_without_req_quests", _INT8 },
-	{ "req_cultivation", _INT32 },
-	{ "dontshow_without_req_cultivation", _INT8 },
-	{ "req_faction_role", _INT32 },
-	{ "dontshow_without_req_faction_role", _INT8 },
-	{ "req_gender", _INT32 },
-	{ "dontshow_wrong_gender", _INT8 },
-	{ "_req_class_cnt", _INT32 },
-	{ "req_class", _ARRAY_START(8) },
+	{ "dontshow_without_premise_quests", _INT8 },
+	{ "premise_cultivation", _INT32 },
+	{ "dontshow_without_premise_cultivation", _INT8 },
+	{ "premise_faction_role", _INT32 },
+	{ "dontshow_without_premise_faction_role", _INT8 },
+	{ "premise_gender", _INT32 },
+	{ "dontshow_premise_gender", _INT8 },
+	{ "_premise_class_cnt", _INT32 },
+	{ "premise_class", _ARRAY_START(8) },
 		{ "", _INT32 },
 	{ "", _ARRAY_END },
 	{ "dontshow_wrong_class", _INT8 },
-	{ "req_be_married", _INT8 },
+	{ "premise_be_married", _INT8 },
 	{ "dontshow_without_marriage", _INT8 },
-	{ "req_be_gm", _INT8 },
-	{ "req_global_quest", _INT32 },
-	{ "req_global_quest_cond", _INT32 },
-	{ "_quests_mutex_cnt", _INT32 },
-	{ "quests_mutex", _ARRAY_START(5) },
+	{ "premise_be_gm", _INT8 },
+	{ "_premise_global_quest", _INT32 },
+	{ "_premise_global_quest_cond", _INT32 },
+	{ "_mutex_quests_cnt", _INT32 },
+	{ "mutex_quests", _ARRAY_START(5) },
 		{ "", _INT32 },
 	{ "", _ARRAY_END },
-	{ "req_blacksmith_level", _INT32 },
-	{ "req_tailor_level", _INT32 },
-	{ "req_craftsman_level", _INT32 },
-	{ "req_apothecary_level", _INT32 },
-	{ "m_DynTaskType", _INT8 },
+	{ "premise_blacksmith_level", _INT32 },
+	{ "premise_tailor_level", _INT32 },
+	{ "premise_craftsman_level", _INT32 },
+	{ "premise_apothecary_level", _INT32 },
+	{ "_m_DynTaskType", _INT8 },
 	{ "special_award_type", _INT32 },
 	{ "is_team_task", _INT8 },
 	{ "recv_in_team_only", _INT8 },
@@ -391,9 +445,9 @@ static struct serializer pw_task_serializer[] = {
 	{ "m_fRcvMemDist", _FLOAT },
 	{ "m_bCntByMemPos", _INT8 },
 	{ "m_fCntMemDist", _FLOAT },
-	{ "_req_squad_cnt", _INT32 },
+	{ "_premise_squad_cnt", _INT32 },
 	{ "_ptr7", _INT32 },
-	{ "show_req_squad", _INT8 },
+	{ "dontshow_without_premise_squad", _INT8 },
 	{ "success_method", _INT32 },
 	{ "need_npc_finish", _INT32 }, /* 0 => auto finish once children finished */
 	{ "_req_monsters_cnt", _INT32 },
@@ -422,7 +476,7 @@ static struct serializer pw_task_serializer[] = {
 	{ "date_spans", _CHAIN_TABLE, pw_task_date_span_serializer },
 	{ "premise_items", _CHAIN_TABLE, pw_task_item_serializer },
 	{ "free_given_items", _CHAIN_TABLE, pw_task_item_serializer },
-	{ "req_squad", _CHAIN_TABLE, pw_task_player_serializer },
+	{ "premise_squad", _CHAIN_TABLE, pw_task_player_serializer },
 	{ "req_monsters", _CHAIN_TABLE, pw_task_mob_serializer },
 	{ "req_items", _CHAIN_TABLE, pw_task_item_serializer },
 	{ "success_award", _OBJECT_START, NULL, NULL, pw_task_award_serializer },
@@ -614,7 +668,7 @@ read_task(void *data, FILE *fp, bool is_server)
 	LOAD_CHAIN_TBL(fp, "date_spans", slzr, data, pw_task_date_span_serializer);
 	LOAD_CHAIN_TBL(fp, "premise_items", slzr, data, pw_task_item_serializer);
 	LOAD_CHAIN_TBL(fp, "free_given_items", slzr, data, pw_task_item_serializer);
-	LOAD_CHAIN_TBL(fp, "req_squad", slzr, data, pw_task_player_serializer);
+	LOAD_CHAIN_TBL(fp, "premise_squad", slzr, data, pw_task_player_serializer);
 	LOAD_CHAIN_TBL(fp, "req_monsters", slzr, data, pw_task_mob_serializer);
 	LOAD_CHAIN_TBL(fp, "req_items", slzr, data, pw_task_item_serializer);
 
@@ -766,6 +820,18 @@ save_chain_tbl(FILE *fp, void **buf)
 }
 
 static void
+finalize_id_field(const char *fieldname, struct serializer *slzr, void *task)
+{
+	uint32_t *f = (uint32_t *)serializer_get_field(slzr, fieldname, task);
+
+	if (*f & (1 << 31)) {
+		*f = 0;
+	} else {
+		*f = ~(1 << 31);
+	}
+}
+
+static void
 write_task(void *data, FILE *fp, bool is_client)
 {
 	void *buf = data;
@@ -779,9 +845,10 @@ write_task(void *data, FILE *fp, bool is_client)
 	SAVE_TBL_CNT("date_spans", slzr, data);
 	SAVE_TBL_CNT("premise_items", slzr, data);
 	SAVE_TBL_CNT("free_given_items", slzr, data);
-	SAVE_TBL_CNT("req_squad", slzr, data);
+	SAVE_TBL_CNT("premise_squad", slzr, data);
 	SAVE_TBL_CNT("req_monsters", slzr, data);
 	SAVE_TBL_CNT("req_items", slzr, data);
+	finalize_id_field("start_npc", slzr, data);
 
 	fwrite(buf, 534, 1, fp);
 	buf += 534;
