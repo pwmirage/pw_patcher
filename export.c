@@ -62,6 +62,8 @@ print_tasks(const char *path)
 		return rc;
 	}
 
+	//pw_tasks_save(&taskf, "tasks2.data", true);
+
 	return 0;
 }
 

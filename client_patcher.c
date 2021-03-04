@@ -249,7 +249,7 @@ on_init(int argc, char *argv[])
 
 	set_text(g_status_right_lbl, "");
 
-	if (JSi(g_latest_version, "patcher_version") >= 13) {
+	if (JSi(g_latest_version, "patcher_version") >= 14) {
 		g_patcher_outdated = true;
 		set_text(g_patch_button, "Update");
 		enable_button(g_patch_button, true);

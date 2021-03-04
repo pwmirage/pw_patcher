@@ -8,6 +8,7 @@
 struct pw_task_file {
 	uint32_t magic;
 	uint32_t version;
+	struct pw_idmap *idmap;
 	struct pw_chain_table *tasks;
 	unsigned max_arr_idx;
 	unsigned max_dialogue_id;

@@ -16,12 +16,14 @@
 #include "cjson.h"
 #include "cjson_ext.h"
 #include "common.h"
+#include "idmap.h"
 #include "serializer.h"
 #include "chain_arr.h"
 #include "pw_npc.h"
 #include "pw_tasks.h"
 
 extern struct pw_idmap *g_elements_map;
+struct pw_idmap *g_tasks_map;
 
 #define TASK_FILE_MAGIC 0x93858361
 
@@ -284,6 +286,12 @@ static struct serializer pw_task_talk_proc_serializer[] = {
 	{ "", _TYPE_END },
 };
 
+static struct serializer pw_task_ref_serializer[] = {
+	{ "", _INT32 },
+	{ "", _TYPE_END },
+};
+
+
 static struct serializer pw_task_serializer[];
 
 static size_t
@@ -496,8 +504,8 @@ static struct serializer pw_task_serializer[] = {
 		{ "unfinished", _OBJECT_START, NULL, NULL, pw_task_talk_proc_serializer },
 		{ "ready", _OBJECT_START, NULL, NULL, pw_task_talk_proc_serializer },
 	{ "", _OBJECT_END },
-	{ "_sub_tasks_cnt", _INT32 },
-	{ "sub_tasks", _CHAIN_TABLE, pw_task_serializer },
+	{ "_sub_quests_cnt", _INT32 },
+	{ "sub_quests", _CHAIN_TABLE, pw_task_ref_serializer },
 	{ "", _TYPE_END },
 };
 
@@ -546,21 +554,6 @@ read_award(void **buf_p, FILE *fp, bool is_server)
 	}
 
 	return 0;
-}
-
-static uint32_t
-pw_chain_table_size(struct pw_chain_table *tbl)
-{
-	struct pw_chain_el *chain;
-	uint32_t cnt = 0;
-
-	chain = tbl->chain;
-	while (chain) {
-		cnt += chain->count;
-		chain = chain->next;
-	}
-
-	return cnt;
 }
 
 #define SAVE_TBL_CNT(name, slzr, data) \
@@ -635,17 +628,18 @@ write_award(void **buf_p, FILE *fp, bool is_client)
 	LOAD_CHAIN_TBL_CNT(fp, name, data_slzr, data_start, tbl_slzr, count)
 
 static int
-read_task(void *data, FILE *fp, bool is_server)
+read_task(struct pw_task_file *taskf, FILE *fp, bool is_server)
 {
-	void *buf = data;
 	struct pw_chain_table *tbl_p;
 	uint32_t id;
 	size_t count;
 	int rc, i;
 	struct serializer *slzr = pw_task_serializer;
+	void *data = pw_chain_table_new_el(taskf->tasks);
+	void *buf = data;
 
 	if (!data) {
-		PWLOG(LOG_ERROR, "data ptr is NULL\n");
+		PWLOG(LOG_ERROR, "pw_chain_table_new_el() failed\n");
 		return -1;
 	}
 
@@ -789,16 +783,21 @@ read_task(void *data, FILE *fp, bool is_server)
 	fread(&count, 4, 1, fp);
 	*(uint32_t *)buf = count;
 	buf += 4;
-	LOAD_CHAIN_TBL_CNT(fp, "sub_tasks", slzr, data, pw_task_serializer, 0);
+	LOAD_CHAIN_TBL_CNT(fp, "sub_quests", slzr, data, pw_task_ref_serializer, 0);
 	for (int s = 0; s < count; s++) {
-		void *el = pw_chain_table_new_el(tbl_p);
-		rc = read_task(el, fp, is_server);
-		if (rc) {
-			return rc;
+		rc = read_task(taskf, fp, is_server);
+		if (rc < 0) {
+			assert(false);
+			continue;
 		}
+
+		void *el = pw_chain_table_new_el(tbl_p);
+		*(uint32_t *)el = rc;
 	}
 
-	return 0;
+	pw_idmap_set(taskf->idmap, id, id, 0, data);
+
+	return id;
 }
 
 static void
@@ -828,7 +827,7 @@ finalize_id_field(const char *fieldname, struct serializer *slzr, void *task)
 }
 
 static void
-write_task(void *data, FILE *fp, bool is_client)
+write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 {
 	void *buf = data;
 	struct pw_chain_table *tbl_p;
@@ -955,16 +954,23 @@ write_task(void *data, FILE *fp, bool is_client)
 		}
 	}
 
-	SAVE_TBL_CNT("sub_tasks", slzr, data);
+	SAVE_TBL_CNT("sub_quests", pw_task_serializer, data);
 
 	fwrite(buf, 4, 1, fp);
 	buf += 4;
 
-	tbl_p = *(void **)serializer_get_field(slzr, "sub_tasks", data);
+	tbl_p = *(void **)serializer_get_field(slzr, "sub_quests", data);
 	void *el;
 
 	PW_CHAIN_TABLE_FOREACH(el, tbl_p) {
-		write_task(el, fp, is_client);
+		uint32_t id = *(uint32_t *)el;
+
+		if (id == 0) {
+			continue;
+		}
+
+		void *sub_q = pw_idmap_get(taskf->idmap, id, 0); /* FIXME go async */
+		write_task(taskf, sub_q, fp, is_client);
 	}
 }
 
@@ -1004,6 +1010,7 @@ pw_tasks_load(struct pw_task_file *taskf, const char *path)
 		return -ENOMEM;
 	}
 
+	taskf->idmap = pw_idmap_init("tasks", NULL);
 	fread(jmp_offsets, sizeof(*jmp_offsets), count, fp);
 	taskf->tasks = pw_chain_table_alloc("quests", pw_task_serializer, serializer_get_size(pw_task_serializer), count);
 	if (!taskf->tasks) {
@@ -1018,9 +1025,7 @@ pw_tasks_load(struct pw_task_file *taskf, const char *path)
 			continue;
 		}
 
-		void *task_el = pw_chain_table_new_el(taskf->tasks);
-
-		read_task(task_el, fp, is_server);
+		read_task(taskf, fp, is_server);
 		/* dont care about failure, we skip invalid tasks anyway */
 	}
 
@@ -1033,15 +1038,34 @@ int
 pw_tasks_serialize(struct pw_task_file *taskf, const char *filename)
 {
 	FILE *fp = fopen(filename, "wb");
+	void *el;
 
 	if (fp == NULL) {
 		PWLOG(LOG_ERROR, "cant open %s\n", filename);
 		return 1;
 	}
 
-	struct pw_chain_el *chain = taskf->tasks->chain;
-	size_t sz = serialize(fp, pw_task_serializer, chain->data, chain->count);
 
+	fprintf(fp, "[");
+
+
+	PW_CHAIN_TABLE_FOREACH(el, taskf->tasks) {
+		struct serializer *tmp_slzr = pw_task_serializer;
+		size_t pos_begin = ftell(fp);
+		void *tmp_el = el;
+
+		_serialize(fp, &tmp_slzr, &tmp_el, 1, true, true, true);
+
+		if (ftell(fp) > pos_begin + 2) {
+			fprintf(fp, ",\n");
+		}
+	}
+
+	/* replace ,\n} with }] */
+	fseek(fp, -3, SEEK_CUR);
+	fprintf(fp, "}]");
+
+	size_t sz = ftell(fp);
 	fclose(fp);
 	truncate(filename, sz);
 	return 0;
@@ -1064,7 +1088,13 @@ pw_tasks_save(struct pw_task_file *taskf, const char *path, bool is_server)
 	fwrite(&taskf->magic, sizeof(taskf->magic), 1, fp);
 	fwrite(&taskf->version, sizeof(taskf->version), 1, fp);
   
-	count = pw_chain_table_size(taskf->tasks);
+	count = 0;
+	PW_CHAIN_TABLE_FOREACH(el, taskf->tasks) {
+		uint32_t parent_id = *(uint32_t *)serializer_get_field(pw_task_serializer, "parent_quest", el);
+		if (!parent_id) {
+			count++;
+		}
+	}
 	fwrite(&count, sizeof(count), 1, fp);
 
 	jmp_offsets = malloc(count * sizeof (*jmp_offsets));
@@ -1079,8 +1109,12 @@ pw_tasks_save(struct pw_task_file *taskf, const char *path, bool is_server)
 
 	uint32_t i = 0;
 	PW_CHAIN_TABLE_FOREACH(el, taskf->tasks) {
+		uint32_t parent_id = *(uint32_t *)serializer_get_field(pw_task_serializer, "parent_quest", el);
+		if (parent_id) {
+			continue;
+		}
 		jmp_offsets[i++] = ftell(fp);
-		write_task(el, fp, !is_server);
+		write_task(taskf, el, fp, !is_server);
 	}
 
 	assert(i == count);
