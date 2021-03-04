@@ -8,6 +8,7 @@
 #include <inttypes.h>
 #include <stdint.h>
 
+#include "chain_arr.h"
 #include "common.h"
 
 /* we use one of the unused fields as id */

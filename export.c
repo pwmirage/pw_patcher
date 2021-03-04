@@ -21,6 +21,7 @@
 
 #include "pw_elements.h"
 #include "pw_npc.h"
+#include "pw_tasks.h"
 
 static int
 print_elements(const char *path)
@@ -43,23 +44,57 @@ print_npcgen(const char *npcgen_path, const char *mapname)
 	return 0;
 }
 
+static int
+print_tasks(const char *path)
+{
+	struct pw_task_file taskf;
+	int rc;
+
+	rc = pw_tasks_load(&taskf, path);
+	if (rc) {
+		PWLOG(LOG_ERROR, "pw_tasks_load() failed: %d\n", rc);
+		return rc;
+	}
+
+	rc = pw_tasks_serialize(&taskf, "tasks.json");
+	if (rc) {
+		PWLOG(LOG_ERROR, "pw_tasks_serialize() failed: %d\n", rc);
+		return rc;
+	}
+
+	return 0;
+}
+
+static void
+print_help(char *argv[0])
+{
+	printf("%s npcs path_to_npcgen.data world_name\n", argv[0]);
+	printf("%s elements\n", argv[0]);
+	printf("%s tasks\n", argv[0]);
+}
 int
 main(int argc, char *argv[])
 {
 	int rc;
+
+	if (argc < 2) {
+		print_help(argv);
+		return 0;
+	}
+
 	setlocale(LC_ALL, "en_US.UTF-8");
+	const char *type = argv[1];
 
-    if (argc < 2) {
-        printf("./%s path_to_npcgen.data world_name\n", argv[0]);
-        printf("./%s path_to_elements.data\n", argv[0]);
-        return 0;
-    }
-
-    if (argc == 2) {
-        rc = print_elements(argv[1]);
-    } else {
-        rc = print_npcgen(argv[1], argv[2]);
-    }
+	if (strcmp(type, "elements") == 0) {
+		rc = print_elements(argv[2]);
+	} else if (strcmp(type, "tasks") == 0) {
+		rc = print_tasks(argv[2]);
+	} else if (strcmp(type, "npcs") == 0) {
+		print_npcgen(argv[2], argv[3]);
+	} else {
+		print_help(argv);
+		return 1;
+	}
 
 	return rc;
 }
