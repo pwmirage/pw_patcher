@@ -384,47 +384,47 @@ static struct serializer pw_task_serializer[] = {
 	{ "_trigger_on_death", _INT8 },
 	{ "remove_premise_items", _INT8 }, /* coins too */
 	{ "recommended_level", _INT32 },
-	{ "show_quest_title", _INT8 },
-	{ "show_as_gold_quest", _INT8 },
+	{ "display_quest_title", _INT8 },
+	{ "is_gold_quest", _INT8 },
 	{ "start_npc", _INT32 },
 	{ "finish_npc", _INT32 },
 	{ "is_craft_skill_quest", _INT8 },
 	{ "can_be_found", _INT8 },
-	{ "show_direction", _INT8 },
+	{ "display_direction", _INT8 },
 	{ "is_marriage_quest", _INT8 },
 	{ "premise_level_min", _INT32 },
 	{ "premise_level_max", _INT32 },
-	{ "dontshow_under_level_min", _INT8 },
+	{ "show_without_level_min", _INT8 },
 	{ "_premise_items_cnt", _INT32 },
 	{ "_ptr5", _INT32 },
-	{ "dontshow_without_premise_items", _INT8 },
+	{ "show_without_premise_items", _INT8 },
 	{ "_free_given_items_cnt", _INT32 },
 	{ "_free_given_common_items_cnt", _INT32 },
 	{ "_free_given_task_items_cnt", _INT32 },
 	{ "_ptr6", _INT32 },
 	{ "premise_coins", _INT32 },
-	{ "dontshow_without_premise_coins", _INT8 },
+	{ "show_without_premise_coins", _INT8 },
 	{ "premise_reputation_min", _INT32 },
 	{ "premise_reputation_max", _INT32 },
-	{ "dontshow_without_premise_reputation", _INT8 },
+	{ "show_without_premise_reputation", _INT8 },
 	{ "_req_quests_done_cnt", _INT32 },
 	{ "premise_quests", _ARRAY_START(5) },
 		{ "", _INT32 },
 	{ "", _ARRAY_END },
-	{ "dontshow_without_premise_quests", _INT8 },
+	{ "show_without_premise_quests", _INT8 },
 	{ "premise_cultivation", _INT32 },
-	{ "dontshow_without_premise_cultivation", _INT8 },
+	{ "show_without_premise_cultivation", _INT8 },
 	{ "premise_faction_role", _INT32 },
-	{ "dontshow_without_premise_faction_role", _INT8 },
+	{ "show_without_premise_faction_role", _INT8 },
 	{ "premise_gender", _INT32 },
-	{ "dontshow_premise_gender", _INT8 },
+	{ "show_without_premise_gender", _INT8 },
 	{ "_premise_class_cnt", _INT32 },
 	{ "premise_class", _ARRAY_START(8) },
 		{ "", _INT32 },
 	{ "", _ARRAY_END },
-	{ "dontshow_wrong_class", _INT8 },
+	{ "show_without_class", _INT8 },
 	{ "premise_be_married", _INT8 },
-	{ "dontshow_without_marriage", _INT8 },
+	{ "show_without_marriage", _INT8 },
 	{ "premise_be_gm", _INT8 },
 	{ "_premise_global_quest", _INT32 },
 	{ "_premise_global_quest_cond", _INT32 },
@@ -455,9 +455,9 @@ static struct serializer pw_task_serializer[] = {
 	{ "m_fCntMemDist", _FLOAT },
 	{ "_premise_squad_cnt", _INT32 },
 	{ "_ptr7", _INT32 },
-	{ "dontshow_without_premise_squad", _INT8 },
+	{ "show_without_premise_squad", _INT8 },
 	{ "success_method", _INT32 },
-	{ "_need_npc_finish", _INT32 }, /* TODO: Finish with NPC_COMPLETE_TASK dialogue */
+	{ "_need_npc_finish", _INT32 }, /* Finish with NPC_COMPLETE_TASK dialogue */
 	{ "_req_monsters_cnt", _INT32 },
 	{ "_ptr8", _INT32 },
 	{ "_req_items_cnt", _INT32 },
@@ -627,6 +627,32 @@ write_award(void **buf_p, FILE *fp, bool is_client)
 	count = *(uint32_t *)serializer_get_field((data_slzr), "_" name "_cnt", (data_start)); \
 	LOAD_CHAIN_TBL_CNT(fp, name, data_slzr, data_start, tbl_slzr, count)
 
+static void
+invert_bools(void *task)
+{
+	const char *fields[] = {
+		"show_without_level_min",
+		"show_without_premise_items",
+		"show_without_premise_coins",
+		"show_without_premise_reputation",
+		"show_without_premise_quests",
+		"show_without_premise_cultivation",
+		"show_without_premise_faction_role",
+		"show_without_premise_gender",
+		"show_without_class",
+		"show_without_marriage",
+		"show_without_premise_squad",
+	};
+	int num = sizeof(fields) / sizeof(fields[0]);
+	int i;
+
+	for (i = 0; i < num; i++) {
+		const char *fname = fields[i];
+		uint8_t *f = (uint8_t *)serializer_get_field(pw_task_serializer, fname, task);
+		*f = !*f;
+	}
+}
+
 static int
 read_task(struct pw_task_file *taskf, FILE *fp, bool is_server)
 {
@@ -647,6 +673,7 @@ read_task(struct pw_task_file *taskf, FILE *fp, bool is_server)
 	fread(buf, 534, 1, fp);
 	buf += 534;
 
+	invert_bools(data);
 	id = *(uint32_t *)data;
 	xor_bytes(serializer_get_field(slzr, "name", data), 30, id);
 
@@ -835,6 +862,7 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 	id = *(uint32_t *)data;
 	xor_bytes(serializer_get_field(slzr, "name", data), 30, id);
 
+	invert_bools(data);
 	SAVE_TBL_CNT("date_spans", slzr, data);
 	SAVE_TBL_CNT("premise_items", slzr, data);
 	SAVE_TBL_CNT("free_given_items", slzr, data);
