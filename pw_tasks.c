@@ -345,6 +345,58 @@ deserialize_start_by(struct cjson *f, struct serializer *slzr, void *data)
 	return 0;
 }
 
+static size_t
+serialize_subquest_activate_order_fn(FILE *fp, struct serializer *f, void *data)
+{
+	uint8_t _activate_chosen_subquest = *(uint8_t *)data;
+	uint8_t _activate_random_subquest = *(uint8_t *)(data + 1);
+	uint8_t _activate_subquests_in_order = *(uint8_t *)(data + 2);
+	int val = 0;
+
+	if (_activate_chosen_subquest) {
+		val = 1;
+	} else if (_activate_random_subquest) {
+		val = 2;
+	} else if (_activate_subquests_in_order) {
+		val = 3;
+	}
+
+	fprintf(fp, "\"%s\":%d,", f->name, val);
+	return 0;
+}
+
+static size_t
+deserialize_subquest_activate_order_fn(struct cjson *f, struct serializer *slzr, void *data)
+{
+	if (f->type == CJSON_TYPE_NONE) {
+		return 0;
+	}
+
+
+	uint8_t *_activate_chosen_subquest = (uint8_t *)data;
+	uint8_t *_activate_random_subquest = (uint8_t *)(data + 1);
+	uint8_t *_activate_subquests_in_order = (uint8_t *)(data + 2);
+	*_activate_chosen_subquest = 0;
+	*_activate_random_subquest = 0;
+	*_activate_subquests_in_order = 0;
+
+	switch (JSi(f)) {
+		case 1:
+			*_activate_chosen_subquest = 1;
+			break;
+		case 2:
+			*_activate_random_subquest = 1;
+			break;
+		case 3:
+			*_activate_subquests_in_order = 1;
+			break;
+		default:
+			break;
+	}
+
+	return 0;
+}
+
 static struct serializer pw_task_serializer[] = {
 	{ "_start_by", _CUSTOM, serialize_start_by_fn, deserialize_start_by },
 	{ "id", _INT32 },
@@ -361,9 +413,10 @@ static struct serializer pw_task_serializer[] = {
 	{ "_ptr3", _INT32 },
 	{ "_ptr4", _INT32 },
 	{ "avail_frequency", _INT32 },
-	{ "activate_chosen_subquest", _INT8 },
-	{ "activate_random_subquest", _INT8 },
-	{ "activate_subquests_in_order", _INT8 },
+	{ "subquest_activate_order", _CUSTOM, serialize_subquest_activate_order_fn, deserialize_subquest_activate_order_fn },
+	{ "_activate_chosen_subquest", _INT8 },
+	{ "_activate_random_subquest", _INT8 },
+	{ "_activate_subquests_in_order", _INT8 },
 	{ "on_give_up_parent_fail", _INT8 },
 	{ "on_success_parent_success", _INT8 },
 	{ "can_give_up", _INT8 },
