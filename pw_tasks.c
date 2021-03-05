@@ -382,7 +382,7 @@ static struct serializer pw_task_serializer[] = {
 	{ "ai_trigger_enable", _INT8 },
 	{ "_auto_trigger", _INT8 },
 	{ "_trigger_on_death", _INT8 },
-	{ "remove_premise_items", _INT8 },
+	{ "remove_premise_items", _INT8 }, /* coins too */
 	{ "recommended_level", _INT32 },
 	{ "show_quest_title", _INT8 },
 	{ "show_as_gold_quest", _INT8 },
@@ -457,7 +457,7 @@ static struct serializer pw_task_serializer[] = {
 	{ "_ptr7", _INT32 },
 	{ "dontshow_without_premise_squad", _INT8 },
 	{ "success_method", _INT32 },
-	{ "need_npc_finish", _INT32 }, /* 0 => auto finish once children finished */
+	{ "_need_npc_finish", _INT32 }, /* TODO: Finish with NPC_COMPLETE_TASK dialogue */
 	{ "_req_monsters_cnt", _INT32 },
 	{ "_ptr8", _INT32 },
 	{ "_req_items_cnt", _INT32 },
@@ -821,8 +821,6 @@ finalize_id_field(const char *fieldname, struct serializer *slzr, void *task)
 
 	if (*f & (1 << 31)) {
 		*f = 0;
-	} else {
-		*f = ~(1 << 31);
 	}
 }
 
@@ -844,6 +842,33 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 	SAVE_TBL_CNT("req_monsters", slzr, data);
 	SAVE_TBL_CNT("req_items", slzr, data);
 	finalize_id_field("start_npc", slzr, data);
+
+	struct serializer *dialogue_slzr = NULL;
+	int dialogue_ready_off = serializer_get_offset_slzr(slzr, "dialogue", &dialogue_slzr);
+	dialogue_ready_off += serializer_get_offset(dialogue_slzr + 1, "ready");
+	int talk_questions_off = serializer_get_offset(pw_task_talk_proc_serializer, "questions");
+	int question_choices_off = serializer_get_offset(pw_task_talk_proc_question_serializer, "choices");
+	int choice_id_off = serializer_get_offset(pw_task_talk_proc_choice_serializer, "id");
+
+	uint32_t _need_npc_finish = 0;
+	struct pw_chain_table *ready_questions_arr = *(void **)(data + dialogue_ready_off + talk_questions_off);
+	void *question;
+	PW_CHAIN_TABLE_FOREACH(question, ready_questions_arr) {
+
+		struct pw_chain_table *choices_arr = *(void **)(question + question_choices_off);
+		void *choice;
+		PW_CHAIN_TABLE_FOREACH(choice, choices_arr) {
+			uint32_t id = *(uint32_t *)(choice + choice_id_off);
+
+			if (id == NPC_COMPLETE_TASK) {
+				_need_npc_finish = 1;
+				break;
+			}
+		}
+	}
+	/* XXX: PW has it also set for parent tasks which are completed through children */
+	*(uint32_t *)serializer_get_field(slzr, "_need_npc_finish", data) = _need_npc_finish;
+
 
 	fwrite(buf, 534, 1, fp);
 	buf += 534;
@@ -1045,9 +1070,7 @@ pw_tasks_serialize(struct pw_task_file *taskf, const char *filename)
 		return 1;
 	}
 
-
 	fprintf(fp, "[");
-
 
 	PW_CHAIN_TABLE_FOREACH(el, taskf->tasks) {
 		struct serializer *tmp_slzr = pw_task_serializer;
@@ -1109,10 +1132,12 @@ pw_tasks_save(struct pw_task_file *taskf, const char *path, bool is_server)
 
 	uint32_t i = 0;
 	PW_CHAIN_TABLE_FOREACH(el, taskf->tasks) {
-		uint32_t parent_id = *(uint32_t *)serializer_get_field(pw_task_serializer, "parent_quest", el);
+		struct serializer *slzr = pw_task_serializer;
+		uint32_t parent_id = *(uint32_t *)serializer_get_field(slzr, "parent_quest", el);
 		if (parent_id) {
 			continue;
 		}
+
 		jmp_offsets[i++] = ftell(fp);
 		write_task(taskf, el, fp, !is_server);
 	}
