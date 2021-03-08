@@ -33,7 +33,7 @@ struct pw_idmap *g_tasks_map;
 
 enum pw_task_service_type
 {
-  NPC_TALK = 0x80000000,
+  NPC_TALK = 0x80000000, /* finish the talk for notqualified and unfinished */
   NPC_SELL,
   NPC_BUY,
   NPC_REPAIR,
@@ -41,7 +41,7 @@ enum pw_task_service_type
   NPC_UNINSTALL,
   NPC_GIVE_TASK,
   NPC_COMPLETE_TASK,
-  NPC_GIVE_TASK_MATTER,
+  NPC_GIVE_TASK_MATTER, /* unused */
   NPC_SKILL,
   NPC_HEAL,
   NPC_TRANSMIT,
@@ -271,7 +271,7 @@ static struct serializer pw_task_talk_proc_choice_serializer[] = {
 
 static struct serializer pw_task_talk_proc_question_serializer[] = {
 	{ "id", _INT32 },
-	{ "control", _INT32 },
+	{ "parent_id", _INT32 },
 	{ "text", _CUSTOM, serialize_pascal_wstr_fn, deserialize_pascal_wstr_fn },
 	{ "_choices_cnt", _INT32 },
 	{ "choices", _CHAIN_TABLE, pw_task_talk_proc_choice_serializer },
@@ -280,7 +280,7 @@ static struct serializer pw_task_talk_proc_question_serializer[] = {
 
 static struct serializer pw_task_talk_proc_serializer[] = {
 	{ "id", _INT32 },
-	{ "name", _WSTRING(64) },
+	{ "_name", _WSTRING(64) }, /* either RootNode or nothing */
 	{ "_questions_cnt", _INT32 },
 	{ "questions", _CHAIN_TABLE, pw_task_talk_proc_question_serializer },
 	{ "", _TYPE_END },
@@ -297,7 +297,6 @@ static struct serializer pw_task_serializer[];
 static size_t
 serialize_start_by_fn(FILE *fp, struct serializer *f, void *data)
 {
-	struct serializer *slzr = pw_task_serializer;
 	void *task = data;
 	int val = 0;
 
@@ -305,10 +304,10 @@ serialize_start_by_fn(FILE *fp, struct serializer *f, void *data)
 		return 0;
 	}
 
-	if (*(uint8_t *)serializer_get_field(slzr, "_auto_trigger", task)) val = 1;
-	if (*(uint32_t *)serializer_get_field(slzr, "start_npc", task) & ~(1 << 31)) val = 2;
-	if (*(uint8_t *)serializer_get_field(slzr, "_start_on_enter", task)) val = 3;
-	if (*(uint8_t *)serializer_get_field(slzr, "_trigger_on_death", task)) val = 4;
+	if (*(uint8_t *)serializer_get_field(pw_task_serializer, "_auto_trigger", task)) val = 1;
+	if (*(uint32_t *)serializer_get_field(pw_task_serializer, "start_npc", task) & ~(1 << 31)) val = 2;
+	if (*(uint8_t *)serializer_get_field(pw_task_serializer, "_start_on_enter", task)) val = 3;
+	if (*(uint8_t *)serializer_get_field(pw_task_serializer, "_trigger_on_death", task)) val = 4;
 
 	fprintf(fp, "\"%s\":%d,", f->name, val);
 	return 0;
@@ -323,22 +322,22 @@ deserialize_start_by(struct cjson *f, struct serializer *slzr, void *data)
 		return 0;
 	}
 
-	*(uint8_t *)serializer_get_field(slzr, "_auto_trigger", task) = 0;
-	*(uint32_t *)serializer_get_field(slzr, "start_npc", task) |= (1 << 31);
-	*(uint8_t *)serializer_get_field(slzr, "_start_on_enter", task) = 0;
-	*(uint8_t *)serializer_get_field(slzr, "_trigger_on_death", task) = 0;
+	*(uint8_t *)serializer_get_field(pw_task_serializer, "_auto_trigger", task) = 0;
+	*(uint32_t *)serializer_get_field(pw_task_serializer, "start_npc", task) |= (1 << 31);
+	*(uint8_t *)serializer_get_field(pw_task_serializer, "_start_on_enter", task) = 0;
+	*(uint8_t *)serializer_get_field(pw_task_serializer, "_trigger_on_death", task) = 0;
 	switch (JSi(f)) {
 		case 1:
-			*(uint8_t *)serializer_get_field(slzr, "_auto_trigger", task) = 1;
+			*(uint8_t *)serializer_get_field(pw_task_serializer, "_auto_trigger", task) = 1;
 			break;
 		case 2:
-			*(uint32_t *)serializer_get_field(slzr, "start_npc", task) &= ~(1 << 31);
+			*(uint32_t *)serializer_get_field(pw_task_serializer, "start_npc", task) &= ~(1 << 31);
 			break;
 		case 3:
-			*(uint8_t *)serializer_get_field(slzr, "_start_on_enter", task) = 1;
+			*(uint8_t *)serializer_get_field(pw_task_serializer, "_start_on_enter", task) = 1;
 			break;
 		case 4:
-			*(uint8_t *)serializer_get_field(slzr, "_trigger_on_death", task) = 1;
+			*(uint8_t *)serializer_get_field(pw_task_serializer, "_trigger_on_death", task) = 1;
 			break;
 	}
 
@@ -397,8 +396,57 @@ deserialize_subquest_activate_order_fn(struct cjson *f, struct serializer *slzr,
 	return 0;
 }
 
+static size_t
+serialize_avail_frequency_fn(FILE *fp, struct serializer *f, void *data)
+{
+	int val = 0;
+	void *task = data;
+
+	if (fp == g_nullfile) {
+		return 0;
+	}
+
+	val = *(uint32_t *)serializer_get_field(pw_task_serializer, "_avail_frequency", task);
+	if (*(uint8_t *)serializer_get_field(pw_task_serializer, "_need_record", task)) val = 6;
+
+	fprintf(fp, "\"%s\":%d,", f->name, val);
+	return 0;
+}
+
+static size_t
+deserialize_avail_frequency_fn(struct cjson *f, struct serializer *slzr, void *data)
+{
+	if (f->type == CJSON_TYPE_NONE) {
+		return 0;
+	}
+
+	void *task = data;
+	uint32_t *_avail_frequency = serializer_get_field(slzr, "_avail_frequency", task);
+	uint8_t *_need_record = serializer_get_field(slzr, "_need_record", task);
+	uint32_t val = JSi(f);
+
+	switch (val) {
+		case 0:
+		case 1:
+		case 2:
+		case 3:
+		case 4:
+		case 5:
+			*_need_record = 0;
+			*_avail_frequency = val;
+			break;
+		case 6:
+			*_avail_frequency = 0;
+			*_need_record = 1;
+			break;
+	}
+
+	return 0;
+}
+
 static struct serializer pw_task_serializer[] = {
-	{ "_start_by", _CUSTOM, serialize_start_by_fn, deserialize_start_by },
+	{ "start_by", _CUSTOM, serialize_start_by_fn, deserialize_start_by },
+	{ "avail_frequency", _CUSTOM, serialize_avail_frequency_fn, deserialize_avail_frequency_fn },
 	{ "id", _INT32 },
 	{ "name", _WSTRING(30) },
 	{ "_has_signature", _INT8 }, /* we'll be always setting this to 0 */
@@ -412,7 +460,7 @@ static struct serializer pw_task_serializer[] = {
 	{ "", _ARRAY_END },
 	{ "_ptr3", _INT32 },
 	{ "_ptr4", _INT32 },
-	{ "avail_frequency", _INT32 },
+	{ "_avail_frequency", _INT32 },
 	{ "subquest_activate_order", _CUSTOM, serialize_subquest_activate_order_fn, deserialize_subquest_activate_order_fn },
 	{ "_activate_chosen_subquest", _INT8 },
 	{ "_activate_random_subquest", _INT8 },
@@ -423,7 +471,7 @@ static struct serializer pw_task_serializer[] = {
 	{ "can_retake", _INT8 },
 	{ "can_retake_after_failure", _INT8 },
 	{ "on_fail_parent_fail", _INT8 },
-	{ "need_record", _INT8 },
+	{ "_need_record", _INT8 },
 	{ "fail_on_death", _INT8 },
 	{ "simultaneous_player_limit", _INT32 },
 	{ "_start_on_enter", _INT8 },
@@ -441,10 +489,10 @@ static struct serializer pw_task_serializer[] = {
 	{ "is_gold_quest", _INT8 },
 	{ "start_npc", _INT32 },
 	{ "finish_npc", _INT32 },
-	{ "is_craft_skill_quest", _INT8 },
+	{ "_is_craft_skill_quest", _INT8 },
 	{ "can_be_found", _INT8 },
 	{ "display_direction", _INT8 },
-	{ "is_marriage_quest", _INT8 },
+	{ "_is_marriage_quest", _INT8 },
 	{ "premise_level_min", _INT32 },
 	{ "premise_level_max", _INT32 },
 	{ "show_without_level_min", _INT8 },
@@ -452,8 +500,8 @@ static struct serializer pw_task_serializer[] = {
 	{ "_ptr5", _INT32 },
 	{ "show_without_premise_items", _INT8 },
 	{ "_free_given_items_cnt", _INT32 },
-	{ "_free_given_common_items_cnt", _INT32 },
-	{ "_free_given_task_items_cnt", _INT32 },
+	{ "_free_given_common_items_cnt", _INT32 }, /* TODO */
+	{ "_free_given_task_items_cnt", _INT32 }, /* TODO */
 	{ "_ptr6", _INT32 },
 	{ "premise_coins", _INT32 },
 	{ "show_without_premise_coins", _INT8 },
@@ -490,8 +538,8 @@ static struct serializer pw_task_serializer[] = {
 	{ "premise_craftsman_level", _INT32 },
 	{ "premise_apothecary_level", _INT32 },
 	{ "_m_DynTaskType", _INT8 },
-	{ "special_award_type", _INT32 },
-	{ "is_team_task", _INT8 },
+	{ "_special_award_type", _INT32 }, /* always 0 */
+	{ "team_recommended", _INT8 }, /* no effect? */
 	{ "recv_in_team_only", _INT8 },
 	{ "m_bSharedTask", _INT8 },
 	{ "m_bSharedAchieved", _INT8 },
@@ -522,9 +570,9 @@ static struct serializer pw_task_serializer[] = {
 	{ "m_ulNPCDestSite", _INT32 },
 	{ "reach_location", _OBJECT_START, NULL, NULL, pw_task_location_serializer },
 	{ "reach_location_world_id", _INT32 },
-	{ "req_wait_time", _INT32 },
-	{ "m_ulAwardType_S", _INT32 },
-	{ "m_ulAwardType_F", _INT32 },
+	{ "req_wait_time", _INT32 }, /* in seconds */
+	{ "award_type", _INT32 },
+	{ "_award_type_failure", _INT32 }, /* unused, maybe works but no reasonable usage */
 	{ "_ptr10", _ARRAY_START(6) },
 		{ "", _INT32 },
 	{ "", _ARRAY_END },
@@ -540,11 +588,11 @@ static struct serializer pw_task_serializer[] = {
 	{ "premise_squad", _CHAIN_TABLE, pw_task_player_serializer },
 	{ "req_monsters", _CHAIN_TABLE, pw_task_mob_serializer },
 	{ "req_items", _CHAIN_TABLE, pw_task_item_serializer },
-	{ "success_award", _OBJECT_START, NULL, NULL, pw_task_award_serializer },
+	{ "award", _OBJECT_START, NULL, NULL, pw_task_award_serializer },
 	{ "failure_award", _OBJECT_START, NULL, NULL, pw_task_award_serializer },
-	{ "success_timed_award", _OBJECT_START, NULL, NULL, pw_task_award_timed_serializer },
+	{ "timed_award", _OBJECT_START, NULL, NULL, pw_task_award_timed_serializer },
 	{ "failure_timed_award", _OBJECT_START, NULL, NULL, pw_task_award_timed_serializer },
-	{ "success_scaled_award", _OBJECT_START, NULL, NULL, pw_task_award_scaled_serializer },
+	{ "scaled_award", _OBJECT_START, NULL, NULL, pw_task_award_scaled_serializer },
 	{ "failure_scaled_award", _OBJECT_START, NULL, NULL, pw_task_award_scaled_serializer },
 	{ "briefing", _CUSTOM, serialize_pascal_wstr_fn, deserialize_pascal_wstr_fn },
 	{ "unk1_text", _CUSTOM, serialize_pascal_wstr_fn, deserialize_pascal_wstr_fn },
@@ -553,7 +601,7 @@ static struct serializer pw_task_serializer[] = {
 	{ "dialogue", _OBJECT_START },
 		{ "initial", _OBJECT_START, NULL, NULL, pw_task_talk_proc_serializer },
 		{ "notqualified", _OBJECT_START, NULL, NULL, pw_task_talk_proc_serializer },
-		{ "unknown", _OBJECT_START, NULL, NULL, pw_task_talk_proc_serializer },
+		{ "unused", _OBJECT_START, NULL, NULL, pw_task_talk_proc_serializer },
 		{ "unfinished", _OBJECT_START, NULL, NULL, pw_task_talk_proc_serializer },
 		{ "ready", _OBJECT_START, NULL, NULL, pw_task_talk_proc_serializer },
 	{ "", _OBJECT_END },
@@ -600,8 +648,8 @@ read_award(void **buf_p, FILE *fp, bool is_server)
 		size_t item_count = *(uint32_t *)serializer_get_field(pw_task_item_group_serializer, "_items_cnt", data_start);
 		void *items = serializer_get_field(pw_task_item_group_serializer, "items", data_start);
 
-		*(void **)items = ptr = pw_chain_table_fread(fp, "items", item_count, pw_task_item_serializer);
-		if (!ptr) {
+		*(void **)items = pw_chain_table_fread(fp, "items", item_count, pw_task_item_serializer);
+		if (!*(void **)items) {
 			return -1;
 		}
 	}
@@ -630,6 +678,15 @@ write_award(void **buf_p, FILE *fp, bool is_client)
 	void *_el;
 
 	buf = data = *buf_p;
+	table = *(void **)serializer_get_field(slzr, "item_groups", data);
+	if (table->chain->count > 1) {
+		if (*(uint8_t *)serializer_get_field(table->serializer, "chosen_randomly", table->chain->data)) {
+			/* if it's a random item there must be just one group */
+			table->chain->count = 1;
+			table->chain->next = NULL;
+		}
+	}
+
 	SAVE_TBL_CNT("item_groups", slzr, data);
 
 	if (is_client) {
@@ -666,7 +723,6 @@ write_award(void **buf_p, FILE *fp, bool is_client)
 
 	*buf_p = buf;
 }
-
 
 #define LOAD_CHAIN_TBL_CNT(fp, name, data_slzr, data_start, tbl_slzr, cnt) \
 	*(void **)(buf) = tbl_p = pw_chain_table_fread((fp), #name, cnt, tbl_slzr); \
@@ -816,7 +872,7 @@ read_task(struct pw_task_file *taskf, FILE *fp, bool is_server)
 		fread(buf, 136, 1, fp);
 		buf += 136;
 
-		xor_bytes(serializer_get_field(pw_task_talk_proc_serializer, "name", data_start), 64, id);
+		xor_bytes(serializer_get_field(pw_task_talk_proc_serializer, "_name", data_start), 64, id);
 
 		count = *(uint32_t *)serializer_get_field(pw_task_talk_proc_serializer, "_questions_cnt", data_start);
 		LOAD_CHAIN_TBL_CNT(fp, "questions", slzr, data_start, pw_task_talk_proc_question_serializer, 0);
@@ -1017,14 +1073,26 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 	for (int p = 0; p < 5; p++) {
 		char *data_start = buf;
 		void *el;
+		uint16_t *name = serializer_get_field(pw_task_talk_proc_serializer, "_name", data_start);
 
-		xor_bytes(serializer_get_field(pw_task_talk_proc_serializer, "name", data_start), 64, id);
+		tbl_p = *(void **)serializer_get_field(pw_task_talk_proc_serializer, "questions", data_start);
+		if (tbl_p->chain->count) {
+			int j = 0;
+			for (j = 0; j < strlen("RootNode"); j++) {
+				name[j] = "RootNode"[j];
+			}
+			name[j] = 0;
+			/* TODO assign talk ID? */
+		} else {
+			name[0] = 0;
+		}
+
+		xor_bytes(name, 64, id);
 		SAVE_TBL_CNT("questions", pw_task_talk_proc_serializer, data_start);
 
 		fwrite(buf, 136, 1, fp);
 		buf += 136;
 
-		tbl_p = *(void **)serializer_get_field(pw_task_talk_proc_serializer, "questions", data_start);
 		buf += sizeof(void *);
 		PW_CHAIN_TABLE_FOREACH(el, tbl_p) {
 			char *data_start = el;
@@ -1253,17 +1321,17 @@ pw_tasks_adjust_rates(struct pw_task_file *taskf, struct cjson *rates)
 	}
 
 	struct serializer *slzr = taskf->tasks->serializer;
-	int success_award_off = serializer_get_offset(slzr, "success_award");
+	int success_award_off = serializer_get_offset(slzr, "award");
 	int failure_award_off = serializer_get_offset(slzr, "failure_award");
 	struct serializer *timed_award_slzr;
-	int success_timed_awards_tbl_off = serializer_get_offset_slzr(slzr, "success_timed_award", &timed_award_slzr);
+	int success_timed_awards_tbl_off = serializer_get_offset_slzr(slzr, "timed_award", &timed_award_slzr);
 	int failure_timed_awards_tbl_off = serializer_get_offset_slzr(slzr, "failure_timed_award", &timed_award_slzr);
 
 	success_timed_awards_tbl_off += serializer_get_offset(timed_award_slzr->ctx, "awards");
 	failure_timed_awards_tbl_off += serializer_get_offset(timed_award_slzr->ctx, "awards");
 
 	struct serializer *scaled_award_slzr;
-	int success_scaled_awards_tbl_off = serializer_get_offset_slzr(slzr, "success_scaled_award", &scaled_award_slzr);
+	int success_scaled_awards_tbl_off = serializer_get_offset_slzr(slzr, "scaled_award", &scaled_award_slzr);
 	int failure_scaled_awards_tbl_off = serializer_get_offset_slzr(slzr, "failure_scaled_award", &scaled_award_slzr);
 	success_scaled_awards_tbl_off += serializer_get_offset(scaled_award_slzr->ctx, "awards");
 	failure_scaled_awards_tbl_off += serializer_get_offset(scaled_award_slzr->ctx, "awards");
