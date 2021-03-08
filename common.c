@@ -212,7 +212,7 @@ change_charset(char *src_charset, char *dst_charset, char *src, long srclen, cha
 void
 fwsprint(FILE *fp, const uint16_t *buf, int maxlen)
 {
-	char out[1024] = {};
+	char out[4096] = {};
 	char *b = out;
 
 	change_charset("UTF-16LE", "UTF-8", (char *)buf, maxlen * 2, out, sizeof(out));
