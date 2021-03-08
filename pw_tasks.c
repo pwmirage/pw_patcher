@@ -24,6 +24,8 @@
 
 extern struct pw_idmap *g_elements_map;
 struct pw_idmap *g_tasks_map;
+extern int g_elements_taskmatter_idmap_id;
+extern int g_elements_monster_idmap_id;
 
 #define TASK_FILE_MAGIC 0x93858361
 
@@ -134,6 +136,109 @@ deserialize_pascal_wstr_fn(struct cjson *f, struct serializer *slzr, void *data)
 	return 4 + sizeof(wstr);
 }
 
+static size_t
+serialize_common_item_id_fn(FILE *fp, struct serializer *f, void *data)
+{
+	uint32_t id = *(uint32_t *)data;
+
+	fprintf(fp, "\"%s\":%d,", f->name, id);
+	return 4;
+}
+
+struct deserialize_common_item_id_async_ctx {
+	void *dst_data;
+	uint64_t item_lid;
+	int offset;
+};
+
+static void
+deserialize_common_item_id_async_fn(void *data, void *_ctx)
+{
+	struct deserialize_common_item_id_async_ctx *ctx = _ctx;
+	void *task_item = pw_idmap_get(g_elements_map, ctx->item_lid, g_elements_taskmatter_idmap_id);
+
+	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)ctx->dst_data, *(uint32_t *)data);
+	*(uint32_t *)ctx->dst_data = *(uint32_t *)data;
+	*(uint8_t *)(ctx->dst_data + 4 + ctx->offset) = !task_item;
+
+	free(ctx);
+}
+
+static size_t
+deserialize_common_item_id_fn(struct cjson *f, struct serializer *slzr, void *data)
+{
+	size_t offset = (size_t)(uintptr_t)slzr->ctx;
+
+	if (f->type == CJSON_TYPE_NONE) {
+		return 4;
+	}
+
+	int64_t val = JSi(f);
+	if (val >= 0x80000000) {
+		struct deserialize_common_item_id_async_ctx *ctx = calloc(1, sizeof(*ctx));
+
+		if (!ctx) {
+			assert(false);
+			return 4;
+		}
+		ctx->dst_data = data;
+		ctx->item_lid = val;
+		ctx->offset = offset;
+
+		int rc = pw_idmap_get_async(g_elements_map, val, 0, deserialize_common_item_id_async_fn, ctx);
+
+		if (rc) {
+			assert(false);
+		}
+	} else {
+		void *task_item = pw_idmap_get(g_elements_map, val, g_elements_taskmatter_idmap_id);
+
+		*(uint32_t *)(data) = (uint32_t)val;
+		*(uint8_t *)(data + 4 + offset) = !task_item;
+	}
+
+	return 4;
+}
+
+static void
+deserialize_elements_id_field_async_fn(void *data, void *target_data)
+{
+	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)target_data, *(uint32_t *)data);
+	*(uint32_t *)target_data = *(uint32_t *)data;
+}
+
+static size_t
+deserialize_elements_id_field_fn(struct cjson *f, struct serializer *slzr, void *data)
+{
+	int64_t val = JSi(f);
+
+	if (f->type == CJSON_TYPE_NONE) {
+		return 4;
+	}
+
+	if (val >= 0x80000000) {
+		int rc = pw_idmap_get_async(g_elements_map, val, 0, deserialize_elements_id_field_async_fn, data);
+
+		if (rc) {
+			assert(false);
+		}
+	} else {
+		deserialize_log(f, data);
+		*(uint32_t *)(data) = (uint32_t)val;
+	}
+
+	return 4;
+}
+
+static size_t
+serialize_elements_id_field_fn(FILE *fp, struct serializer *f, void *data)
+{
+	uint32_t id = *(uint32_t *)data;
+
+	fprintf(fp, "\"%s\":%d,", f->name, id);
+	return 4;
+}
+
 static struct serializer pw_task_location_serializer[] = {
 	{ "east", _FLOAT },
 	{ "bottom", _FLOAT },
@@ -169,8 +274,8 @@ static struct serializer pw_task_date_span_serializer[] = {
 };
 
 static struct serializer pw_task_item_serializer[] = {
-	{ "id", _INT32 },
-	{ "is_common", _INT8 },
+	{ "id", _CUSTOM, serialize_common_item_id_fn, deserialize_common_item_id_fn, (void *)(uintptr_t)0 },
+	{ "_is_common", _INT8 },
 	{ "amount", _INT32 },
 	{ "probability", _FLOAT },
 	{ "", _TYPE_END },
@@ -189,11 +294,11 @@ static struct serializer pw_task_player_serializer[] = {
 };
 
 static struct serializer pw_task_mob_serializer[] = {
-	{ "id", _INT32 },
+	{ "id", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 	{ "count", _INT32 },
-	{ "drop_item_id", _INT32 },
+	{ "drop_item_id", _CUSTOM, serialize_common_item_id_fn, deserialize_common_item_id_fn, (void *)(uintptr_t)4 },
 	{ "drop_item_cnt", _INT32 },
-	{ "drop_item_is_common", _INT8 },
+	{ "_drop_item_is_common", _INT8 },
 	{ "drop_item_probability", _FLOAT },
 	{ "lvl_diff_gt8_doesnt_cnt", _INT8 },
 	{ "", _TYPE_END },

@@ -24,6 +24,7 @@ char *g_item_descs[65536] = {};
 
 uint32_t g_elements_last_id;
 struct pw_idmap *g_elements_map;
+int g_elements_taskmatter_idmap_id;
 
 static size_t
 icon_serialize_fn(FILE *fp, struct serializer *f, void *data)
@@ -1558,6 +1559,26 @@ pw_elements_serialize(struct pw_elements *elements)
 	truncate("items.json", sz);
 }
 
+static int
+pw_elements_get_idmap_type(struct pw_elements *elements, const char *obj_type)
+{
+	struct pw_chain_table *table = NULL;
+	int i;
+
+	for (i = 0; i < elements->tables_count; i++) {
+		table = elements->tables[i];
+		if (strcmp(table->name, obj_type) == 0) {
+			break;
+		}
+	}
+
+	if (i == elements->tables_count) {
+		return -1;
+	}
+
+	return i;
+}
+
 int
 pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 {
@@ -1941,6 +1962,8 @@ pw_elements_load(struct pw_elements *el, const char *filename, const char *idmap
 #undef LOAD_ARR
 
 	fclose(fp);
+
+	g_elements_taskmatter_idmap_id = pw_elements_get_idmap_type(el, "taskmatter_essence");
 
 	return 0;
 }

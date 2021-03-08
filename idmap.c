@@ -281,6 +281,7 @@ _idmap_set(struct pw_idmap *map, long long lid, long id, long type, void *data)
 				if (tmp_el->lid == lid && (type == 0 || tmp_el->type == 0 || tmp_el->type == type)) {
 					/* target lid already set */
 					if (tmp_el->is_async_fn) {
+						/* TODO do this after setting the el, so that idmap_get() works */
 						call_async_arr(tmp_el->data, data);
 					}
 
