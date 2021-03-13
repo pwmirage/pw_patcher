@@ -219,7 +219,6 @@ deserialize_elements_id_field_fn(struct cjson *f, struct serializer *slzr, void 
 
 	if (val >= 0x80000000) {
 		int rc = pw_idmap_get_async(g_elements_map, val, 0, deserialize_elements_id_field_async_fn, data);
-
 		if (rc) {
 			assert(false);
 		}
@@ -239,6 +238,45 @@ serialize_elements_id_field_fn(FILE *fp, struct serializer *f, void *data)
 	fprintf(fp, "\"%s\":%d,", f->name, id);
 	return 4;
 }
+
+static void
+deserialize_tasks_id_field_async_fn(void *data, void *target_data)
+{
+	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)target_data, *(uint32_t *)data);
+	*(uint32_t *)target_data = *(uint32_t *)data;
+}
+
+static size_t
+deserialize_tasks_id_field_fn(struct cjson *f, struct serializer *slzr, void *data)
+{
+	int64_t val = JSi(f);
+
+	if (f->type == CJSON_TYPE_NONE) {
+		return 4;
+	}
+
+	if (val >= 0x80000000) {
+		int rc = pw_idmap_get_async(g_tasks_map, val, 0, deserialize_tasks_id_field_async_fn, data);
+		if (rc) {
+			assert(false);
+		}
+	} else {
+		deserialize_log(f, data);
+		*(uint32_t *)(data) = (uint32_t)val;
+	}
+
+	return 4;
+}
+
+static size_t
+serialize_tasks_id_field_fn(FILE *fp, struct serializer *f, void *data)
+{
+	uint32_t id = *(uint32_t *)data;
+
+	fprintf(fp, "\"%s\":%d,", f->name, id);
+	return 4;
+}
+
 
 static struct serializer pw_task_location_serializer[] = {
 	{ "east", _FLOAT },
@@ -371,7 +409,7 @@ static struct serializer pw_task_award_scaled_serializer[] = {
 static struct serializer pw_task_talk_proc_choice_serializer[] = {
 	{ "id", _INT32 },
 	{ "text", _WSTRING(64) },
-	{ "param", _INT32 },
+	{ "param", _CUSTOM, serialize_tasks_id_field_fn, deserialize_tasks_id_field_fn },
 	{ "", _TYPE_END },
 };
 
@@ -1344,6 +1382,8 @@ pw_tasks_load(struct pw_task_file *taskf, const char *path, const char *idmap_fi
 		fclose(fp);
 		return 1;
 	}
+	/* XXX: cheap hack */
+	g_tasks_map = taskf->idmap;
 
 	fread(jmp_offsets, sizeof(*jmp_offsets), count, fp);
 	taskf->tasks = pw_chain_table_alloc("quests", pw_task_serializer, serializer_get_size(pw_task_serializer), count);
