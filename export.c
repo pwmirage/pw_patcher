@@ -50,7 +50,7 @@ print_tasks(const char *path)
 	struct pw_task_file taskf;
 	int rc;
 
-	rc = pw_tasks_load(&taskf, path);
+	rc = pw_tasks_load(&taskf, path, NULL);
 	if (rc) {
 		PWLOG(LOG_ERROR, "pw_tasks_load() failed: %d\n", rc);
 		return rc;

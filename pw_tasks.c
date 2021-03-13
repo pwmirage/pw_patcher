@@ -26,6 +26,7 @@ extern struct pw_idmap *g_elements_map;
 struct pw_idmap *g_tasks_map;
 extern int g_elements_taskmatter_idmap_id;
 extern int g_elements_monster_idmap_id;
+static unsigned g_tasks_last_id;
 
 #define TASK_FILE_MAGIC 0x93858361
 
@@ -682,9 +683,9 @@ static struct serializer pw_task_serializer[] = {
 		{ "", _INT32 },
 	{ "", _ARRAY_END },
 	{ "parent_quest", _INT32 },
-	{ "previous_quest", _INT32 },
-	{ "next_quest", _INT32 },
-	{ "sub_quest_first", _INT32 },
+	{ "_previous_quest", _INT32 }, /* the game doesn't read those, they're just for convenience */
+	{ "_next_quest", _INT32 },
+	{ "_sub_quest_first", _INT32 },
 /*	{ "signature", _CUSTOM, serialize_signature, deserialize_signature },
  * the signature is always removed */
 	{ "date_spans", _CHAIN_TABLE, pw_task_date_span_serializer },
@@ -891,6 +892,10 @@ read_task(struct pw_task_file *taskf, FILE *fp, bool is_server)
 	id = *(uint32_t *)data;
 	xor_bytes(serializer_get_field(slzr, "name", data), 30, id);
 
+	if (id > g_tasks_last_id) {
+		g_tasks_last_id = id;
+	}
+
 	uint8_t *has_signature = (uint8_t *)serializer_get_field(slzr, "_has_signature", data);
 	if(*has_signature) {
 		fseek(fp, 60, SEEK_CUR);
@@ -1039,6 +1044,50 @@ read_task(struct pw_task_file *taskf, FILE *fp, bool is_server)
 	pw_idmap_set(taskf->idmap, id, id, 0, data);
 
 	return id;
+}
+
+int
+pw_tasks_patch_obj(struct pw_task_file *taskf, struct cjson *obj)
+{
+	void **table_el;
+	const char *obj_type;
+	int64_t id;
+
+	obj_type = JSs(obj, "_db", "type");
+	if (!obj_type) {
+		PWLOG(LOG_ERROR, "missing obj._db.type\n");
+		return -1;
+	}
+
+	id = JSi(obj, "id");
+	if (!id) {
+		PWLOG(LOG_ERROR, "missing obj.id\n");
+		return -1;
+	}
+
+	table_el = pw_idmap_get(taskf->idmap, id, 0);
+	if (!table_el) {
+		uint32_t el_id = ++g_tasks_last_id;
+		uint32_t mapped_id;
+
+		mapped_id = pw_idmap_get_mapped_id(taskf->idmap, id, 0);
+		if (mapped_id) {
+			el_id = mapped_id;
+		}
+
+		table_el = pw_chain_table_new_el(taskf->tasks);
+		*(uint32_t *)table_el = el_id;
+
+		pw_idmap_set(taskf->idmap, id, el_id, 0, table_el);
+	}
+	deserialize(obj, pw_task_serializer, table_el);
+	return 0;
+}
+
+int
+pw_tasks_idmap_save(struct pw_task_file *taskf, const char *filename)
+{
+	return pw_idmap_save(taskf->idmap, filename);
 }
 
 static void
@@ -1254,7 +1303,7 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 }
 
 int
-pw_tasks_load(struct pw_task_file *taskf, const char *path)
+pw_tasks_load(struct pw_task_file *taskf, const char *path, const char *idmap_filename)
 {
 	uint32_t *jmp_offsets;
 	FILE* fp;
@@ -1289,7 +1338,13 @@ pw_tasks_load(struct pw_task_file *taskf, const char *path)
 		return -ENOMEM;
 	}
 
-	taskf->idmap = pw_idmap_init("tasks", NULL);
+	taskf->idmap = pw_idmap_init("tasks", idmap_filename);
+	if (!taskf->idmap) {
+		PWLOG(LOG_ERROR, "pw_idmap_init() failed\n");
+		fclose(fp);
+		return 1;
+	}
+
 	fread(jmp_offsets, sizeof(*jmp_offsets), count, fp);
 	taskf->tasks = pw_chain_table_alloc("quests", pw_task_serializer, serializer_get_size(pw_task_serializer), count);
 	if (!taskf->tasks) {

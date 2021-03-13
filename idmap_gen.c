@@ -90,7 +90,8 @@ main(int argc, char *argv[])
 	const char *elements_path = "patcher/elements.data.src";
 	const char *tasks_path = "patcher/tasks.data.src";
 
-	rc = pw_tasks_load(g_tasks, tasks_path);
+	snprintf(tmpbuf, sizeof(tmpbuf), "cache/%s/tasks.imap", branch_name);
+	rc = pw_tasks_load(g_tasks, tasks_path, tmpbuf);
 	if (rc != 0) {
 		PWLOG(LOG_ERROR, "pw_tasks_load(\"%s\") failed: %d\n", elements_path, rc);
 		return 1;

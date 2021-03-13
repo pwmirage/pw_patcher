@@ -26,6 +26,9 @@ static char *g_latest_version_str;
 static struct cjson *g_latest_version;
 struct pw_version g_version;
 
+struct pw_elements *g_elements;
+struct pw_task_file *g_tasks;
+
 struct task_ctx {
 	mg_callback cb;
 	void *arg1;
@@ -459,8 +462,6 @@ print_obj(struct cjson *obj, int depth)
 static void
 import_stream_cb(void *ctx, struct cjson *obj)
 {
-	struct pw_elements *elements = ctx;
-
 	if (obj->type != CJSON_TYPE_OBJECT) {
 		PWLOG(LOG_ERROR, "found non-object in the patch file (type=%d)\n", obj->type);
 		assert(false);
@@ -478,11 +479,16 @@ import_stream_cb(void *ctx, struct cjson *obj)
 		return;
 	}
 
-	pw_elements_patch_obj(elements, obj);
+	if (strncmp(type, "tasks") == 0) {
+		pw_tasks_patch_obj(g_tasks, obj);
+		return;
+	}
+
+	pw_elements_patch_obj(g_elements, obj);
 }
 
 static int
-patch(struct pw_elements *elements, const char *url)
+patch(const char *url)
 {
 	char *buf, *b;
 	size_t num_bytes = 1;
@@ -496,7 +502,7 @@ patch(struct pw_elements *elements, const char *url)
 
 	b = buf;
 	do {
-		rc = cjson_parse_arr_stream(b, import_stream_cb, elements);
+		rc = cjson_parse_arr_stream(b, import_stream_cb, NULL);
 		/* skip comma and newline */
 		b += rc;
 		while (*b && *b != '[') b++;
@@ -513,8 +519,6 @@ patch(struct pw_elements *elements, const char *url)
 void
 patch_cb(void *arg1, void *arg2)
 {
-	struct pw_elements elements = {0};
-	struct pw_task_file tasks = {0};
 	char tmpbuf[1024];
 	int i, rc;
 
@@ -535,6 +539,20 @@ patch_cb(void *arg1, void *arg2)
 	enable_button(g_patch_button, false);
 	set_text(g_status_right_lbl, "Loading local files");
 
+	if (!g_elements) {
+		g_elements = calloc(1, sizeof(*g_elements));
+		g_tasks = calloc(1, sizeof(*g_tasks));
+		if (!g_elements || !g_tasks) {
+			set_text(g_status_right_lbl, "failed to allocate memory");
+			free(g_elements);
+			g_elements = NULL;
+			free(g_tasks);
+			g_tasks = NULL;
+			goto err_retry;
+		}
+	}
+
+
 	if (!JSi(g_latest_version, "cumulative")) {
 		g_force_update = true;
 	}
@@ -550,17 +568,13 @@ patch_cb(void *arg1, void *arg2)
 		tasks_path = "element/data/tasks.data";
 	}
 
-	set_progress(5);
-
-	rc = pw_elements_load(&elements, elements_path, "patcher/elements.imap");
+	rc = pw_elements_load(g_elements, elements_path, "patcher/elements.imap");
 	if (rc != 0) {
 		set_text(g_status_right_lbl, "elements file not found. Please redownload the client");
 		goto err_retry;
 	}
 
-	set_progress(10);
-
-	rc = pw_tasks_load(&tasks, tasks_path);
+	rc = pw_tasks_load(&tasks, tasks_path, "patcher/tasks.imap");
 	if (rc != 0) {
 		set_text(g_status_right_lbl, "tasks file not found. Please redownload the client");
 		goto err_retry;
@@ -587,8 +601,8 @@ patch_cb(void *arg1, void *arg2)
 		}
 
 		struct cjson *rates = cjson_parse(buf);
-		pw_elements_adjust_rates(&elements, rates);
-		pw_tasks_adjust_rates(&tasks, rates);
+		pw_elements_adjust_rates(g_elements, rates);
+		pw_tasks_adjust_rates(g_tasks, rates);
 		cjson_free(rates);
 		free(buf);
 	}
@@ -608,7 +622,7 @@ patch_cb(void *arg1, void *arg2)
 			snprintf(tmpbuf, sizeof(tmpbuf), "%s/uploads/%s.json", origin, last_hash);
 		}
 
-		rc = patch(&elements, tmpbuf);
+		rc = patch(tmpbuf);
 		if (rc) {
 			PWLOG(LOG_ERROR, "Failed to patch\n");
 			set_text(g_status_right_lbl, "Patching failed!");
@@ -632,13 +646,13 @@ patch_cb(void *arg1, void *arg2)
 		return;
 	}
 
-	rc = pw_elements_save(&elements, "element/data/elements.data", false);
+	rc = pw_elements_save(g_elements, "element/data/elements.data", false);
 	if (rc) {
 		set_text(g_status_right_lbl, "Saving failed (2). No permission to access game directories?");
 		return;
 	}
 
-	rc = pw_tasks_save(&tasks, "element/data/tasks.data", false);
+	rc = pw_tasks_save(g_tasks, "element/data/tasks.data", false);
 	if (rc) {
 		PWLOG(LOG_ERROR, "err: %d\n", rc);
 		set_text(g_status_right_lbl, "Saving failed (3). No permission to access game directories?");

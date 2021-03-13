@@ -205,6 +205,8 @@ import_stream_cb(void *ctx, struct cjson *obj)
 		}
 
 		pw_npcs_patch_obj(npcfile, obj);
+	} else if (strcmp(type, "tasks") == 0) {
+		pw_tasks_patch_obj(g_tasks, obj);
 	} else {
 		pw_elements_patch_obj(g_elements, obj);
 	}
@@ -321,7 +323,7 @@ main(int argc, char *argv[])
 			const char *name = JSs(file, "name");
 			const char *url = JSs(file, "url");
 
-			if (strcmp(name, "elements.imap") != 0) {
+			if (strcmp(name, "elements.imap") != 0 && strcmp(name, "tasks.imap") != 0) {
 				continue;
 			}
 
@@ -348,13 +350,13 @@ main(int argc, char *argv[])
 			return 1;
 		}
 
-		rc = pw_tasks_load(g_tasks, tasks_path);
+		rc = pw_tasks_load(g_tasks, tasks_path, "patcher/elements.imap");
 		if (rc != 0) {
 			PWLOG(LOG_ERROR, "pw_tasks_load(\"%s\") failed: %d\n", elements_path, rc);
 			return 1;
 		}
 
-		rc = pw_elements_load(g_elements, elements_path, "patcher/elements.imap");
+		rc = pw_elements_load(g_elements, elements_path, "patcher/tasks.imap");
 		if (rc != 0) {
 			PWLOG(LOG_ERROR, "pw_elements_load(\"%s\") failed: %d\n", elements_path, rc);
 			return 1;
