@@ -370,7 +370,7 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p,
 		}
 
 		/* TODO make id fields _CUSTOM in all serializers */
-		if (is_root_obj && strcmp(slzr->name, "id") == 0) {
+		if (is_root_obj && strcmp(slzr->name, "id") == 0 && slzr->ctx == NULL) {
 			data += 4;
 			slzr++;
 			continue;

@@ -194,6 +194,7 @@ deserialize_common_item_id_fn(struct cjson *f, struct serializer *slzr, void *da
 	} else {
 		void *task_item = pw_idmap_get(g_elements_map, val, g_elements_taskmatter_idmap_id);
 
+		deserialize_log(f, data);
 		*(uint32_t *)(data) = (uint32_t)val;
 		*(uint8_t *)(data + 4 + offset) = !task_item;
 	}
@@ -407,14 +408,14 @@ static struct serializer pw_task_award_scaled_serializer[] = {
 };
 
 static struct serializer pw_task_talk_proc_choice_serializer[] = {
-	{ "id", _INT32 },
+	{ "id", _INT32, NULL, NULL, (void *)(uintptr_t)1 },
 	{ "text", _WSTRING(64) },
 	{ "param", _CUSTOM, serialize_tasks_id_field_fn, deserialize_tasks_id_field_fn },
 	{ "", _TYPE_END },
 };
 
 static struct serializer pw_task_talk_proc_question_serializer[] = {
-	{ "id", _INT32 },
+	{ "id", _INT32, NULL, NULL, (void *)(uintptr_t)1 },
 	{ "parent_id", _INT32 },
 	{ "text", _CUSTOM, serialize_pascal_wstr_fn, deserialize_pascal_wstr_fn },
 	{ "_choices_cnt", _INT32 },
@@ -423,7 +424,7 @@ static struct serializer pw_task_talk_proc_question_serializer[] = {
 };
 
 static struct serializer pw_task_talk_proc_serializer[] = {
-	{ "id", _INT32 },
+	{ "id", _INT32, NULL, NULL, (void *)(uintptr_t)1 },
 	{ "_name", _WSTRING(64) }, /* either RootNode or nothing */
 	{ "_questions_cnt", _INT32 },
 	{ "questions", _CHAIN_TABLE, pw_task_talk_proc_question_serializer },
