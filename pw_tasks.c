@@ -113,24 +113,24 @@ deserialize_pascal_wstr_fn(struct cjson *f, struct serializer *slzr, void *data)
 		return 4 + sizeof(wstr);
 	}
 
-	rc = change_charset("UTF-8", "UTF-16LE", f->s, newlen, (char *)wstr, len * 2);
+	rc = change_charset("UTF-8", "UTF-16LE", f->s, newlen, (char *)wstr, len * 2 + 2);
 	while (rc < 0) {
 		newlen *= 2;
 
 		free(wstr);
-		wstr = *(void **)(data + 4) = calloc(1, newlen * 2);
+		wstr = *(void **)(data + 4) = calloc(1, newlen * 2 + 2);
 		if (!wstr) {
 			PWLOG(LOG_ERROR, "calloc() failed\n");
 			return 4 + sizeof(wstr);
 		}
-		rc = change_charset("UTF-8", "UTF-16LE", f->s, strlen(f->s), (char *)wstr, newlen * 2);
+		rc = change_charset("UTF-8", "UTF-16LE", f->s, strlen(f->s), (char *)wstr, newlen * 2 + 2);
 		if (rc >= 0) {
 			break;
 		}
 	}
 
 	newlen = 0;
-	while (*wstr) {
+	while (*wstr++) {
 		newlen++;
 	}
 	*len_p = newlen;
@@ -804,7 +804,7 @@ read_award(void **buf_p, FILE *fp, bool is_server)
 #define SAVE_TBL_CNT(name, slzr, data) \
 	({ \
 		struct pw_chain_table *tbl = *(void **)serializer_get_field(slzr, name, data); \
-		struct pw_chain_el *chain = tbl->chain; \
+		struct pw_chain_el *chain = tbl ? tbl->chain : NULL; \
 		uint32_t cnt = 0; \
 		while (chain) { \
 			cnt += chain->count; \
@@ -823,7 +823,7 @@ write_award(void **buf_p, FILE *fp, bool is_client)
 
 	buf = data = *buf_p;
 	table = *(void **)serializer_get_field(slzr, "item_groups", data);
-	if (table->chain->count > 1) {
+	if (table && table->chain->count > 1) {
 		if (*(uint8_t *)serializer_get_field(table->serializer, "chosen_randomly", table->chain->data)) {
 			/* if it's a random item there must be just one group */
 			table->chain->count = 1;
@@ -1268,7 +1268,7 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 		uint16_t *name = serializer_get_field(pw_task_talk_proc_serializer, "_name", data_start);
 
 		tbl_p = *(void **)serializer_get_field(pw_task_talk_proc_serializer, "questions", data_start);
-		if (tbl_p->chain->count) {
+		if (tbl_p && tbl_p->chain->count) {
 			int j = 0;
 			for (j = 0; j < strlen("RootNode"); j++) {
 				name[j] = "RootNode"[j];
