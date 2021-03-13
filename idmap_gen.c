@@ -120,6 +120,8 @@ main(int argc, char *argv[])
 
 	snprintf(tmpbuf, sizeof(tmpbuf), "cache/%s/elements.imap", branch_name);
 	pw_elements_idmap_save(g_elements, tmpbuf);
+	snprintf(tmpbuf, sizeof(tmpbuf), "cache/%s/tasks.imap", branch_name);
+	pw_tasks_idmap_save(g_tasks, tmpbuf);
 
 	free(g_elements);
 	free(g_tasks);
