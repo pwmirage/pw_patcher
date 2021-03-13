@@ -277,7 +277,7 @@ main(int argc, char *argv[])
 			PWLOG(LOG_INFO, "different branch detected, forcing a fresh update\n");
 		}
 		force_fresh_update = true;
-		version.version = 0;
+		version.generation = 0;
 		snprintf(version.branch, sizeof(version.branch), "%s", branch_name);
 		snprintf(version.cur_hash, sizeof(version.cur_hash), "0");
 	}
@@ -295,7 +295,7 @@ main(int argc, char *argv[])
 	}
 
 	snprintf(tmpbuf, sizeof(tmpbuf), "https://pwmirage.com/editor/project/fetch/%s/since/%s/%u",
-			branch_name, version.cur_hash, version.version);
+			branch_name, version.cur_hash, version.generation);
 
 	rc = download_mem(tmpbuf, &buf, &num_bytes);
 	if (rc) {
@@ -440,7 +440,7 @@ main(int argc, char *argv[])
 	}
 
 	PWLOG(LOG_INFO, "last_hash: %s\n", last_hash);
-	version.version = JSi(ver_cjson, "version");
+	version.generation = JSi(ver_cjson, "generation");
 	snprintf(version.branch, sizeof(version.branch), "%s", branch_name);
 	if (last_hash) {
 		snprintf(version.cur_hash, sizeof(version.cur_hash), "%s", last_hash);

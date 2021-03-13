@@ -36,10 +36,11 @@
 extern const char g_zeroes[4096];
 extern FILE *g_nullfile;
 
-#define PW_VERSION_MAGIC 0xb78e97a0
+#define PW_VERSION_MAGIC 0xb78e97a1
 struct pw_version {
 	uint32_t magic;
 	uint32_t version;
+	uint32_t generation;
 	char branch[64];
 	char cur_hash[64];
 };
