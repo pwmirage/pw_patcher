@@ -1339,20 +1339,20 @@ struct __attribute__((packed)) player_levelexp_config {
 	int32_t exp[150];
 };
 
-static struct serializer npc_task_in_service_serializer[] = {
+static struct serializer npc_tasks_in_serializer[] = {
 	{ "id", _INT32 },
 	{ "name", _WSTRING(32) },
 	{ "tasks", _ARRAY_START(32) },
-		{ "", _INT32 },
+		{ "", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 	{ "", _ARRAY_END },
 	{ "", _TYPE_END },
 };
 
-static struct serializer npc_task_out_service_serializer[] = {
+static struct serializer npc_tasks_out_serializer[] = {
 	{ "id", _INT32 },
 	{ "name", _WSTRING(32) },
 	{ "tasks", _ARRAY_START(32) },
-		{ "", _INT32 },
+		{ "", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 	{ "", _ARRAY_END },
 	{ "", _TYPE_END },
 };
@@ -1487,8 +1487,8 @@ pw_elements_serialize(struct pw_elements *elements)
 	EXPORT_TABLE(elements, armor_sets, "armor_sets.json");
 	EXPORT_TABLE(elements, equipment_addon, "equipment_addon.json");
 
-	EXPORT_TABLE(elements, npc_task_in_service, "npc_tasks_in.json");
-	EXPORT_TABLE(elements, npc_task_out_service, "npc_tasks_out.json");
+	EXPORT_TABLE(elements, npc_tasks_in, "npc_tasks_in.json");
+	EXPORT_TABLE(elements, npc_tasks_out, "npc_tasks_out.json");
 	EXPORT_TABLE(elements, npc_task_matter_service, "npc_tasks_matter.json");
 
 	FILE *fp = fopen("items.json", "wb");
@@ -1883,8 +1883,8 @@ pw_elements_load(struct pw_elements *el, const char *filename, const char *idmap
 	LOAD_ARR(npc_repair_service, 72);
 	LOAD_ARR(npc_install_service, 200);
 	LOAD_ARR(npc_uninstall_service, 200);
-	LOAD_ARR(npc_task_in_service, 196);
-	LOAD_ARR(npc_task_out_service, 196);
+	LOAD_ARR(npc_tasks_in, 196);
+	LOAD_ARR(npc_tasks_out, 196);
 	LOAD_ARR(npc_task_matter_service, 644);
 	LOAD_ARR(npc_skill_service, 584);
 	LOAD_ARR(npc_heal_service, 72);
