@@ -479,7 +479,7 @@ import_stream_cb(void *ctx, struct cjson *obj)
 		return;
 	}
 
-	if (strncmp(type, "tasks") == 0) {
+	if (strcmp(type, "tasks") == 0) {
 		pw_tasks_patch_obj(g_tasks, obj);
 		return;
 	}
@@ -574,7 +574,7 @@ patch_cb(void *arg1, void *arg2)
 		goto err_retry;
 	}
 
-	rc = pw_tasks_load(&tasks, tasks_path, "patcher/tasks.imap");
+	rc = pw_tasks_load(g_tasks, tasks_path, "patcher/tasks.imap");
 	if (rc != 0) {
 		set_text(g_status_right_lbl, "tasks file not found. Please redownload the client");
 		goto err_retry;
