@@ -154,8 +154,9 @@ serialize_chunked_table_fn(FILE *fp, struct serializer *f, void *data)
 }
 
 size_t
-deserialize_chunked_table_fn(struct cjson *f, struct serializer *slzr, void *data)
+deserialize_chunked_table_fn(struct cjson *f, struct serializer *_slzr, void *data)
 {
+	struct serializer *slzr = _slzr->ctx;
 	struct pw_chain_table *table = *(void **)data;
 
 	if (f->type == CJSON_TYPE_NONE) {

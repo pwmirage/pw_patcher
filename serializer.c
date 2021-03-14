@@ -370,7 +370,7 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p,
 		}
 
 		/* TODO make id fields _CUSTOM in all serializers */
-		if (is_root_obj && strcmp(slzr->name, "id") == 0 && slzr->ctx == NULL) {
+		if (is_root_obj && slzr->type == _INT32 && strcmp(slzr->name, "id") == 0 && slzr->ctx == NULL) {
 			data += 4;
 			slzr++;
 			continue;
@@ -502,7 +502,7 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p,
 			}
 		} else if (slzr->type == _CUSTOM) {
 			if (slzr->des_fn) {
-				data += slzr->des_fn(json_f, slzr->ctx, data);
+				data += slzr->des_fn(json_f, slzr, data);
 			}
 		}
 

@@ -1117,6 +1117,8 @@ pw_tasks_patch_obj(struct pw_task_file *taskf, struct cjson *obj)
 		table_el = pw_chain_table_new_el(taskf->tasks);
 		*(uint32_t *)table_el = el_id;
 
+		*(uint8_t *)serializer_get_field(pw_task_serializer, "_need_record", table_el) = 1;
+
 		pw_idmap_set(taskf->idmap, id, el_id, 0, table_el);
 	}
 	deserialize(obj, pw_task_serializer, table_el);
