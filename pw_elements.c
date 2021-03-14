@@ -25,6 +25,7 @@ char *g_item_descs[65536] = {};
 uint32_t g_elements_last_id;
 struct pw_idmap *g_elements_map;
 int g_elements_taskmatter_idmap_id;
+extern struct pw_idmap *g_tasks_map;
 
 static size_t
 icon_serialize_fn(FILE *fp, struct serializer *f, void *data)
@@ -1339,11 +1340,50 @@ struct __attribute__((packed)) player_levelexp_config {
 	int32_t exp[150];
 };
 
+static void
+deserialize_tasks_id_field_async_fn(void *data, void *target_data)
+{
+	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)target_data, *(uint32_t *)data);
+	*(uint32_t *)target_data = *(uint32_t *)data;
+}
+
+static size_t
+deserialize_tasks_id_field_fn(struct cjson *f, struct serializer *slzr, void *data)
+{
+	int64_t val = JSi(f);
+
+	if (f->type == CJSON_TYPE_NONE) {
+		return 4;
+	}
+
+	if (val >= 0x80000000) {
+		int rc = pw_idmap_get_async(g_tasks_map, val, 0, deserialize_tasks_id_field_async_fn, data);
+		if (rc) {
+			assert(false);
+		}
+	} else {
+		deserialize_log(f, data);
+		*(uint32_t *)(data) = (uint32_t)val;
+	}
+
+	return 4;
+}
+
+static size_t
+serialize_tasks_id_field_fn(FILE *fp, struct serializer *f, void *data)
+{
+	uint32_t id = *(uint32_t *)data;
+
+	fprintf(fp, "\"%s\":%d,", f->name, id);
+	return 4;
+}
+
+
 static struct serializer npc_tasks_in_serializer[] = {
 	{ "id", _INT32 },
 	{ "name", _WSTRING(32) },
 	{ "tasks", _ARRAY_START(32) },
-		{ "", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+		{ "", _CUSTOM, serialize_tasks_id_field_fn, deserialize_tasks_id_field_fn },
 	{ "", _ARRAY_END },
 	{ "", _TYPE_END },
 };
@@ -1352,7 +1392,7 @@ static struct serializer npc_tasks_out_serializer[] = {
 	{ "id", _INT32 },
 	{ "name", _WSTRING(32) },
 	{ "tasks", _ARRAY_START(32) },
-		{ "", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+		{ "", _CUSTOM, serialize_tasks_id_field_fn, deserialize_tasks_id_field_fn },
 	{ "", _ARRAY_END },
 	{ "", _TYPE_END },
 };
