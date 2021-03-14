@@ -636,7 +636,7 @@ static struct serializer pw_task_serializer[] = {
 	{ "finish_npc", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 	{ "_is_craft_skill_quest", _INT8 },
 	{ "can_be_found", _INT8 },
-	{ "display_direction", _INT8 },
+	{ "show_direction", _INT8 },
 	{ "_is_marriage_quest", _INT8 },
 	{ "premise_level_min", _INT32 },
 	{ "premise_level_max", _INT32 },
