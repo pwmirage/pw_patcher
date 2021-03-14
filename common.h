@@ -32,6 +32,9 @@
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #endif
 
+/* use 8 bytes for storing every pointer in data structures (even on 32-bit archs).
+ * This unifies serializer offsets between x86 and x86_64. */
+#define PW_POINTER_BUF_SIZE 8
 
 extern const char g_zeroes[4096];
 extern FILE *g_nullfile;

@@ -89,7 +89,7 @@ serialize_pascal_wstr_fn(FILE *fp, struct serializer *f, void *data)
 	fwsprint(fp, wstr, len);
 	fprintf(fp, "\",");
 
-	return 4 + sizeof(wstr);
+	return 4 + PW_POINTER_BUF_SIZE;
 }
 
 static size_t
@@ -101,7 +101,7 @@ deserialize_pascal_wstr_fn(struct cjson *f, struct serializer *slzr, void *data)
 	int rc;
 
 	if (f->type == CJSON_TYPE_NONE) {
-		return 4 + sizeof(wstr);
+		return 4 + PW_POINTER_BUF_SIZE;
 	}
 
 	normalize_json_string(f->s);
@@ -110,7 +110,7 @@ deserialize_pascal_wstr_fn(struct cjson *f, struct serializer *slzr, void *data)
 	memset(wstr, 0, len * 2);
 	if (newlen == 0) {
 		*len_p = 0;
-		return 4 + sizeof(wstr);
+		return 4 + PW_POINTER_BUF_SIZE;
 	}
 
 	rc = change_charset("UTF-8", "UTF-16LE", f->s, newlen, (char *)wstr, len * 2 + 2);
@@ -121,7 +121,7 @@ deserialize_pascal_wstr_fn(struct cjson *f, struct serializer *slzr, void *data)
 		wstr = *(void **)(data + 4) = calloc(1, newlen * 2 + 2);
 		if (!wstr) {
 			PWLOG(LOG_ERROR, "calloc() failed\n");
-			return 4 + sizeof(wstr);
+			return 4 + PW_POINTER_BUF_SIZE;
 		}
 		rc = change_charset("UTF-8", "UTF-16LE", f->s, strlen(f->s), (char *)wstr, newlen * 2 + 2);
 		if (rc >= 0) {
@@ -134,7 +134,7 @@ deserialize_pascal_wstr_fn(struct cjson *f, struct serializer *slzr, void *data)
 		newlen++;
 	}
 	*len_p = newlen;
-	return 4 + sizeof(wstr);
+	return 4 + PW_POINTER_BUF_SIZE;
 }
 
 static size_t
@@ -780,7 +780,7 @@ read_award(void **buf_p, FILE *fp, bool is_server)
 	if (!ptr) {
 		return -1;
 	}
-	buf += sizeof(void *);
+	buf += PW_POINTER_BUF_SIZE;
 	*buf_p = buf;
 
 	for (i = 0; i < item_groups_count; i++) {
@@ -847,7 +847,7 @@ write_award(void **buf_p, FILE *fp, bool is_client)
 	}
 
 	table = *(void **)buf;
-	buf += sizeof(void *);
+	buf += PW_POINTER_BUF_SIZE;
 
 	PW_CHAIN_TABLE_FOREACH(_el, table) {
 		struct pw_chain_table *item_table;
@@ -875,7 +875,7 @@ write_award(void **buf_p, FILE *fp, bool is_client)
 		PWLOG(LOG_ERROR, "pw_chain_table_fread() failed\n"); \
 		return -1; \
 	} \
-	buf += sizeof(void *)
+	buf += PW_POINTER_BUF_SIZE
 
 #define LOAD_CHAIN_TBL(fp, name, data_slzr, data_start, tbl_slzr) \
 	count = *(uint32_t *)serializer_get_field((data_slzr), "_" name "_cnt", (data_start)); \
@@ -1012,7 +1012,7 @@ read_task(struct pw_task_file *taskf, FILE *fp, bool is_server)
 		fread(wstr, len * 2, 1, fp);
 		xor_bytes(wstr, len, id);
 
-		buf += sizeof(void *);
+		buf += PW_POINTER_BUF_SIZE;
 	}
 
 	for (int p = 0; p < 5; p++) {
@@ -1039,7 +1039,7 @@ read_task(struct pw_task_file *taskf, FILE *fp, bool is_server)
 			buf += 4;
 
 			uint16_t *wstr = *(void **)buf = calloc(1, wstr_len * 2 + 2);
-			buf += sizeof(void *);
+			buf += PW_POINTER_BUF_SIZE;
 			if (!wstr) {
 				PWLOG(LOG_ERROR, "calloc() failed\n");
 				return -1;
@@ -1140,7 +1140,7 @@ save_chain_tbl(FILE *fp, void **buf)
 		fwrite(el, tbl->el_size, 1, fp);
 	}
 
-	*buf += sizeof(void *);
+	*buf += PW_POINTER_BUF_SIZE;
 }
 
 static void
@@ -1223,7 +1223,7 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 		buf += 24;
 
 		tbl_p = *(void **)serializer_get_field(pw_task_award_timed_serializer, "awards", data_start);
-		buf += sizeof(void *);
+		buf += PW_POINTER_BUF_SIZE;
 		PW_CHAIN_TABLE_FOREACH(el, tbl_p) {
 			void *_el = el;
 			write_award(&_el, fp, is_client);
@@ -1240,7 +1240,7 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 		buf += 12;
 
 		tbl_p = *(void **)serializer_get_field(pw_task_award_scaled_serializer, "awards", data_start);
-		buf += sizeof(void *);
+		buf += PW_POINTER_BUF_SIZE;
 		PW_CHAIN_TABLE_FOREACH(el, tbl_p) {
 			void *_el = el;
 			write_award(&_el, fp, is_client);
@@ -1260,7 +1260,7 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 		xor_bytes(wstr, len, id);
 		fwrite(wstr, len * 2, 1, fp);
 
-		buf += sizeof(void *);
+		buf += PW_POINTER_BUF_SIZE;
 	}
 
 	for (int p = 0; p < 5; p++) {
@@ -1286,7 +1286,7 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 		fwrite(buf, 136, 1, fp);
 		buf += 136;
 
-		buf += sizeof(void *);
+		buf += PW_POINTER_BUF_SIZE;
 		PW_CHAIN_TABLE_FOREACH(el, tbl_p) {
 			char *data_start = el;
 			void *buf = el;
@@ -1302,7 +1302,7 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 			xor_bytes(wstr, len, id);
 			fwrite(wstr, len * 2, 1, fp);
 
-			buf += sizeof(void *);
+			buf += PW_POINTER_BUF_SIZE;
 
 			SAVE_TBL_CNT("choices", pw_task_talk_proc_question_serializer, data_start);
 			fwrite(buf, 4, 1, fp);
@@ -1310,7 +1310,7 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 
 			{
 				struct pw_chain_table *tbl_p = *(void **)buf;
-				buf += sizeof(void *);
+				buf += PW_POINTER_BUF_SIZE;
 				void *c;
 
 				PW_CHAIN_TABLE_FOREACH(c, tbl_p) {

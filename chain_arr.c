@@ -116,7 +116,7 @@ serialize_chunked_table_fn(FILE *fp, struct serializer *f, void *data)
 	struct pw_chain_el *chain;
 
 	if (!table) {
-		return sizeof(void *);
+		return PW_POINTER_BUF_SIZE;
 	}
 	slzr = table->serializer;
 	chain = table->chain;
@@ -150,7 +150,7 @@ serialize_chunked_table_fn(FILE *fp, struct serializer *f, void *data)
 		fprintf(fp, "],");
 	}
 
-	return sizeof(void *);
+	return PW_POINTER_BUF_SIZE;
 }
 
 size_t
@@ -233,6 +233,6 @@ deserialize_chunked_table_fn(struct cjson *f, struct serializer *slzr, void *dat
 		json_el = json_el->next;
 	}
 
-	return sizeof(void *);
+	return PW_POINTER_BUF_SIZE;
 }
 
