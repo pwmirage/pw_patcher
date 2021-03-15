@@ -18,6 +18,7 @@
 #include "pw_tasks.h"
 #include "pw_elements.h"
 #include "gui.h"
+#include "pw_tasks_npc.h"
 
 static char *g_branch_name = "public";
 static bool g_patcher_outdated = false;
@@ -28,6 +29,7 @@ struct pw_version g_version;
 
 struct pw_elements *g_elements;
 struct pw_task_file *g_tasks;
+struct pw_tasks_npc *g_tasks_npc;
 
 struct task_ctx {
 	mg_callback cb;
@@ -475,7 +477,7 @@ import_stream_cb(void *ctx, struct cjson *obj)
 	print_obj(obj->a, 1);
 
 	if (strncmp(type, "spawners_", 9) == 0) {
-		/* server-side only */
+		pw_tasks_npc_patch_obj(g_tasks_npc, obj);
 		return;
 	}
 
@@ -559,13 +561,16 @@ patch_cb(void *arg1, void *arg2)
 
 	const char *elements_path;
 	const char *tasks_path;
+	const char *tasks_npc_path;
 
 	if (g_force_update) {
 		elements_path = "patcher/elements.data.src";
 		tasks_path = "patcher/tasks.data.src";
+		tasks_npc_path = "patcher/task_npc.data.src";
 	} else {
 		elements_path = "element/data/elements.data";
 		tasks_path = "element/data/tasks.data";
+		tasks_npc_path = "element/data/task_npc.data";
 	}
 
 	rc = pw_elements_load(g_elements, elements_path, "patcher/elements.imap");
@@ -577,6 +582,12 @@ patch_cb(void *arg1, void *arg2)
 	rc = pw_tasks_load(g_tasks, tasks_path, "patcher/tasks.imap");
 	if (rc != 0) {
 		set_text(g_status_right_lbl, "tasks file not found. Please redownload the client");
+		goto err_retry;
+	}
+
+	g_tasks_npc = pw_tasks_npc_load(tasks_npc_path);
+	if (!g_tasks_npc) {
+		set_text(g_status_right_lbl, "task_npc file not found. Please redownload the client");
 		goto err_retry;
 	}
 
@@ -656,6 +667,13 @@ patch_cb(void *arg1, void *arg2)
 	if (rc) {
 		PWLOG(LOG_ERROR, "err: %d\n", rc);
 		set_text(g_status_right_lbl, "Saving failed (3). No permission to access game directories?");
+		return;
+	}
+
+	rc = pw_tasks_npc_save(g_tasks_npc, "element/data/task_npc.data");
+	if (rc) {
+		PWLOG(LOG_ERROR, "err: %d\n", rc);
+		set_text(g_status_right_lbl, "Saving failed (4). No permission to access game directories?");
 		return;
 	}
 

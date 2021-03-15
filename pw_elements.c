@@ -25,6 +25,7 @@ char *g_item_descs[65536] = {};
 uint32_t g_elements_last_id;
 struct pw_idmap *g_elements_map;
 int g_elements_taskmatter_idmap_id;
+int g_elements_npc_idmap_id;
 extern struct pw_idmap *g_tasks_map;
 
 static size_t
@@ -1616,7 +1617,7 @@ pw_elements_get_idmap_type(struct pw_elements *elements, const char *obj_type)
 		return -1;
 	}
 
-	return i;
+	return i + 1;
 }
 
 int
@@ -2004,6 +2005,7 @@ pw_elements_load(struct pw_elements *el, const char *filename, const char *idmap
 	fclose(fp);
 
 	g_elements_taskmatter_idmap_id = pw_elements_get_idmap_type(el, "taskmatter_essence");
+	g_elements_npc_idmap_id = pw_elements_get_idmap_type(el, "npcs");
 
 	return 0;
 }
