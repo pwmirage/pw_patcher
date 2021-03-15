@@ -104,17 +104,17 @@ init_gui(HWND hwnd, HINSTANCE hInst)
 			WS_VISIBLE | WS_CHILD | WS_GROUP | SS_LEFT,
 			413, 11, 287, 270, hwnd, (HMENU)0, hInst, 0);
 
-	g_version_lbl = CreateWindowW(L"Static", L"Patcher v1.0.2",
+	g_version_lbl = CreateWindowW(L"Static", L"Patcher v1.0.12",
 			WS_VISIBLE | WS_CHILD | WS_GROUP | SS_LEFT,
 			102, 367, 162, 18, hwnd, (HMENU)0, hInst, 0);
 
-	g_progress_bar = CreateWindowEx(0, PROGRESS_CLASS, (LPTSTR) NULL, 
-															WS_CHILD | WS_VISIBLE, 12, 296, 689, 23, 
-															hwnd, (HMENU) 0, hInst, NULL);
-
+	g_progress_bar = CreateWindowEx(0, PROGRESS_CLASS, (LPTSTR) NULL,
+		WS_CHILD | WS_VISIBLE, 12, 296, 689, 23,
+		hwnd, (HMENU) 0, hInst, NULL);
 
 	g_quit_button = CreateWindowW(L"Button", L"Quit",
-			WS_VISIBLE | WS_CHILD | WS_TABSTOP, 618, 358, 83, 23, hwnd, (HMENU)BUTTON_ID_QUIT, hInst, 0);
+			WS_VISIBLE | WS_CHILD | WS_TABSTOP, 618, 358, 83, 23,
+			hwnd, (HMENU)BUTTON_ID_QUIT, hInst, 0);
 
 	g_patch_button = CreateWindowW(L"Button", L"Patch",
 			WS_VISIBLE | WS_CHILD | WS_TABSTOP | 0x00000001,
@@ -202,7 +202,7 @@ WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 		case WM_DESTROY:
 			PostQuitMessage(0);
 			break;
-}
+	}
 
 	return DefWindowProcW(hwnd, msg, arg1, arg2);
 }
