@@ -39,10 +39,9 @@ download_wininet(const char *url, const char *filename)
 	BOOL success;
 	DWORD num_bytes = 1;
 	FILE *fp;
+	DWORD flags;
 
-	if (strstr(url, "version.json") != NULL) {
-		DeleteUrlCacheEntry(url);
-	}
+	DeleteUrlCacheEntry(url);
 
 	fp = fopen(filename, "wb");
 	if (!fp) {
@@ -55,7 +54,8 @@ download_wininet(const char *url, const char *filename)
 		return -1;
 	}
 
-	hURL = InternetOpenUrl(hInternetSession, url,	NULL, 0, 0, 0);
+	flags = INTERNET_FLAG_DONT_CACHE | INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_NO_CACHE_WRITE;
+	hURL = InternetOpenUrl(hInternetSession, url, NULL, 0, flags, 0);
 	if (!hURL) {
 		InternetCloseHandle(hInternetSession);
 		fclose(fp);
