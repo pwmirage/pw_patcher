@@ -615,7 +615,7 @@ static struct serializer pw_task_serializer[] = {
 	{ "can_give_up", _INT8 },
 	{ "_can_retake", _INT8 },
 	{ "can_retake_after_failure", _INT8 },
-	{ "can_retake_after_giving_up", _INT8 },
+	{ "cant_retake_after_giving_up", _INT8 },
 	{ "_need_record", _INT8 },
 	{ "fail_on_death", _INT8 },
 	{ "simultaneous_player_limit", _INT32 },
