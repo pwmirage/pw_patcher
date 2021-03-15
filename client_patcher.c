@@ -196,7 +196,7 @@ on_init(int argc, char *argv[])
 	}
 
 	char *motd = JSs(g_latest_version, "message");
-	normalize_json_string(motd);
+	normalize_json_string(motd, false);
 	set_text(g_changelog_lbl, motd);
 
 	set_text(g_status_left_lbl, "Checking prerequisites ...");

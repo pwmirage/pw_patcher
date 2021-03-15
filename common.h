@@ -59,7 +59,7 @@ void fwsprintf(FILE *fp, const char *fmt, const uint16_t *buf, int maxlen);
 void wsnprintf(uint16_t *dst, size_t dstsize, const char *src);
 
 int change_charset(char *src_charset, char *dst_charset, char *src, long srclen, char *dst, long dstlen);
-void normalize_json_string(char *str);
+void normalize_json_string(char *str, bool use_crlf);
 
 #define LOG_ERROR 0
 #define LOG_INFO 1

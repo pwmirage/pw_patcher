@@ -152,7 +152,7 @@ download_mem(const char *url, char **buf, size_t *len)
 }
 
 void
-normalize_json_string(char *str)
+normalize_json_string(char *str, bool use_crlf)
 {
 	char *read_b = str;
 	char *write_b = str;
@@ -167,10 +167,19 @@ normalize_json_string(char *str)
 			continue;
 		}
 
-		if (*read_b == '\\' && *(read_b + 1) == 'n') {
-			/* replace first \\ with newline, skip second \\ */
-			c = '\n';
-			read_b++;
+		if (use_crlf) {
+			if (*read_b == '\\' && *(read_b + 1) == 'n') {
+				/* replace \\ with \r, n with \n */
+				*write_b++ = '\r';
+				c = '\n';
+				read_b++;
+			}
+		} else {
+			if (*read_b == '\\' && *(read_b + 1) == 'n') {
+				/* replace first \\ with newline, skip second \\ */
+				c = '\n';
+				read_b++;
+			}
 		}
 
 		if (*read_b == '\\' && *(read_b + 1) == '"') {
@@ -182,6 +191,10 @@ normalize_json_string(char *str)
 		if (*read_b == '\\' && *(read_b + 1) == '\\') {
 			/* skip second \ in strings */
 			read_b++;
+		}
+
+		if (!*read_b) {
+			break;
 		}
 
 		*write_b = c;

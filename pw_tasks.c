@@ -104,7 +104,7 @@ deserialize_pascal_wstr_fn(struct cjson *f, struct serializer *slzr, void *data)
 		return 4 + PW_POINTER_BUF_SIZE;
 	}
 
-	normalize_json_string(f->s);
+	normalize_json_string(f->s, true);
 	uint32_t newlen = strlen(f->s);
 	deserialize_log(f, data);
 	memset(wstr, 0, len * 2);
