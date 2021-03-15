@@ -113,17 +113,17 @@ deserialize_pascal_wstr_fn(struct cjson *f, struct serializer *slzr, void *data)
 		return 4 + PW_POINTER_BUF_SIZE;
 	}
 
-	rc = change_charset("UTF-8", "UTF-16LE", f->s, newlen, (char *)wstr, len * 2 + 2);
+	rc = change_charset("UTF-8", "UTF-16LE", f->s, newlen, (char *)wstr, len * 2);
 	while (rc < 0) {
 		newlen *= 2;
 
 		free(wstr);
-		wstr = *(void **)(data + 4) = calloc(1, newlen * 2 + 2);
+		wstr = *(void **)(data + 4) = calloc(1, newlen * 2);
 		if (!wstr) {
 			PWLOG(LOG_ERROR, "calloc() failed\n");
 			return 4 + PW_POINTER_BUF_SIZE;
 		}
-		rc = change_charset("UTF-8", "UTF-16LE", f->s, strlen(f->s), (char *)wstr, newlen * 2 + 2);
+		rc = change_charset("UTF-8", "UTF-16LE", f->s, strlen(f->s), (char *)wstr, newlen * 2);
 		if (rc >= 0) {
 			break;
 		}
@@ -133,7 +133,7 @@ deserialize_pascal_wstr_fn(struct cjson *f, struct serializer *slzr, void *data)
 	while (*wstr++) {
 		newlen++;
 	}
-	*len_p = newlen;
+	*len_p = newlen + 1;
 	return 4 + PW_POINTER_BUF_SIZE;
 }
 
