@@ -2144,11 +2144,11 @@ pw_elements_adjust_rates(struct pw_elements *elements, struct cjson *rates)
 	double coin_rate = JSf(rates, "mob", "coin");
 	double pet_xp = JSf(rates, "pet_xp");
 
-	fprintf(stderr, "Adjusting rates:\n");
-	fprintf(stderr, "  mob xp:   %8.4f\n", xp_rate);
-	fprintf(stderr, "  mob sp:   %8.4f\n", sp_rate);
-	fprintf(stderr, "  mob coin: %8.4f\n", coin_rate);
-	fprintf(stderr, "  pet xp:   %8.4f\n", pet_xp);
+	PWLOG(LOG_INFO, "Adjusting rates:\n");
+	PWLOG(LOG_INFO, "  mob xp:   %8.4f\n", xp_rate);
+	PWLOG(LOG_INFO, "  mob sp:   %8.4f\n", sp_rate);
+	PWLOG(LOG_INFO, "  mob coin: %8.4f\n", coin_rate);
+	PWLOG(LOG_INFO, "  pet xp:   %8.4f\n", pet_xp);
 
 	struct pw_chain_table *tbl = get_chain_table(elements, "param_adjust_config");
 	struct param_adjust_config *exp_penalty_cfg = pw_idmap_get(g_elements_map, 10, tbl->idmap_type);

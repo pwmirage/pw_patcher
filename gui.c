@@ -219,7 +219,7 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrevInstance,
 	MSG msg;
 
 	setlocale(LC_ALL, "en_US.UTF-8");
-	freopen("patcher/patch.log", "w", stderr);
+	freopen("patcher/launcher.log", "w", stderr);
 
 	g_cmdline = lpCmdLine;
 
