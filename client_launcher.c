@@ -14,6 +14,11 @@
 #include "cjson_ext.h"
 #include "gui.h"
 
+#define MG_GUI_ID_QUIT 1
+#define MG_GUI_ID_PATCH 2
+#define MG_GUI_ID_PLAY 3
+#define MG_GUI_ID_REPAIR 4
+
 int calc_sha1_hash(const char *path, char *hash_buf, size_t buflen);
 
 static char *g_branch_name = "public";
@@ -26,12 +31,6 @@ struct pw_version g_version;
 struct pw_elements *g_elements;
 struct pw_task_file *g_tasks;
 struct pw_tasks_npc *g_tasks_npc;
-
-struct task_ctx {
-	mg_callback cb;
-	void *arg1;
-	void *arg2;
-};
 
 DWORD __stdcall
 task_cb(void *arg)
@@ -55,74 +54,6 @@ task(mg_callback cb, void *arg1, void *arg2)
 	ctx->arg1 = arg1;
 	ctx->arg2 = arg2;
 	CreateThread(NULL, 0, task_cb, ctx, 0, &tid);
-}
-
-static void
-set_text_cb(void *_label, void *_txt)
-{
-	SetWindowText(_label, _txt);
-	ShowWindow(_label, SW_HIDE);
-	ShowWindow(_label, SW_SHOW);
-}
-
-static void
-set_text(HWND label, const char *txt)
-{
-	ui_thread(set_text_cb, label, (void *)txt);
-}
-
-static void
-set_progress_cb(void *_percent, void *arg2)
-{
-	SendMessage(g_progress_bar, PBM_SETPOS, (int)(uintptr_t)_percent, 0);
-}
-
-static void
-set_progress(int percent)
-{
-	ui_thread(set_progress_cb, (void *)(uintptr_t)percent, NULL);
-}
-
-static void
-enable_button_cb(void *_button, void *_enable)
-{
-	EnableWindow(_button, (bool)(uintptr_t)_enable);
-}
-
-static void
-enable_button(HWND button, bool enable)
-{
-	ui_thread(enable_button_cb, button, (void *)(uintptr_t)enable);
-}
-
-static void
-show_ui_cb(void *ui, void *_enable)
-{
-	ShowWindow(ui, (bool)(uintptr_t)_enable ? SW_SHOW : SW_HIDE);
-}
-
-static void
-show_ui(HWND ui, bool enable)
-{
-	ui_thread(show_ui_cb,ui, (void *)(uintptr_t)enable);
-}
-
-static void
-quit_cb(void *arg1, void *arg2)
-{
-	PostQuitMessage(0);
-}
-
-static void
-set_banner_cb(void *path, void *arg2)
-{
-	reload_banner(path);
-}
-
-static void
-set_banner(const char *path)
-{
-	ui_thread(set_banner_cb, (void *)path, NULL);
 }
 
 static int
@@ -156,6 +87,9 @@ on_init(int argc, char *argv[])
 	rc = pw_version_load(&g_version);
 	if (rc < 0) {
 		PWLOG(LOG_ERROR, "pw_version_load() failed with rc=%d\n", rc);
+		set_text(g_status_right_lbl, "Failed. Invalid file permissions?");
+		set_progress_state(PBST_ERROR);
+		set_progress(100);
 		return;
 	}
 
@@ -168,7 +102,9 @@ on_init(int argc, char *argv[])
 	}
 
 	if (access("patcher", F_OK) != 0) {
-		MessageBox(0, "Can't find the \"patcher\" directory. Please redownload a full client.", "Error", MB_OK);
+		set_progress_state(PBST_ERROR);
+		set_progress(100);
+		MessageBox(0, "Can't find the \"patcher\" directory. Please redownload the full client.", "Error", MB_OK);
 		ui_thread(quit_cb, NULL, NULL);
 		return;
 	}
@@ -181,19 +117,22 @@ on_init(int argc, char *argv[])
 	rc = download_mem(tmpbuf, &g_latest_version_str, &len);
 	if (rc) {
 		set_text(g_status_right_lbl, "Can't fetch patch list");
+		set_progress_state(PBST_ERROR);
+		set_progress(100);
 		return;
 	}
 
 	g_latest_version = cjson_parse(g_latest_version_str);
 	if (!g_latest_version) {
 		set_text(g_status_right_lbl, "Can't parse patch list");
+		set_progress_state(PBST_ERROR);
+		set_progress(100);
 		return;
 	}
 
 	char *motd = JSs(g_latest_version, "message");
 	normalize_json_string(motd, false);
 	set_text(g_changelog_lbl, motd);
-
 
 	set_text(g_status_left_lbl, "Checking prerequisites ...");
 
@@ -204,6 +143,7 @@ on_init(int argc, char *argv[])
 		const char *sha = JSs(file, "sha256");
 		const char *url = JSs(file, "url");
 
+		set_progress_state(PBST_NORMAL);
 		set_progress(100 * i / files->count);
 
 		/* no hidden files and no directories (also no ../) */
@@ -233,9 +173,12 @@ on_init(int argc, char *argv[])
 
 			rc = MessageBox(0, errmsg, "Error", MB_YESNO);
 			if (rc == IDYES) {
+				set_progress_state(PBST_PAUSED);
 				i--;
 				continue;
 			} else {
+				set_progress_state(PBST_ERROR);
+				set_progress(100);
 				snprintf(errmsg, sizeof(errmsg), "Failed to download \"%s\".", namebuf);
 				set_text(g_status_right_lbl, errmsg);
 				return;
@@ -248,6 +191,8 @@ on_init(int argc, char *argv[])
 	}
 
 	if (JSi(g_latest_version, "launcher_version") >= 15) {
+		set_progress_state(PBST_PAUSED);
+
 		g_patcher_outdated = true;
 		set_text(g_patch_button, "Update");
 		enable_button(g_patch_button, true);
@@ -275,6 +220,7 @@ on_init(int argc, char *argv[])
 	set_progress(100);
 
 	if (rc != 0) {
+		set_progress_state(PBST_PAUSED);
 		set_text(g_status_right_lbl, "Missing Visual Studio C++ Redistributable 2019 x86");
 		int install = MessageBox(NULL, "Missing Visual Studio C++ Redistributable 2019 x86.\nWould you like to download now?", "Status", MB_YESNO);
 		if (install == IDYES) {
@@ -299,6 +245,7 @@ on_init(int argc, char *argv[])
 				show_ui(g_win, true);
 
 				if (check_deps() != 0) {
+					set_progress_state(PBST_ERROR);
 					set_text(g_status_right_lbl, "vc_redist.x86 installation failed!");
 					return;
 				}
@@ -313,9 +260,11 @@ on_init(int argc, char *argv[])
 	set_text(g_status_left_lbl, msg);
 
 	if (g_version.version == JSi(g_latest_version, "version")) {
+		set_progress_state(PBST_NORMAL);
 		set_text(g_status_right_lbl, "Ready to launch");
 		enable_button(g_play_button, true);
 	} else {
+		set_progress_state(PBST_PAUSED);
 		set_text(g_status_right_lbl, "Update is required");
 		enable_button(g_patch_button, true);
 	}
@@ -402,8 +351,13 @@ patch_cb(void *arg1, void *arg2)
 	char tmpbuf[1024];
 	int rc;
 
+	set_progress_state(PBST_NORMAL);
+	set_progress(0);
+
 	enable_button(g_play_button, false);
 	if (g_patcher_outdated) {
+		set_progress_state(PBST_PAUSED);
+		set_progress(100);
 		rc = MessageBox(0, "New version of the patcher is available! "
 				"Would you like to download it now?", "Patcher Update", MB_YESNO);
 		if (rc == IDYES) {
@@ -414,8 +368,6 @@ patch_cb(void *arg1, void *arg2)
 		return;
 	}
 
-	set_progress(0);
-
 	enable_button(g_patch_button, false);
 	set_text(g_status_right_lbl, "Loading local files");
 
@@ -423,9 +375,12 @@ patch_cb(void *arg1, void *arg2)
 	PROCESS_INFORMATION pi = {};
 
 	si.cb = sizeof(si);
-	snprintf(tmpbuf, sizeof(tmpbuf), "patcher/patcher.exe -b %s", g_branch_name);
+	PWLOG(LOG_INFO, "tid: %u\n", g_win_tid);
+	snprintf(tmpbuf, sizeof(tmpbuf), "patcher/patcher.exe -branch %s -tid %u %s", g_branch_name, (unsigned)g_win_tid, g_force_update ? "--fresh" : "");
 	if(!CreateProcess(NULL, tmpbuf, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
 		set_text(g_status_right_lbl, "Failed to start the patcher!");
+		set_progress_state(PBST_ERROR);
+		set_progress(100);
 		goto err_retry;
 	}
 
@@ -434,23 +389,21 @@ patch_cb(void *arg1, void *arg2)
 	GetExitCodeProcess(pi.hProcess, &exit_code);
 	CloseHandle(pi.hProcess);
 
-	set_progress(15);
-	set_text(g_status_right_lbl, "Updating...");
+	if (exit_code != EXIT_SUCCESS) {
+		PWLOG(LOG_ERROR, "Patcher failed with rc=0x%x\n", exit_code);
+		set_progress_state(PBST_ERROR);
+		set_progress(100);
 
-	set_text(g_status_right_lbl, "Done!");
+		if (exit_code != EXIT_FAILURE) {
+			set_text(g_status_right_lbl, "Patcher failed with an unexpected error. Check the log file for details");
+		}
+		goto err_retry;
+	}
 
 	int written = snprintf(tmpbuf, sizeof(tmpbuf), "Current version: %d. ", (int)JSi(g_latest_version, "version"));
 	snprintf(tmpbuf + written, sizeof(tmpbuf) - written, "Latest: %d", (int)JSi(g_latest_version, "version"));
-	set_text(g_status_left_lbl,tmpbuf);
+	set_text(g_status_left_lbl, tmpbuf);
 
-	set_progress(10 + 80);
-	PWLOG(LOG_INFO, "Saving.\n");
-	set_text(g_status_right_lbl, "Saving files...");
-
-	set_text(g_status_right_lbl, "Ready to launch");
-	PWLOG(LOG_INFO, "All done\n");
-
-	set_progress(100);
 	enable_button(g_patch_button, false);
 	enable_button(g_play_button, true);
 
@@ -471,7 +424,7 @@ repair_cb(void *arg1, void *arg2)
 void
 on_button_click(int btn)
 {
-	if (btn == BUTTON_ID_PLAY) {
+	if (btn == MG_GUI_ID_PLAY) {
 		STARTUPINFO pw_proc_startup_info = {0};
 		PROCESS_INFORMATION pw_proc_info = {0};
 		BOOL result = FALSE;
@@ -491,16 +444,16 @@ on_button_click(int btn)
 		PostQuitMessage(0);
 	}
 
-	if (btn == BUTTON_ID_QUIT) {
+	if (btn == MG_GUI_ID_QUIT) {
 		PostQuitMessage(0);
 		return;
 	}
 
-	if (btn == BUTTON_ID_PATCH) {
+	if (btn == MG_GUI_ID_PATCH) {
 		task(patch_cb, NULL, NULL);
 	}
 
-	if (btn == BUTTON_ID_REPAIR) {
+	if (btn == MG_GUI_ID_REPAIR) {
 		task(repair_cb, NULL, NULL);
 	}
 }
