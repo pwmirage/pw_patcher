@@ -21,7 +21,9 @@
 #include "common.h"
 #include "cjson.h"
 
+#ifndef NO_ICONV
 #include <iconv.h>
+#endif
 
 int g_pwlog_level = 99;
 FILE *g_nullfile;
@@ -209,6 +211,9 @@ normalize_json_string(char *str, bool use_crlf)
 int
 change_charset(char *src_charset, char *dst_charset, char *src, long srclen, char *dst, long dstlen)
 {
+#ifdef NO_ICONV
+	return 0;
+#else
 	iconv_t cd;
 	int rc;
 
@@ -224,6 +229,7 @@ change_charset(char *src_charset, char *dst_charset, char *src, long srclen, cha
 	rc = iconv(cd, &src, (size_t *) &srclen, &dst, (size_t *) &dstlen);
 	iconv_close(cd);
 	return rc;
+#endif
 }
 
 void
