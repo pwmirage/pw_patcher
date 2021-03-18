@@ -153,7 +153,12 @@ on_init(int argc, char *argv[])
 		}
 
 		char namebuf[280];
-		snprintf(namebuf, sizeof(namebuf), "patcher/%s", name);
+		if (strcmp(name, "game.exe") == 0) {
+			snprintf(namebuf, sizeof(namebuf), "element/%s", name);
+		} else {
+			snprintf(namebuf, sizeof(namebuf), "patcher/%s", name);
+		}
+
 		tmpbuf[0] = 0;
 		rc = calc_sha1_hash(namebuf, tmpbuf, sizeof(tmpbuf));
 		if (rc == 0 && strcmp(tmpbuf, sha) == 0) {
