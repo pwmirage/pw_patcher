@@ -8,6 +8,7 @@
 #include <shellapi.h>
 #include <assert.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 #include "common.h"
 #include "cjson.h"
@@ -27,6 +28,7 @@ static bool g_force_update = false;
 static char *g_latest_version_str;
 static struct cjson *g_latest_version;
 struct pw_version g_version;
+static bool g_quickupdate = false;
 
 struct pw_elements *g_elements;
 struct pw_task_file *g_tasks;
@@ -76,10 +78,18 @@ on_init(int argc, char *argv[])
 	size_t len;
 	int i, rc;
 
-	if (argc >= 3) {
-		if (strcmp(argv[1], "-b") == 0) {
-			g_branch_name = argv[2];
+	char **a = argv;
+	while (argc > 0) {
+		if (argc >= 2 && (strcmp(*a, "-b") == 0 || strcmp(*a, "-branch") == 0)) {
+			g_branch_name = *(a + 1);
+			a++;
+			argc--;
+		} else if (strcmp(*a, "--quickupdate") == 0) {
+			g_quickupdate = true;
 		}
+
+		a++;
+		argc--;
 	}
 
 	set_text(g_status_left_lbl, "Reading local version ...");
@@ -91,6 +101,10 @@ on_init(int argc, char *argv[])
 		set_progress_state(PBST_ERROR);
 		set_progress(100);
 		return;
+	}
+
+	if (g_quickupdate) {
+		g_branch_name = g_version.branch;
 	}
 
 	if (strcmp(g_version.branch, g_branch_name) != 0) {
@@ -155,6 +169,8 @@ on_init(int argc, char *argv[])
 		char namebuf[280];
 		if (strcmp(name, "game.exe") == 0) {
 			snprintf(namebuf, sizeof(namebuf), "element/%s", name);
+		} else if (strcmp(name, "calibrib.ttf") == 0) {
+			snprintf(namebuf, sizeof(namebuf), "element/fonts/%s", name);
 		} else {
 			snprintf(namebuf, sizeof(namebuf), "patcher/%s", name);
 		}
@@ -274,6 +290,10 @@ on_init(int argc, char *argv[])
 		enable_button(g_patch_button, true);
 	}
 	enable_button(g_repair_button, true);
+
+	if (g_quickupdate) {
+		patch_cb(NULL, NULL);
+	}
 }
 
 void
@@ -324,7 +344,7 @@ inject_dll(DWORD pid, char *path_to_dll)
 
 	thr = CreateRemoteThread(proc, NULL, 0,
 		(LPTHREAD_START_ROUTINE)load_lib_winapi_addr,
-		(LPVOID)ext_path_to_dll, 0, NULL);	 
+		(LPVOID)ext_path_to_dll, 0, NULL);
 	if (thr == NULL) {
 		goto err_free;
 	}
