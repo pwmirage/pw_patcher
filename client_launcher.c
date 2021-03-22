@@ -71,6 +71,8 @@ check_deps(void)
 	return nResult == 0 ? -1 : 0;
 }
 
+void patch_cb(void *arg1, void *arg2);
+
 void
 on_init(int argc, char *argv[])
 {
@@ -211,7 +213,7 @@ on_init(int argc, char *argv[])
 		}
 	}
 
-	if (JSi(g_latest_version, "launcher_version") >= 16) {
+	if (JSi(g_latest_version, "launcher_version") >= 17) {
 		set_progress_state(PBST_PAUSED);
 
 		g_patcher_outdated = true;
