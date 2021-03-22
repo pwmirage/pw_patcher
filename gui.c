@@ -167,7 +167,7 @@ init_win(HINSTANCE hInst)
 	RegisterClassW(&wc);
 
 	g_win = CreateWindowW(wc.lpszClassName, L"PW Mirage Launcher",
-			(WS_OVERLAPPEDWINDOW & ~(WS_THICKFRAME | WS_MAXIMIZEBOX)) | WS_VISIBLE,
+			(WS_OVERLAPPEDWINDOW & ~(WS_THICKFRAME | WS_MAXIMIZEBOX) | WS_VISIBLE),
 			CW_USEDEFAULT, CW_USEDEFAULT, 720, 420, 0, 0, hInst, 0);
 }
 
@@ -265,6 +265,7 @@ WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 		{
 			HINSTANCE hInst = ((LPCREATESTRUCT)arg2)->hInstance;
 			init_gui(hwnd, hInst);
+			SetWindowPos(hwnd, HWND_TOP, CW_USEDEFAULT, CW_USEDEFAULT, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
 			task(on_init_cb, NULL, NULL);
 			break;
 		}
