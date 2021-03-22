@@ -169,7 +169,7 @@ static struct serializer spawner_group_serializer[] = {
 };
 
 static struct serializer spawner_serializer[] = {
-	{ "fixed_y", _INT32 },
+	{ "_fixed_y", _INT32 },
 	{ "_groups_cnt", _INT32 }, 
 	{ "pos", _ARRAY_START(3) },
 		{ "", _FLOAT },
@@ -570,6 +570,12 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 	}
 	PWLOG(LOG_DEBUG_5, "0x%llx found with real id=%u\n", id, real_id);
 	deserialize(obj, table->serializer, table_el);
+
+	if (table == &npc->spawners) {
+		float *pos = (float *)serializer_get_field(spawner_serializer, "pos", table_el);
+		*(uint32_t *)serializer_get_field(spawner_serializer, "_fixed_y", table_el) = pos[1] != 0;
+	}
+
 	return 0;
 }
 
