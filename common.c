@@ -90,7 +90,7 @@ download_wget(const char *url, const char *filename)
 	char buf[2048];
 	int rc;
 
-	snprintf(buf, sizeof(buf), "wget \"%s\" -O \"%s\"", url, filename);
+	snprintf(buf, sizeof(buf), "wget --no-check-certificate --no-cache --no-cookies \"%s\" -O \"%s\"", url, filename);
 	rc = system(buf);
 	if (rc != 0) {
 		return rc;
