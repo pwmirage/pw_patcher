@@ -54,14 +54,14 @@ main(void)
 	}
 
 	for (i = 0; i < 10; i++) {
-		rc = unlink("..\\pwmirage.exe");
-		if (rc != 0) {
+		rc = unlink("../pwmirage.exe");
+		if (rc == 0) {
 			break;
 		}
 		Sleep(300);
 	}
 
-	if (i == 10 || rename("pwmirage.dat", "..\\pwmirage.exe") != 0) {
+	if (i == 10 || rename("pwmirage.dat", "../pwmirage.exe") != 0) {
 		MessageBox(0, "Failed to replace the old patcher. Could it be it's still running?", "Status", MB_OK);
 		return 1;
 	}
