@@ -120,7 +120,7 @@ on_init(int argc, char *argv[])
 	if (access("patcher", F_OK) != 0) {
 		set_progress_state(PBST_ERROR);
 		set_progress(100);
-		MessageBox(0, "Can't find the \"patcher\" directory. Please redownload the full client.", "Error", MB_OK);
+		MessageBox(g_win, "Can't find the \"patcher\" directory. Please redownload the full client.", "Error", MB_OK);
 		ui_thread(quit_cb, NULL, NULL);
 		return;
 	}
@@ -170,11 +170,11 @@ on_init(int argc, char *argv[])
 
 		char namebuf[280];
 		if (strcmp(name, "game.exe") == 0) {
-			snprintf(namebuf, sizeof(namebuf), "element/%s", name);
+			snprintf(namebuf, sizeof(namebuf), "element\\%s", name);
 		} else if (strcmp(name, "calibrib.ttf") == 0) {
-			snprintf(namebuf, sizeof(namebuf), "element/fonts/%s", name);
+			snprintf(namebuf, sizeof(namebuf), "element\\fonts\\%s", name);
 		} else {
-			snprintf(namebuf, sizeof(namebuf), "patcher/%s", name);
+			snprintf(namebuf, sizeof(namebuf), "patcher\\%s", name);
 		}
 
 		tmpbuf[0] = 0;
@@ -194,7 +194,7 @@ on_init(int argc, char *argv[])
 			char errmsg[512];
 			snprintf(errmsg, sizeof(errmsg), "Failed to download \"%s\" from the server. Do you want to retry?", namebuf);
 
-			rc = MessageBox(0, errmsg, "Error", MB_YESNO);
+			rc = MessageBox(g_win, errmsg, "Error", MB_YESNO);
 			if (rc == IDYES) {
 				set_progress_state(PBST_PAUSED);
 				i--;
@@ -208,22 +208,22 @@ on_init(int argc, char *argv[])
 			}
 		}
 
-		if (strcmp(namebuf, "patcher/banner") == 0) {
+		if (strcmp(namebuf, "patcher\\banner") == 0) {
 			set_banner(namebuf);
 		}
 	}
 
-	if (JSi(g_latest_version, "launcher_version") >= 17) {
+	if (JSi(g_latest_version, "launcher_version") >= 19) {
 		set_progress_state(PBST_PAUSED);
 
 		g_patcher_outdated = true;
 		set_text(g_patch_button, "Update");
 		enable_button(g_patch_button, true);
 		set_text(g_status_right_lbl, "Launcher outdated. Click the update button or download at pwmirage.com/launcher");
-		rc = MessageBox(0, "New version of the launcher is available! "
+		rc = MessageBox(g_win, "New version of the launcher is available! "
 				"Would you like to download it now?", "Launcher Update", MB_YESNO);
 		if (rc == IDYES) {
-			ShellExecute(NULL, NULL, "patcher/updater.exe", NULL, NULL, SW_SHOW);
+			ShellExecute(NULL, NULL, "patcher\\updater.exe", NULL, NULL, SW_SHOW);
 			ui_thread(quit_cb, NULL, NULL);
 			return;
 		}
@@ -232,10 +232,10 @@ on_init(int argc, char *argv[])
 
 	set_text(g_status_right_lbl, "");
 
-	if (access("element/d3d8.dll", F_OK) != 0) {
-		rc = download("https://github.com/crosire/d3d8to9/releases/latest/download/d3d8.dll", "element/d3d8.dll");
+	if (access("element\\d3d8.dll", F_OK) != 0) {
+		rc = download("https://github.com/crosire/d3d8to9/releases/latest/download/d3d8.dll", "element\\d3d8.dll");
 		if (rc != 0) {
-			MessageBox(0, "Failed to download d3d8.dll. Perfect World might not run to its full potential", "Status", MB_OK);
+			MessageBox(g_win, "Failed to download d3d8.dll. Perfect World might not run to its full potential", "Status", MB_OK);
 		}
 	}
 
@@ -245,35 +245,36 @@ on_init(int argc, char *argv[])
 	if (rc != 0) {
 		set_progress_state(PBST_PAUSED);
 		set_text(g_status_right_lbl, "Missing Visual Studio C++ Redistributable 2019 x86");
-		int install = MessageBox(NULL, "Missing Visual Studio C++ Redistributable 2019 x86.\nWould you like to download now?", "Status", MB_YESNO);
+		int install = MessageBox(g_win, "Missing Visual Studio C++ Redistributable 2019 x86.\nWould you like to download now?", "Status", MB_YESNO);
 		if (install == IDYES) {
-				rc = download("https://aka.ms/vs/16/release/vc_redist.x86.exe", "patcher/vc_redist.x86.exe");
-				if (rc != 0) {
-					set_text(g_status_right_lbl, "vc_redist.x86 download failed!");
-					return;
-				}
-
-				STARTUPINFO si = {};
-				PROCESS_INFORMATION pi = {};
-
-				si.cb = sizeof(si);
-				if(!CreateProcess("patcher/vc_redist.x86.exe", NULL, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-					set_text(g_status_right_lbl, "vc_redist.x86 execution failed!");
-					return;
-				}
-
-				show_ui(g_win, false);
-				WaitForSingleObject(pi.hProcess, INFINITE);
-				CloseHandle(pi.hProcess);
-				show_ui(g_win, true);
-
-				if (check_deps() != 0) {
-					set_progress_state(PBST_ERROR);
-					set_text(g_status_right_lbl, "vc_redist.x86 installation failed!");
-					return;
-				}
-		} else {
+			rc = download("https://aka.ms/vs/16/release/vc_redist.x86.exe", "patcher\\vc_redist.x86.exe");
+			if (rc != 0) {
+				set_text(g_status_right_lbl, "vc_redist.x86 download failed!");
 				return;
+			}
+
+			STARTUPINFO si = {};
+			PROCESS_INFORMATION pi = {};
+
+			si.cb = sizeof(si);
+			char buf[] = "patcher\\vc_redist.x86.exe";
+			if(!CreateProcess(NULL, buf, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+				set_text(g_status_right_lbl, "vc_redist.x86 execution failed!");
+				return;
+			}
+
+			show_ui(g_win, false);
+			WaitForSingleObject(pi.hProcess, INFINITE);
+			CloseHandle(pi.hProcess);
+			show_ui(g_win, true);
+
+			if (check_deps() != 0) {
+				set_progress_state(PBST_ERROR);
+				set_text(g_status_right_lbl, "vc_redist.x86 installation failed!");
+				return;
+			}
+		} else {
+			return;
 		}
 	}
 
@@ -368,7 +369,7 @@ err_free:
 err:
 	snprintf(buf, sizeof(buf), "Failed to open PW process. "
 		"Was it closed prematurely?");
-	MessageBoxA(NULL, buf, "Loader", MB_OK);
+	MessageBox(g_win, buf, "Loader", MB_OK);
 	return NULL;
 }
 
@@ -385,10 +386,10 @@ patch_cb(void *arg1, void *arg2)
 	if (g_patcher_outdated) {
 		set_progress_state(PBST_PAUSED);
 		set_progress(100);
-		rc = MessageBox(0, "New version of the patcher is available! "
-				"Would you like to download it now?", "Patcher Update", MB_YESNO);
+		rc = MessageBox(g_win, "New version of the launcher is available! "
+				"Would you like to download it now?", "Launcher Update", MB_YESNO);
 		if (rc == IDYES) {
-			ShellExecute(NULL, NULL, "patcher/updater.exe", NULL, NULL, SW_SHOW);
+			ShellExecute(NULL, NULL, "patcher\\updater.exe", NULL, NULL, SW_SHOW);
 			ui_thread(quit_cb, NULL, NULL);
 			return;
 		}
@@ -403,7 +404,7 @@ patch_cb(void *arg1, void *arg2)
 
 	si.cb = sizeof(si);
 	PWLOG(LOG_INFO, "tid: %u\n", g_win_tid);
-	snprintf(tmpbuf, sizeof(tmpbuf), "patcher/patcher.exe -branch %s -tid %u %s", g_branch_name, (unsigned)g_win_tid, g_force_update ? "--fresh" : "");
+	snprintf(tmpbuf, sizeof(tmpbuf), "patcher\\patcher.exe -branch %s -tid %u %s", g_branch_name, (unsigned)g_win_tid, g_force_update ? "--fresh" : "");
 	if(!CreateProcess(NULL, tmpbuf, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
 		set_text(g_status_right_lbl, "Failed to start the patcher!");
 		set_progress_state(PBST_ERROR);
@@ -458,15 +459,16 @@ on_button_click(int btn)
 
 		SetCurrentDirectory("element");
 		pw_proc_startup_info.cb = sizeof(STARTUPINFO);
-		result = CreateProcess(NULL, "game.exe game:mpw",
+		char buf[] = "game.exe game:mpw";
+		result = CreateProcess(NULL, buf,
 				NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, NULL,
 				&pw_proc_startup_info, &pw_proc_info);
 		if(!result) {
-			MessageBox(0, "Could not start the PW process", "Error", MB_ICONERROR);
+			MessageBox(g_win, "Could not start the PW process", "Error", MB_ICONERROR);
 			return;
 		}
 
-		inject_dll(pw_proc_info.dwProcessId, "../patcher/gamehook.dll");
+		inject_dll(pw_proc_info.dwProcessId, "..\\patcher\\gamehook.dll");
 		ResumeThread(pw_proc_info.hThread);
 		PostQuitMessage(0);
 	}
