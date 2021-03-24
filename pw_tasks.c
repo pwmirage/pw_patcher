@@ -443,16 +443,16 @@ static size_t
 serialize_start_by_fn(FILE *fp, struct serializer *f, void *data)
 {
 	void *task = data;
-	int val = 0;
+	int val = 2;
 
 	if (fp == g_nullfile) {
 		return 0;
 	}
 
-	if (*(uint8_t *)serializer_get_field(pw_task_serializer, "_auto_trigger", task)) val = 1;
-	if (*(uint32_t *)serializer_get_field(pw_task_serializer, "start_npc", task) & ~(1 << 31)) val = 2;
-	if (*(uint8_t *)serializer_get_field(pw_task_serializer, "_start_on_enter", task)) val = 3;
-	if (*(uint8_t *)serializer_get_field(pw_task_serializer, "_trigger_on_death", task)) val = 4;
+	if (*(uint32_t *)serializer_get_field(pw_task_serializer, "parent_quest", task)) val = 0;
+	else if (*(uint8_t *)serializer_get_field(pw_task_serializer, "_auto_trigger", task)) val = 1;
+	else if (*(uint8_t *)serializer_get_field(pw_task_serializer, "_start_on_enter", task)) val = 3;
+	else if (*(uint8_t *)serializer_get_field(pw_task_serializer, "_trigger_on_death", task)) val = 4;
 
 	fprintf(fp, "\"%s\":%d,", f->name, val);
 	return 0;
@@ -471,6 +471,11 @@ deserialize_start_by(struct cjson *f, struct serializer *slzr, void *data)
 	*(uint32_t *)serializer_get_field(pw_task_serializer, "start_npc", task) |= (1 << 31);
 	*(uint8_t *)serializer_get_field(pw_task_serializer, "_start_on_enter", task) = 0;
 	*(uint8_t *)serializer_get_field(pw_task_serializer, "_trigger_on_death", task) = 0;
+
+	if (*(uint32_t *)serializer_get_field(pw_task_serializer, "parent_quest", task)) {
+		return 0;
+	}
+
 	switch (JSi(f)) {
 		case 1:
 			*(uint8_t *)serializer_get_field(pw_task_serializer, "_auto_trigger", task) = 1;
