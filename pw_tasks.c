@@ -1174,6 +1174,11 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 	id = *(uint32_t *)data;
 	xor_bytes(serializer_get_field(slzr, "name", data), 30, id);
 
+	struct pw_chain_table *sub_quests_tbl = *(void **)serializer_get_field(slzr, "sub_quests", data);
+	if (sub_quests_tbl && sub_quests_tbl->chain && sub_quests_tbl->chain->count) {
+		*(uint32_t *)serializer_get_field(pw_task_serializer, "finish_npc", data) |= (1 << 31);
+	}
+
 	invert_bools(data);
 	SAVE_TBL_CNT("date_spans", slzr, data);
 	SAVE_TBL_CNT("premise_items", slzr, data);
@@ -1336,10 +1341,9 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 	fwrite(buf, 4, 1, fp);
 	buf += 4;
 
-	tbl_p = *(void **)serializer_get_field(slzr, "sub_quests", data);
 	void *el;
 
-	PW_CHAIN_TABLE_FOREACH(el, tbl_p) {
+	PW_CHAIN_TABLE_FOREACH(el, sub_quests_tbl) {
 		uint32_t id = *(uint32_t *)el;
 
 		if (id == 0) {
