@@ -12,6 +12,7 @@ download(const char *url, char *filename)
 	BOOL success;
 	DWORD num_bytes = 1;
 	FILE *fp;
+	DWORD flags;
 
 	fp = fopen(filename, "wb");
 	if (!fp) {
@@ -19,6 +20,12 @@ download(const char *url, char *filename)
 	}
 
 	hInternetSession = InternetOpen("Mirage Patcher", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+	if (!hInternetSession) {
+		fclose(fp);
+		return -1;
+	}
+
+	flags = INTERNET_FLAG_DONT_CACHE | INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_NO_CACHE_WRITE;
 	hURL = InternetOpenUrl(hInternetSession, url,  NULL, 0, 0, 0);
 
 	char buf[1024];
