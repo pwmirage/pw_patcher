@@ -454,7 +454,10 @@ serialize_start_by_fn(FILE *fp, struct serializer *f, void *data)
 	else if (*(uint8_t *)serializer_get_field(pw_task_serializer, "_start_on_enter", task)) val = 3;
 	else if (*(uint8_t *)serializer_get_field(pw_task_serializer, "_trigger_on_death", task)) val = 4;
 
-	fprintf(fp, "\"%s\":%d,", f->name, val);
+	if (val) {
+		fprintf(fp, "\"%s\":%d,", f->name, val);
+	}
+
 	return 0;
 }
 

@@ -30,6 +30,7 @@ print_elements(const char *path)
 	int rc;
 	rc = pw_elements_load(&elements, path, NULL);
 	if (rc != 0) {
+		PWLOG(LOG_ERROR, "pw_elements_load(%s) failed: %d\n", path, rc);
 		return 1;
 	}
 
@@ -52,7 +53,7 @@ print_tasks(const char *path)
 
 	rc = pw_tasks_load(&taskf, path, NULL);
 	if (rc) {
-		PWLOG(LOG_ERROR, "pw_tasks_load() failed: %d\n", rc);
+		PWLOG(LOG_ERROR, "pw_tasks_load(%s) failed: %d\n", path, rc);
 		return rc;
 	}
 
