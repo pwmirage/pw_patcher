@@ -305,6 +305,39 @@ cjson_parse(char *str)
 				cur_key = NULL;
 				break;
 			}
+			case 'n':
+			{
+				struct cjson *obj;
+
+				/* nullxyz will still match as true -> don't care */
+				if (strncmp(b, "null", 4) != 0) {
+					break;
+				}
+
+				if (!cur_key && cur_obj->type != CJSON_TYPE_ARRAY) {
+					assert(false);
+					goto err;
+				}
+
+				obj = new_obj(&mem);
+				if (!obj) {
+					assert(false);
+					goto err;
+				}
+				obj->i = 0;
+				obj->parent = cur_obj;
+				obj->key = cur_key;
+				obj->type = CJSON_TYPE_NULL;
+
+				if (add_child(cur_obj, obj) != 0) {
+					assert(false);
+					goto err;
+				}
+
+				b += 3; /* will be incremented */
+				cur_key = NULL;
+				break;
+			}
 			case ',':
 				need_comma = false;
 				break;
@@ -540,6 +573,39 @@ cjson_parse_arr_stream(char *str, cjson_parse_arr_stream_cb obj_cb, void *cb_ctx
 				}
 
 				b += val ? 3 : 4; /* will be incremented */
+				cur_key = NULL;
+				break;
+			}
+			case 'n':
+			{
+				struct cjson *obj;
+
+				/* nullxyz will still match as true -> don't care */
+				if (strncmp(b, "null", 4) != 0) {
+					break;
+				}
+
+				if (!cur_key && cur_obj->type != CJSON_TYPE_ARRAY) {
+					assert(false);
+					goto err;
+				}
+
+				obj = new_obj(&mem);
+				if (!obj) {
+					assert(false);
+					goto err;
+				}
+				obj->i = 0;
+				obj->parent = cur_obj;
+				obj->key = cur_key;
+				obj->type = CJSON_TYPE_NULL;
+
+				if (add_child(cur_obj, obj) != 0) {
+					assert(false);
+					goto err;
+				}
+
+				b += 3; /* will be incremented */
 				cur_key = NULL;
 				break;
 			}
