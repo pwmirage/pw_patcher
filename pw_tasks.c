@@ -862,13 +862,24 @@ write_award(void **buf_p, FILE *fp, bool is_client)
 		void *el = _el;
 		void *el_start = el;
 		void *item;
+		uint32_t item_count = 0;
+
+		item_table = *(void **)serializer_get_field(table->serializer, "items", el_start);
+		PW_CHAIN_TABLE_FOREACH(item, item_table) {
+			if (*(uint32_t *)serializer_get_field(item_table->serializer, "id", item) == 0) {
+				/* the game will parse item id 0 as "unknown item", so remove it entirely */
+				pw_chain_table_truncate(item_table, item_count);
+				/* assume there are no holes in the item table */
+				break;
+			}
+			item_count++;
+		}
 
 		SAVE_TBL_CNT("items", table->serializer, el_start);
 
 		fwrite(el, 5, 1, fp);
 		el += 5;
 
-		item_table = *(void **)serializer_get_field(table->serializer, "items", el_start);
 		PW_CHAIN_TABLE_FOREACH(item, item_table) {
 			fwrite(item, item_table->el_size, 1, fp);
 		}
@@ -1187,6 +1198,7 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 	SAVE_TBL_CNT("req_monsters", slzr, data);
 	SAVE_TBL_CNT("req_items", slzr, data);
 	finalize_id_field("start_npc", slzr, data);
+	finalize_id_field("finish_npc", slzr, data);
 
 	struct serializer *dialogue_slzr = NULL;
 	int dialogue_ready_off = serializer_get_offset_slzr(slzr, "dialogue", &dialogue_slzr);

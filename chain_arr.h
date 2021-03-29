@@ -49,6 +49,7 @@ int pw_chain_table_init(struct pw_chain_table *table, const char *name, struct s
 struct pw_chain_table *pw_chain_table_alloc(const char *name, struct serializer *serializer, size_t el_size, size_t count);
 struct pw_chain_table *pw_chain_table_fread(FILE *fp, const char *name, size_t el_count, struct serializer *el_serializer);
 void *pw_chain_table_new_el(struct pw_chain_table *table);
+void pw_chain_table_truncate(struct pw_chain_table *table, uint32_t size);
 
 size_t serialize_chunked_table_fn(FILE *fp, struct serializer *f, void *data);
 size_t deserialize_chunked_table_fn(struct cjson *f, struct serializer *_slzr, void *data);

@@ -108,6 +108,24 @@ pw_chain_table_fread(FILE *fp, const char *name, size_t el_count, struct seriali
 	return tbl;
 }
 
+void
+pw_chain_table_truncate(struct pw_chain_table *table, uint32_t size)
+{
+	struct pw_chain_el *chain = table->chain;
+	uint32_t traversed_size = 0;
+
+	while (chain) {
+		if (chain->count + traversed_size > size) {
+			chain->count = size - traversed_size;
+			chain->next = NULL;
+			return;
+		}
+
+		traversed_size += chain->count;
+		chain = chain->next;
+	}
+}
+
 size_t
 serialize_chunked_table_fn(FILE *fp, struct serializer *f, void *data)
 {
