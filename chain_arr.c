@@ -108,15 +108,50 @@ pw_chain_table_fread(FILE *fp, const char *name, size_t el_count, struct seriali
 	return tbl;
 }
 
+static void
+free_chain(struct pw_chain_el *chain)
+{
+	struct pw_chain_el *tmp;
+
+	while (chain) {
+		tmp = chain->next;
+		free(chain);
+		chain = tmp;
+	}
+}
+
+uint32_t
+pw_chain_table_count(struct pw_chain_table *table)
+{
+	struct pw_chain_el *chain = table->chain;
+	uint32_t count = 0;
+
+	while (chain) {
+		count += chain->count;
+		chain = chain->next;
+	}
+
+	return count;
+}
+
 void
 pw_chain_table_truncate(struct pw_chain_table *table, uint32_t size)
 {
-	struct pw_chain_el *chain = table->chain;
+	struct pw_chain_el *chain;
 	uint32_t traversed_size = 0;
 
+	chain = table->chain;
 	while (chain) {
 		if (chain->count + traversed_size > size) {
+			uint32_t oldcount = chain->count;
+
 			chain->count = size - traversed_size;
+			/* TODO reset that memory in a better way -> the following
+			 * memset might clear nested chain tables and cause a memory
+			 * leak */
+			memset(chain->data + chain->count * table->el_size, 0,
+					(oldcount - chain->count) * table->el_size);
+			free_chain(chain->next);
 			chain->next = NULL;
 			return;
 		}
@@ -178,12 +213,21 @@ deserialize_chunked_table_fn(struct cjson *f, struct serializer *_slzr, void *da
 	struct pw_chain_table *table = *(void **)data;
 
 	if (f->type == CJSON_TYPE_NONE) {
-		return 8;
+		return PW_POINTER_BUF_SIZE;
 	}
 
-	if (f->type != CJSON_TYPE_OBJECT) {
+	if (f->type != CJSON_TYPE_OBJECT && f->type != CJSON_TYPE_NULL) {
 		PWLOG(LOG_ERROR, "found json group field that is not an object (type: %d)\n", f->type);
-		return 8;
+		return PW_POINTER_BUF_SIZE;
+	}
+
+	if (f->type == CJSON_TYPE_NULL) {
+		if (table) {
+			pw_chain_table_truncate(table, 0);
+		} else {
+			/* nothing to do */
+		}
+		return PW_POINTER_BUF_SIZE;
 	}
 
 	if (!table) {
@@ -192,10 +236,11 @@ deserialize_chunked_table_fn(struct cjson *f, struct serializer *_slzr, void *da
 		/* FIXME set new_el_fn in here */
 		if (!table) {
 			PWLOG(LOG_ERROR, "pw_chain_table_alloc() failed\n");
-			return 8;
+			return PW_POINTER_BUF_SIZE;
 		}
 	}
 
+	int32_t null_indices_start = -1;
 	struct cjson *json_el = f->a;
 	while (json_el) {
 		char *end;
@@ -205,6 +250,17 @@ deserialize_chunked_table_fn(struct cjson *f, struct serializer *_slzr, void *da
 			json_el = json_el->next;
 			assert(false);
 			continue;
+		}
+
+		if (json_el->type == CJSON_TYPE_NULL) {
+			if (null_indices_start == -1) {
+				null_indices_start = idx;
+			}
+			json_el = json_el->next;
+			continue;
+		} else {
+			/* there must not be holes */
+			assert(null_indices_start == -1);
 		}
 
 		void *el = NULL;
@@ -238,7 +294,7 @@ deserialize_chunked_table_fn(struct cjson *f, struct serializer *_slzr, void *da
 				el = pw_chain_table_new_el(table);
 				if (!el) {
 					PWLOG(LOG_ERROR, "pw_chain_table_new_el() failed\n");
-					return 8;
+					return PW_POINTER_BUF_SIZE;
 				}
 
 				if (remaining_idx == 0) {
@@ -250,6 +306,10 @@ deserialize_chunked_table_fn(struct cjson *f, struct serializer *_slzr, void *da
 
 		deserialize(json_el, slzr, el);
 		json_el = json_el->next;
+	}
+
+	if (null_indices_start != -1) {
+		pw_chain_table_truncate(table, null_indices_start);
 	}
 
 	return PW_POINTER_BUF_SIZE;
