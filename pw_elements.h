@@ -33,6 +33,7 @@ int pw_elements_idmap_save(struct pw_elements *el, const char *filename);
 void pw_elements_serialize(struct pw_elements *elements);
 int pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj);
 void pw_elements_adjust_rates(struct pw_elements *elements, struct cjson *rates);
+void pw_elements_prepare(struct pw_elements *elements);
 
 struct talk_proc {
 	int32_t id;

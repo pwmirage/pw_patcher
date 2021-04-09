@@ -34,7 +34,12 @@ print_elements(const char *path)
 		return 1;
 	}
 
+	pw_elements_prepare(&elements);
 	pw_elements_serialize(&elements);
+
+	pw_elements_save(&elements, "config/elements.data.srv", true);
+	pw_elements_save(&elements, "config/elements.data.cl", false);
+
 	return 0;
 }
 

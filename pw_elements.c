@@ -263,6 +263,31 @@ static struct serializer monsters_serializer[] = {
 	{ "", _TYPE_END },
 };
 
+__attribute__((packed)) struct recipes {
+	uint32_t id;
+	uint32_t major_type;
+	uint32_t minor_type;
+	char16_t name[32];
+	uint32_t recipe_level;
+	uint32_t skill_id;
+	uint32_t skill_level;
+	uint32_t _bind_type;
+	struct recipes_targets {
+		uint32_t id;
+		float prob;
+	} targets[4];
+	float fail_prob;
+	uint32_t num_to_make;
+	uint32_t coins;
+	float duration;
+	uint32_t xp;
+	uint32_t sp;
+	struct recipes_mats {
+		uint32_t id;
+		uint32_t num;
+	} mats[32];
+};
+	
 static struct serializer recipes_serializer[] = {
 	{ "id", _INT32 },
 	{ "major_type", _INT32 },
@@ -2134,6 +2159,33 @@ get_chain_table(struct pw_elements *elements, const char *name)
 	}
 
 	return NULL;
+}
+
+void
+pw_elements_prepare(struct pw_elements *elements)
+{
+	struct recipes *recipe;
+	struct pw_chain_table *tbl = get_chain_table(elements, "recipes");
+	void *el;
+
+	PW_CHAIN_TABLE_FOREACH(el, tbl) {
+		int next_idx = 0;
+		recipe = el;
+
+		for (int i = 0; i < 32; i++) {
+			if (recipe->mats[i].id) {
+				recipe->mats[next_idx].id = recipe->mats[i].id;
+				recipe->mats[next_idx].num = recipe->mats[i].num;
+				next_idx++;
+			}
+
+			if (i >= next_idx) {
+				recipe->mats[i].id = 0;
+				recipe->mats[i].num = 0;
+			}
+		}
+	}
+
 }
 
 void
