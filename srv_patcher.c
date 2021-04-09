@@ -350,13 +350,13 @@ main(int argc, char *argv[])
 			return 1;
 		}
 
-		rc = pw_tasks_load(g_tasks, tasks_path, "patcher/elements.imap");
+		rc = pw_tasks_load(g_tasks, tasks_path, "patcher/tasks.imap");
 		if (rc != 0) {
 			PWLOG(LOG_ERROR, "pw_tasks_load(\"%s\") failed: %d\n", elements_path, rc);
 			return 1;
 		}
 
-		rc = pw_elements_load(g_elements, elements_path, "patcher/tasks.imap");
+		rc = pw_elements_load(g_elements, elements_path, "patcher/elements.imap");
 		if (rc != 0) {
 			PWLOG(LOG_ERROR, "pw_elements_load(\"%s\") failed: %d\n", elements_path, rc);
 			return 1;
