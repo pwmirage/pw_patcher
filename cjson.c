@@ -68,8 +68,8 @@ cjson_free(struct cjson *json)
 	}
 }
 
-static int
-add_child(struct cjson *parent, struct cjson *child)
+int
+cjson_add_child(struct cjson *parent, struct cjson *child)
 {
 	struct cjson *last = parent->a;
 
@@ -144,7 +144,7 @@ cjson_parse(char *str)
 				obj->parent = cur_obj;
 				obj->key = cur_key;
 				obj->type = *b == '{' ? CJSON_TYPE_OBJECT : CJSON_TYPE_ARRAY;
-				if (add_child(cur_obj, obj) != 0) {
+				if (cjson_add_child(cur_obj, obj) != 0) {
 					assert(false);
 					goto err;
 				}
@@ -187,7 +187,7 @@ cjson_parse(char *str)
 					obj->key = cur_key;
 					obj->type = CJSON_TYPE_STRING;
 					obj->s = start;
-					if (add_child(cur_obj, obj) != 0) {
+					if (cjson_add_child(cur_obj, obj) != 0) {
 						assert(false);
 						goto err;
 					}
@@ -257,7 +257,7 @@ cjson_parse(char *str)
 					obj->type = CJSON_TYPE_INTEGER;
 				}
 
-				if (add_child(cur_obj, obj) != 0) {
+				if (cjson_add_child(cur_obj, obj) != 0) {
 					assert(false);
 					goto err;
 				}
@@ -296,7 +296,7 @@ cjson_parse(char *str)
 				obj->key = cur_key;
 				obj->type = CJSON_TYPE_BOOLEAN;
 
-				if (add_child(cur_obj, obj) != 0) {
+				if (cjson_add_child(cur_obj, obj) != 0) {
 					assert(false);
 					goto err;
 				}
@@ -329,7 +329,7 @@ cjson_parse(char *str)
 				obj->key = cur_key;
 				obj->type = CJSON_TYPE_NULL;
 
-				if (add_child(cur_obj, obj) != 0) {
+				if (cjson_add_child(cur_obj, obj) != 0) {
 					assert(false);
 					goto err;
 				}
@@ -409,7 +409,7 @@ cjson_parse_arr_stream(char *str, cjson_parse_arr_stream_cb obj_cb, void *cb_ctx
 				obj->parent = cur_obj;
 				obj->key = cur_key;
 				obj->type = *b == '{' ? CJSON_TYPE_OBJECT : CJSON_TYPE_ARRAY;
-				if (add_child(cur_obj, obj) != 0) {
+				if (cjson_add_child(cur_obj, obj) != 0) {
 					assert(false);
 					goto err;
 				}
@@ -458,7 +458,7 @@ cjson_parse_arr_stream(char *str, cjson_parse_arr_stream_cb obj_cb, void *cb_ctx
 					obj->key = cur_key;
 					obj->type = CJSON_TYPE_STRING;
 					obj->s = start;
-					if (add_child(cur_obj, obj) != 0) {
+					if (cjson_add_child(cur_obj, obj) != 0) {
 						assert(false);
 						goto err;
 					}
@@ -528,7 +528,7 @@ cjson_parse_arr_stream(char *str, cjson_parse_arr_stream_cb obj_cb, void *cb_ctx
 					obj->type = CJSON_TYPE_INTEGER;
 				}
 
-				if (add_child(cur_obj, obj) != 0) {
+				if (cjson_add_child(cur_obj, obj) != 0) {
 					assert(false);
 					goto err;
 				}
@@ -567,7 +567,7 @@ cjson_parse_arr_stream(char *str, cjson_parse_arr_stream_cb obj_cb, void *cb_ctx
 				obj->key = cur_key;
 				obj->type = CJSON_TYPE_BOOLEAN;
 
-				if (add_child(cur_obj, obj) != 0) {
+				if (cjson_add_child(cur_obj, obj) != 0) {
 					assert(false);
 					goto err;
 				}
@@ -600,7 +600,7 @@ cjson_parse_arr_stream(char *str, cjson_parse_arr_stream_cb obj_cb, void *cb_ctx
 				obj->key = cur_key;
 				obj->type = CJSON_TYPE_NULL;
 
-				if (add_child(cur_obj, obj) != 0) {
+				if (cjson_add_child(cur_obj, obj) != 0) {
 					assert(false);
 					goto err;
 				}
