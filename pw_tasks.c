@@ -440,6 +440,51 @@ static struct serializer pw_task_ref_serializer[] = {
 static struct serializer pw_task_serializer[];
 
 static size_t
+serialize_type_fn(FILE *fp, struct serializer *f, void *data)
+{
+	void *task = data;
+	int val;
+
+	if (fp == g_nullfile) {
+		return 0;
+	}
+
+	val = *(uint32_t *)serializer_get_field(pw_task_serializer, "_type", task);
+	if (*(uint32_t *)serializer_get_field(pw_task_serializer, "_is_gold_quest", task)) val = 10;
+
+	if (val) {
+		fprintf(fp, "\"%s\":%d,", f->name, val);
+	}
+
+	return 0;
+}
+
+static size_t
+deserialize_type_fn(struct cjson *f, struct serializer *slzr, void *data)
+{
+	void *task = data;
+	uint32_t val;
+
+	if (f->type == CJSON_TYPE_NONE) {
+		return 0;
+	}
+
+	val = JSi(f);
+	*(uint32_t *)serializer_get_field(pw_task_serializer, "_type", task) = val;
+
+	switch (val) {
+		case 10:
+			*(uint8_t *)serializer_get_field(pw_task_serializer, "_is_gold_quest", task) = 1;
+			break;
+		default:
+			*(uint8_t *)serializer_get_field(pw_task_serializer, "_is_gold_quest", task) = 0;
+			break;
+	}
+
+	return 0;
+}
+
+static size_t
 serialize_start_by_fn(FILE *fp, struct serializer *f, void *data)
 {
 	void *task = data;
@@ -600,11 +645,12 @@ deserialize_avail_frequency_fn(struct cjson *f, struct serializer *slzr, void *d
 static struct serializer pw_task_serializer[] = {
 	{ "start_by", _CUSTOM, serialize_start_by_fn, deserialize_start_by },
 	{ "avail_frequency", _CUSTOM, serialize_avail_frequency_fn, deserialize_avail_frequency_fn },
+	{ "type", _CUSTOM, serialize_type_fn, deserialize_type_fn },
 	{ "id", _INT32 },
 	{ "name", _WSTRING(30) },
 	{ "_has_signature", _INT8 }, /* we'll be always setting this to 0 */
 	{ "_ptr1", _INT32 },
-	{ "type", _INT32 },
+	{ "_type", _INT32 },
 	{ "time_limit_sec", _INT32 },
 	{ "date_span_is_cyclic", _INT8 },
 	{ "_date_spans_cnt", _INT32 },
@@ -638,13 +684,13 @@ static struct serializer pw_task_serializer[] = {
 	{ "_trigger_on_death", _INT8 },
 	{ "remove_premise_items", _INT8 }, /* coins too */
 	{ "recommended_level", _INT32 },
-	{ "display_quest_title", _INT8 },
-	{ "is_gold_quest", _INT8 },
+	{ "no_display_quest_title", _INT8 },
+	{ "_is_gold_quest", _INT8 },
 	{ "start_npc", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 	{ "finish_npc", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 	{ "_is_craft_skill_quest", _INT8 },
-	{ "can_be_found", _INT8 },
-	{ "show_direction", _INT8 },
+	{ "cant_be_found", _INT8 },
+	{ "no_show_direction", _INT8 },
 	{ "_is_marriage_quest", _INT8 },
 	{ "premise_level_min", _INT32 },
 	{ "premise_level_max", _INT32 },
@@ -915,6 +961,9 @@ invert_bools(void *task)
 		"show_without_class",
 		"show_without_marriage",
 		"show_without_premise_squad",
+		"no_display_quest_title",
+		"cant_be_found",
+		"no_show_direction",
 	};
 	int num = sizeof(fields) / sizeof(fields[0]);
 	int i;
