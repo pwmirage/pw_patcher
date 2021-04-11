@@ -141,7 +141,6 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 					nonzero = true;
 				}
 			} else if (slzr->type == _OBJECT_START) {
-				/* FIXME need to advance slzr for inline objs even if its _prefixed */
 				if (slzr->name[0] != '_') {
 					size_t pre_name_pos = ftell(fp);
 
@@ -165,6 +164,10 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 						fprintf(fp, ",");
 						nonzero = true;
 					}
+				} else {
+					/* just advance the slzr and data */
+					slzr++;
+					_serialize(g_nullfile, &slzr, &data, 1, true, false, true);
 				}
 			} else if (slzr->type == _CUSTOM) {
 				size_t pre_pos = ftell(fp);
