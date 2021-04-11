@@ -21,25 +21,25 @@ build/gcc_ver.h:
 	cp build/gcc_ver_tmp.h build/gcc_ver.h
 
 build/export: build/gcc_ver.h $(OBJECTS:%.o=build/%.o) build/export.o
-	gcc $(_CFLAGS) -o $@ $^
+	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ -Wl,--no-whole-archive
 
 build/srv_patcher: build/gcc_ver.h $(OBJECTS:%.o=build/%.o) build/srv_patcher.o
-	gcc $(_CFLAGS) -o $@ $^
+	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ -Wl,--no-whole-archive
 
 build/idmap_gen: build/gcc_ver.h $(OBJECTS:%.o=build/%.o) build/idmap_gen.o
-	gcc $(_CFLAGS) -o $@ $^
+	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ -Wl,--no-whole-archive
 
 build/client_patcher: build/gcc_ver.h $(OBJECTS:%.o=build/%.o) build/client_patcher.o
 	windres -i patcher.rc -o patcher_rc.o
-	gcc $(_CFLAGS) -o $@ $^ patcher_rc.o -s -lwininet -mwindows -lcrypt32 -Wl,-Bstatic -liconv -Wl,-Bdynamic
+	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ patcher_rc.o -Wl,--no-whole-archive -s -lwininet -mwindows -lcrypt32 -Wl,-Bstatic -liconv -Wl,-Bdynamic
 
 build/client_launcher: build/gcc_ver.h build/cjson.o build/common.o build/sha1.o build/gui.o build/client_launcher.o
 	windres -i launcher.rc -o launcher_rc.o
-	gcc $(_CFLAGS) -o $@ $^ launcher_rc.o -s -Wl,--subsystem,windows -lwininet -mwindows -lcrypt32
+	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ launcher_rc.o -Wl,--no-whole-archive -s -Wl,--subsystem,windows -lwininet -mwindows -lcrypt32
 
 build/updater: build/gcc_ver.h build/updater.o
 	windres -i updater.rc -o updater_rc.o
-	gcc $(_CFLAGS) -o $@ $^ updater_rc.o -s -Wl,--subsystem,windows -lwininet -Wno-address-of-packed-member
+	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ updater_rc.o -Wl,--no-whole-archive -s -Wl,--subsystem,windows -lwininet -Wno-address-of-packed-member
 
 build/%.o: %.c
 	gcc $(_CFLAGS) -c -o $@ $<
