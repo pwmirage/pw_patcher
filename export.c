@@ -44,9 +44,25 @@ print_elements(const char *path)
 }
 
 static int
-print_npcgen(const char *npcgen_path, const char *mapname)
+print_npcgen()
 {
-	/* TODO */
+	struct pw_npc_file npc;
+	char tmpbuf[1024];
+	int i;
+
+	for (i = 0; i < PW_MAX_MAPS; i++) {
+		const struct map_name *map = &g_map_names[i];
+		snprintf(tmpbuf, sizeof(tmpbuf), "mkdir -p json/%s", map->name);
+		system(tmpbuf);
+
+		memset(&npc, 0, sizeof(npc));
+		snprintf(tmpbuf, sizeof(tmpbuf), "config/%s/npcgen.data", map->dir_name);
+		pw_npcs_load(&npc, map->name, tmpbuf, true);
+
+		snprintf(tmpbuf, sizeof(tmpbuf), "json/%s/triggers.json", map->name);
+		pw_npcs_serialize(&npc, tmpbuf);
+	}
+
 	return 0;
 }
 
@@ -76,7 +92,7 @@ print_tasks(const char *path)
 static void
 print_help(char *argv[0])
 {
-	printf("%s npcs path_to_npcgen.data world_name\n", argv[0]);
+	printf("%s npcs\n", argv[0]);
 	printf("%s elements\n", argv[0]);
 	printf("%s tasks\n", argv[0]);
 }
@@ -98,7 +114,7 @@ main(int argc, char *argv[])
 	} else if (strcmp(type, "tasks") == 0) {
 		rc = print_tasks(argv[2]);
 	} else if (strcmp(type, "npcs") == 0) {
-		print_npcgen(argv[2], argv[3]);
+		print_npcgen();
 	} else {
 		print_help(argv);
 		return 1;

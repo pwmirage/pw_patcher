@@ -10,6 +10,8 @@
 #include <errno.h>
 #include <assert.h>
 #include <stdbool.h>
+#include <unistd.h>
+#include <sys/types.h>
 
 #include "cjson.h"
 #include "cjson_ext.h"
@@ -146,6 +148,47 @@ serialize_elements_id_field_fn(FILE *fp, struct serializer *f, void *data)
 	return 4;
 }
 
+static size_t
+serialize_trigger_id_fn(FILE *fp, struct serializer *f, void *data)
+{
+	uint32_t trigger = *(uint32_t *)data;
+
+	fprintf(fp, "\"trigger\":\"%u\",", trigger);
+	return 4;
+}
+
+static void
+deserialize_trigger_id_async_fn(void *data, void *target_data)
+{
+	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)target_data, *(uint32_t *)data);
+	*(uint32_t *)target_data = *(uint32_t *)data;
+}
+
+static struct pw_idmap *g_cur_npc_idmap;
+
+static size_t
+deserialize_trigger_id_fn(struct cjson *f, struct serializer *slzr, void *data)
+{
+	int64_t val = JSi(f);
+
+	if (f->type == CJSON_TYPE_NONE) {
+		return 4;
+	}
+
+	if (val >= 0x80000000) {
+		int rc = pw_idmap_get_async(g_cur_npc_idmap, val, 0, deserialize_trigger_id_async_fn, data);
+
+		if (rc) {
+			assert(false);
+		}
+	} else {
+		deserialize_log(f, data);
+		*(uint32_t *)(data) = (uint32_t)val;
+	}
+
+	return 4;
+}
+
 static struct serializer spawner_group_serializer[] = {
 	{ "type", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 	{ "count", _INT32 },
@@ -170,7 +213,7 @@ static struct serializer spawner_group_serializer[] = {
 
 static struct serializer spawner_serializer[] = {
 	{ "_fixed_y", _INT32 },
-	{ "_groups_cnt", _INT32 }, 
+	{ "_groups_cnt", _INT32 },
 	{ "pos", _ARRAY_START(3) },
 		{ "", _FLOAT },
 	{ "", _ARRAY_END },
@@ -187,7 +230,7 @@ static struct serializer spawner_serializer[] = {
 	{ "_unused1", _INT8 },
 	{ "_removed", _CUSTOM, serialize_id_removed_fn, deserialize_id_removed_fn },
 	{ "id", _INT32 },
-	{ "trigger", _INT32 /* TODO parse high IDs */ },
+	{ "trigger", _CUSTOM, serialize_trigger_id_fn, deserialize_trigger_id_fn },
 	{ "lifetime", _FLOAT },
 	{ "max_num", _INT32 },
 	{ "groups", _CHAIN_TABLE, spawner_group_serializer },
@@ -229,7 +272,7 @@ static struct serializer resource_serializer[] = {
 		{ "", _INT8 },
 	{ "", _ARRAY_END },
 	{ "rad", _INT8 },
-	{ "trigger", _INT32 }, /* TODO */
+	{ "trigger", _CUSTOM, serialize_trigger_id_fn, deserialize_trigger_id_fn },
 	{ "max_num", _INT32 },
 	{ "groups", _CHAIN_TABLE, resource_group_serializer },
 	{ "", _TYPE_END },
@@ -244,7 +287,7 @@ static struct serializer dynamic_serializer[] = {
 		{ "", _INT8 },
 	{ "", _ARRAY_END },
 	{ "rad", _INT8 },
-	{ "trigger", _INT32 },
+	{ "trigger", _CUSTOM, serialize_trigger_id_fn, deserialize_trigger_id_fn },
 	{ "scale", _INT8 },
 	{ "", _TYPE_END },
 };
@@ -252,14 +295,14 @@ static struct serializer dynamic_serializer[] = {
 static struct serializer trigger_serializer[] = {
 	{ "_removed", _CUSTOM, serialize_id_removed_fn, deserialize_id_removed_fn },
 	{ "id", _INT32 },
-	{ "console_id", _INT32 },
-	{ "name", _WSTRING(64) },
+	{ "_console_id", _INT32 }, /* same as id */
+	{ "name", _STRING(128) },
 	{ "auto_start", _INT8 },
 	{ "start_delay", _INT32 },
 	{ "stop_delay", _INT32 },
-	{ "has_start_time", _INT8 },
-	{ "has_stop_time", _INT8 },
-	{ "start_time", _OBJECT_START },
+	{ "_no_start_time", _INT8 }, /* all hidden -> we'll control it with scripts */
+	{ "_no_stop_time", _INT8 },
+	{ "_start_time", _OBJECT_START },
 		{ "year", _INT32 },
 		{ "month", _INT32 },
 		{ "week_day", _INT32 },
@@ -267,7 +310,7 @@ static struct serializer trigger_serializer[] = {
 		{ "hour", _INT32 },
 		{ "minute", _INT32 },
 	{ "", _OBJECT_END },
-	{ "end_time", _OBJECT_START },
+	{ "_end_time", _OBJECT_START },
 		{ "year", _INT32 },
 		{ "month", _INT32 },
 		{ "week_day", _INT32 },
@@ -492,6 +535,8 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 		return -1;
 	}
 
+	g_cur_npc_idmap = npc->idmap;
+
 	/* todo verify obj._db.type == spawners_* */
 	obj_type = JSs(obj, "type");
 	if (obj_type) {
@@ -695,12 +740,19 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 		dynamics_count++;
 	}
 
+	uint32_t no_start_time_off = serializer_get_offset(npc->triggers.serializer, "_no_start_time");
+	uint32_t no_stop_time_off = serializer_get_offset(npc->triggers.serializer, "_no_stop_time");
+	uint32_t console_id_off = serializer_get_offset(npc->triggers.serializer, "_console_id");
 	uint32_t triggers_count = 0;
 	PW_CHAIN_TABLE_FOREACH(el, &npc->triggers) {
 		if (TRIGGER_ID(el) & (1 << 31)) {
 			PWLOG(LOG_DEBUG_5, "trigger ignored, off=%u, id=%u\n", ftell(fp), TRIGGER_ID(el));
 			continue;
 		}
+
+		*(uint8_t *)(el + no_start_time_off) = 1;
+		*(uint8_t *)(el + no_stop_time_off) = 1;
+		*(uint32_t *)(el + console_id_off) = *(uint32_t *)el;
 
 		PWLOG(LOG_DEBUG_5, "trigger saved, off=%u, id=%u\n", ftell(fp), TRIGGER_ID(el));
 		fwrite(el, 1, npc->triggers.el_size, fp);
@@ -727,3 +779,39 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 	return pw_idmap_save(npc->idmap, tmpbuf);
 }
 
+int
+pw_npcs_serialize(struct pw_npc_file *npc, const char *path)
+{
+	FILE *fp = fopen(path, "wb");
+	void *el;
+	int count = 0;
+
+	if (fp == NULL) {
+		PWLOG(LOG_ERROR, "cant open %s\n", path);
+		return 1;
+	}
+
+	fprintf(fp, "[");
+
+	PW_CHAIN_TABLE_FOREACH(el, &npc->triggers) {
+		struct serializer *tmp_slzr = npc->triggers.serializer;
+		size_t pos_begin = ftell(fp);
+		void *tmp_el = el;
+
+		_serialize(fp, &tmp_slzr, &tmp_el, 1, true, true, true);
+
+		if (ftell(fp) > pos_begin + 2) {
+			fprintf(fp, ",\n");
+		}
+		count++;
+	}
+
+	/* replace ,\n} with }] */
+	fseek(fp, -3, SEEK_CUR);
+	fprintf(fp, count > 0 ? "}]" : "]");
+
+	size_t sz = ftell(fp);
+	fclose(fp);
+	truncate(path, sz);
+	return 0;
+}
