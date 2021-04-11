@@ -22,6 +22,7 @@
 #include "pw_npc.h"
 
 extern struct pw_idmap *g_elements_map;
+struct pw_idmap *g_triggers_map;
 
 const struct map_name g_map_names[PW_MAX_MAPS] = {
 	{ "gs01", "world" },
@@ -164,8 +165,6 @@ deserialize_trigger_id_async_fn(void *data, void *target_data)
 	*(uint32_t *)target_data = *(uint32_t *)data;
 }
 
-static struct pw_idmap *g_cur_npc_idmap;
-
 static size_t
 deserialize_trigger_id_fn(struct cjson *f, struct serializer *slzr, void *data)
 {
@@ -176,7 +175,7 @@ deserialize_trigger_id_fn(struct cjson *f, struct serializer *slzr, void *data)
 	}
 
 	if (val >= 0x80000000) {
-		int rc = pw_idmap_get_async(g_cur_npc_idmap, val, 0, deserialize_trigger_id_async_fn, data);
+		int rc = pw_idmap_get_async(g_triggers_map, val, 0, deserialize_trigger_id_async_fn, data);
 
 		if (rc) {
 			assert(false);
@@ -330,6 +329,15 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 	char buf[128];
 	char buf2[256];
 	uint32_t max_id;
+
+
+	if (!g_triggers_map) {
+		g_triggers_map = pw_idmap_init("npcgen_triggers", clean_load ? NULL : "patcher/npcgen_triggers.imap");
+		if (!g_triggers_map) {
+			PWLOG(LOG_ERROR, "pw_idmap_init() failed\n");
+			return 1;
+		}
+	}
 
 	memset(npc, 0, sizeof(*npc));
 	snprintf(buf, sizeof(buf), "npcgen_%s", name);
@@ -509,8 +517,12 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 		if (id > max_id) {
 			max_id = id;
 		}
+
 		pw_idmap_set(npc->idmap, id, id, npc->triggers.idmap_type, el);
+		pw_idmap_set(g_triggers_map, id, id, 0, el);
 	}
+	npc->max_trigger_id = max_id;
+
 	pw_idmap_end_type_load(npc->idmap, npc->triggers.idmap_type, max_id);
 
 	fclose(fp);
@@ -535,11 +547,11 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 		return -1;
 	}
 
-	g_cur_npc_idmap = npc->idmap;
-
-	/* todo verify obj._db.type == spawners_* */
 	obj_type = JSs(obj, "type");
-	if (obj_type) {
+	if (strncmp(JSs(obj, "_db", "type"), "triggers_", strlen("triggers_")) == 0) {
+		table = &npc->triggers;
+		table_el = pw_idmap_get(npc->idmap, id, table->idmap_type);
+	} else if (obj_type) {
 		if (strcmp(obj_type, "npc") == 0) {
 			table = &npc->spawners;
 		} else if (strcmp(obj_type, "monster") == 0) {
@@ -569,9 +581,13 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 		uint32_t el_id = 0;
 		struct pw_chain_el *chain = table->chain;
 
-		while (chain) {
-			el_id += chain->count;
-			chain = chain->next;
+		if (table == &npc->triggers) {
+			el_id = ++npc->max_trigger_id;
+		} else {
+			while (chain) {
+				el_id += chain->count;
+				chain = chain->next;
+			}
 		}
 
 		PWLOG(LOG_DEBUG_5, "0x%llx not found, creating with id=%u\n", id, el_id);
@@ -602,6 +618,10 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 				return -1;
 			}
 			*(void **)serializer_get_field(table->serializer, "groups", table_el) = grp_tbl;
+		} else if (table == &npc->triggers) {
+			TRIGGER_ID(table_el) = el_id;
+
+			pw_idmap_set(g_triggers_map, id, el_id, table->idmap_type, table_el);
 		}
 
 		pw_idmap_set(npc->idmap, id, el_id, table->idmap_type, table_el);
@@ -772,6 +792,11 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 	PWLOG(LOG_DEBUG_5, "triggers_count: %u\n", triggers_count);
 
 	fclose(fp);
+
+	if (g_triggers_map) {
+		pw_idmap_save(g_triggers_map, "patcher/npcgen_triggers.imap");
+		g_triggers_map = NULL;
+	}
 
 	/* save idmap immediately, it's only used server-side */
 	char tmpbuf[1024];

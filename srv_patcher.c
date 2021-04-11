@@ -185,7 +185,7 @@ import_stream_cb(void *ctx, struct cjson *obj)
 
 	print_obj(obj->a, 1);
 
-	if (strncmp(type, "spawners_", 9) == 0) {
+	if (strncmp(type, "spawners_", 9) == 0 || strncmp(type, "triggers_", 9) == 0) {
 		struct pw_npc_file *npcfile;
 		const char *mapid = type + 9;
 		int i;

@@ -26,6 +26,7 @@ struct pw_chain_table;
 
 #define PW_MAX_MAPS 32
 extern const struct map_name g_map_names[];
+extern struct pw_idmap *g_triggers_map;
 
 struct pw_npc_file {
 	struct pw_npc_header {
@@ -42,6 +43,7 @@ struct pw_npc_file {
 	struct pw_chain_table dynamics;
 	struct pw_chain_table triggers;
 	struct pw_idmap *idmap;
+	unsigned max_trigger_id;
 };
 
 struct cjson;
