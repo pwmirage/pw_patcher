@@ -1644,6 +1644,52 @@ pw_elements_get_idmap_type(struct pw_elements *elements, const char *obj_type)
 	return i + 1;
 }
 
+static const char *
+get_item_type_by_id(unsigned type) {
+	switch (type) {
+		case 1: return "weapon_essence";
+		case 2: return "armor_essence";
+		case 3: return "decoration_essence";
+		case 4: return "medicine_essence";
+		case 5: return "material_essence";
+		case 6: return "damagerune_essence";
+		case 7: return "armorrune_essence";
+		case 8: return "skilltome_essence";
+		case 9: return "flysword_essence";
+		case 10: return "wingmanwing_essence";
+		case 11: return "townscroll_essence";
+		case 12: return "revivescroll_essence";
+		case 13: return "element_essence";
+		case 14: return "taskmatter_essence";
+		case 15: return "tossmatter_essence";
+		case 16: return "projectile_essence";
+		case 17: return "quiver_essence";
+		case 18: return "stone_essence";
+		case 19: return "taskdice_essence";
+		case 20: return "tasknormalmatter_essence";
+		case 21: return "fashion_essence";
+		case 22: return "faceticket_essence";
+		case 23: return "facepill_essence";
+		case 24: return "gm_generator_essence";
+		case 25: return "pet_egg_essence";
+		case 26: return "pet_food_essence";
+		case 27: return "pet_faceticket_essence";
+		case 28: return "fireworks_essence";
+		case 29: return "war_tankcallin_essence";
+		case 30: return "skillmatter_essence";
+		case 31: return "refine_ticket_essence";
+		case 32: return "bible_essence";
+		case 33: return "speaker_essence";
+		case 34: return "autohp_essence";
+		case 35: return "automp_essence";
+		case 36: return "double_exp_essence";
+		case 37: return "transmitscroll_essence";
+		case 38: return "dye_ticket_essence";
+	}
+
+	return "unknown";
+}
+
 int
 pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 {
@@ -1657,6 +1703,11 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 	if (!obj_type) {
 		PWLOG(LOG_ERROR, "missing obj._db.type\n");
 		return -1;
+	}
+
+	if (strcmp(obj_type, "items") == 0) {
+		uint32_t type = JSi(obj, "type");
+		obj_type = get_item_type_by_id(type);
 	}
 
 	id = JSi(obj, "id");
