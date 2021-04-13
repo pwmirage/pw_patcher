@@ -1617,7 +1617,6 @@ pw_elements_serialize(struct pw_elements *elements)
 	EXPORT_ITEMS(double_exp);
 	EXPORT_ITEMS(transmitscroll);
 	EXPORT_ITEMS(dye_ticket);
-	EXPORT_ITEMS(flysword);
 
 #undef EXPORT_ITEMS
 
