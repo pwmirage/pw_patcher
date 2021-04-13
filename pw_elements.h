@@ -23,7 +23,8 @@ struct pw_idmap;
 extern uint32_t g_elements_last_id;
 extern struct pw_idmap *g_elements_map;
 
-extern char g_icon_names[][64];
+#define PW_ELEMENTS_ICON_COUNT (4096 / 32 * 2048 / 32 + 1)
+extern char g_icon_names[PW_ELEMENTS_ICON_COUNT][128];
 extern char g_item_colors[];
 extern char *g_item_descs[];
 

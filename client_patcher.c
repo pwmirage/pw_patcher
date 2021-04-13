@@ -66,6 +66,36 @@ enable_button(unsigned button, bool enable)
 	PostThreadMessage(g_parent_tid, MG_PATCHER_STATUS_MSG, cmd, button);
 }
 
+static void
+load_icons(void) {
+	FILE *fp = fopen("patcher/iconlist_ivtrm.txt", "r");
+	char *line = NULL;
+	size_t len = 0;
+	ssize_t read;
+
+	if (fp == NULL) {
+		PWLOG(LOG_ERROR, "failed to open iconlist_ivtrm.txt\n");
+		return;
+	}
+
+	/* skip header */
+	for (int i = 0; i < 4; i++) {
+		getline(&line, &len, fp);
+		line = NULL;
+		len = 0;
+	}
+
+	unsigned i = 0;
+	while (i < PW_ELEMENTS_ICON_COUNT &&
+			(read = getline(&line, &len, fp)) != -1) {
+		snprintf(g_icon_names[i], sizeof(g_icon_names[0]), "%s", line);
+		i++;
+		len = 0;
+	}
+
+	free(line);
+}
+
 static int
 save_serverlist(void)
 {
@@ -201,6 +231,8 @@ patch(void)
 		return rc;
 	}
 	PWLOG(LOG_INFO, "Version: %u, Generation: %u, Hash: %s\n", g_version.version ,g_version.generation, g_version.cur_hash);
+
+	load_icons();
 
 	if (strcmp(g_version.branch, g_branch_name) != 0) {
 		PWLOG(LOG_INFO, "new branch detected, forcing a fresh update\n");

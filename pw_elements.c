@@ -18,7 +18,7 @@
 #include "idmap.h"
 #include "pw_elements.h"
 
-char g_icon_names[4096 / 32 * 2048 / 32 + 1][64] = {};
+char g_icon_names[PW_ELEMENTS_ICON_COUNT][128];
 char g_item_colors[65536] = {};
 char *g_item_descs[65536] = {};
 
@@ -36,6 +36,10 @@ icon_serialize_fn(FILE *fp, struct serializer *f, void *data)
 	char *tmp = out, *basename = out;
 	int i;
 
+	if (fp == g_nullfile) {
+		return 128;
+	}
+
 	sprint(out, sizeof(out), data, len);
 	while (*tmp) {
 		if (*tmp == '\\') {
@@ -44,18 +48,29 @@ icon_serialize_fn(FILE *fp, struct serializer *f, void *data)
 		tmp++;
 	}
 
-	for (i = 0; i < sizeof(g_icon_names) / sizeof(g_icon_names[0]); i++) {
-		if (g_icon_names[i] == NULL) {
-			i = -1;
-			break;
-		}
-
+	for (i = 0; i < PW_ELEMENTS_ICON_COUNT; i++) {
 		if (memcmp(basename, g_icon_names[i], strlen(basename) - 3) == 0) {
 			break;
 		}
 	}
 
 	fprintf(fp, "\"icon\":%d,", i);
+	return 128;
+}
+
+static size_t
+icon_deserialize_fn(struct cjson *f, struct serializer *slzr, void *data)
+{
+	int64_t val = JSi(f);
+
+	if (f->type == CJSON_TYPE_NONE || !g_icon_names[0]) {
+		return 128;
+	}
+
+	if (val < PW_ELEMENTS_ICON_COUNT) {
+		memcpy(data, g_icon_names[val], 128);
+	}
+
 	return 128;
 }
 
@@ -91,6 +106,13 @@ serialize_item_id_fn(FILE *fp, struct serializer *f, void *data)
 		fprintf(fp, "\"desc\":\"%s\",", desc);
 	}
 
+	return 4;
+}
+
+static size_t
+deserialize_item_id_fn(struct cjson *f, struct serializer *slzr, void *data)
+{
+	/* do nothing */
 	return 4;
 }
 
@@ -407,7 +429,7 @@ static struct serializer weapon_minor_types_serializer[] = {
 };
 
 static struct serializer weapon_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(1) },
 	{ "major_type", _INT32 },
 	{ "minor_type", _INT32 },
@@ -416,7 +438,7 @@ static struct serializer weapon_essence_serializer[] = {
 	{ "file_model_right", _STRING(128) },
 	{ "file_model_left", _STRING(128) },
 	{ "file_matter", _STRING(128) },
-	{ "file_icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "require_strength", _INT32 },
 	{ "require_dexterity", _INT32 },
 	{ "require_magic", _INT32 },
@@ -488,14 +510,14 @@ static struct serializer armor_minor_types_serializer[] = {
 };
 
 static struct serializer armor_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(2) },
 	{ "major_type", _INT32 },
 	{ "minor_type", _INT32 },
 	{ "name", _WSTRING(32) },
 	{ "realname", _STRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "equip_location", _INT32 },
 	{ "level", _INT32 },
 	{ "require_strength", _INT32 },
@@ -567,14 +589,14 @@ static struct serializer decoration_minor_types_serializer[] = {
 };
 
 static struct serializer decoration_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(3) },
 	{ "major_type", _INT32 },
 	{ "minor_type", _INT32 },
 	{ "name", _WSTRING(32) },
 	{ "file_model", _STRING(128) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "level", _INT32 },
 	{ "require_strength", _INT32 },
 	{ "require_agility", _INT32 },
@@ -638,13 +660,13 @@ static struct serializer medicine_minor_types_serializer[] = {
 };
 
 static struct serializer medicine_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(4) },
 	{ "major_type", _INT32 },
 	{ "minor_type", _INT32 },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "require_level", _INT32 },
 	{ "cool_time", _INT32 },
 	{ "hp_add_total", _INT32 },
@@ -672,13 +694,13 @@ static struct serializer material_sub_type_serializer[] = {
 };
 
 static struct serializer material_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(5) },
 	{ "major_type", _INT32 },
 	{ "minor_type", _INT32 },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "price", _INT32 },
 	{ "shop_price", _INT32 },
 	{ "decompose_price", _INT32 },
@@ -692,12 +714,12 @@ static struct serializer material_essence_serializer[] = {
 };
 
 static struct serializer damagerune_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(6) },
 	{ "minor_type", _INT32 },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "is_magic", _INT32 },
 	{ "price", _INT32 },
 	{ "shop_price", _INT32 },
@@ -711,12 +733,12 @@ static struct serializer damagerune_essence_serializer[] = {
 };
 
 static struct serializer armorrune_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(7) },
 	{ "minor_type", _INT32 },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "file_gfx", _STRING(128) },
 	{ "file_sfx", _STRING(128) },
 	{ "is_magic", _INT32 },
@@ -733,12 +755,12 @@ static struct serializer armorrune_essence_serializer[] = {
 };
 
 static struct serializer skilltome_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(8) },
 	{ "minor_type", _INT32 },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "price", _INT32 },
 	{ "shop_price", _INT32 },
 	{ "pile_num_max", _INT32 },
@@ -748,12 +770,12 @@ static struct serializer skilltome_essence_serializer[] = {
 };
 
 static struct serializer flysword_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(9) },
 	{ "name", _WSTRING(32) },
 	{ "file_model", _STRING(128) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "price", _INT32 },
 	{ "shop_price", _INT32 },
 	{ "level", _INT32 },
@@ -774,12 +796,12 @@ static struct serializer flysword_essence_serializer[] = {
 };
 
 static struct serializer wingmanwing_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(10) },
 	{ "name", _WSTRING(32) },
 	{ "file_model", _STRING(128) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "price", _INT32 },
 	{ "shop_price", _INT32 },
 	{ "require_player_level_min", _INT32 },
@@ -793,11 +815,11 @@ static struct serializer wingmanwing_essence_serializer[] = {
 };
 
 static struct serializer townscroll_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(11) },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "use_time", _FLOAT },
 	{ "price", _INT32 },
 	{ "shop_price", _INT32 },
@@ -808,11 +830,11 @@ static struct serializer townscroll_essence_serializer[] = {
 };
 
 static struct serializer revivescroll_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(12) },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "use_time", _FLOAT },
 	{ "cool_time", _INT32 },
 	{ "price", _INT32 },
@@ -824,11 +846,11 @@ static struct serializer revivescroll_essence_serializer[] = {
 };
 
 static struct serializer element_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(13) },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "level", _INT32 },
 	{ "price", _INT32 },
 	{ "shop_price", _INT32 },
@@ -839,10 +861,10 @@ static struct serializer element_essence_serializer[] = {
 };
 
 static struct serializer taskmatter_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(14) },
 	{ "name", _WSTRING(32) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "pile_num_max", _INT32 },
 	{ "has_guid", _INT32 },
 	{ "proc_type", _INT32 },
@@ -850,12 +872,12 @@ static struct serializer taskmatter_essence_serializer[] = {
 };
 
 static struct serializer tossmatter_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(15) },
 	{ "name", _WSTRING(32) },
 	{ "file_model", _STRING(128) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "file_firegfx", _STRING(128) },
 	{ "file_hitgfx", _STRING(128) },
 	{ "file_hitsfx", _STRING(128) },
@@ -882,13 +904,13 @@ static struct serializer projectile_types_serializer[] = {
 };
 
 static struct serializer projectile_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(16) },
 	{ "projectile_types", _INT32 },
 	{ "name", _WSTRING(32) },
 	{ "file_model", _STRING(128) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "file_firegfx", _STRING(128) },
 	{ "file_hitgfx", _STRING(128) },
 	{ "file_hitsfx", _STRING(128) },
@@ -914,12 +936,12 @@ static struct serializer quiver_sub_type_serializer[] = {
 };
 
 static struct serializer quiver_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(17) },
 	{ "minor_type", _INT32 },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "id_projectile", _INT32 },
 	{ "num_min", _INT32 },
 	{ "num_max", _INT32 },
@@ -933,12 +955,12 @@ static struct serializer stone_types_serializer[] = {
 };
 
 static struct serializer stone_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(18) },
 	{ "minor_type", _INT32 },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "level", _INT32 },
 	{ "color", _INT32 },
 	{ "price", _INT32 },
@@ -956,11 +978,11 @@ static struct serializer stone_essence_serializer[] = {
 };
 
 static struct serializer taskdice_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(19) },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "tasks", _ARRAY_START(8) },
 		{ "id", _INT32 },
 		{ "prob", _FLOAT },
@@ -972,11 +994,11 @@ static struct serializer taskdice_essence_serializer[] = {
 };
 
 static struct serializer tasknormalmatter_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(20) },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "price", _INT32 },
 	{ "shop_price", _INT32 },
 	{ "pile_num_max", _INT32 },
@@ -986,14 +1008,14 @@ static struct serializer tasknormalmatter_essence_serializer[] = {
 };
 
 static struct serializer fashion_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(21) },
 	{ "major_type", _INT32 },
 	{ "minor_type", _INT32 },
 	{ "name", _WSTRING(32) },
 	{ "realname", _STRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "equip_location", _INT32 },
 	{ "level", _INT32 },
 	{ "require_level", _INT32 },
@@ -1008,13 +1030,13 @@ static struct serializer fashion_essence_serializer[] = {
 };
 
 static struct serializer faceticket_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(22) },
 	{ "major_type", _INT32 },
 	{ "minor_type", _INT32 },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "require_level", _INT32 },
 	{ "bound_file", _STRING(128) },
 	{ "unsymmetrical", _INT32 },
@@ -1027,13 +1049,13 @@ static struct serializer faceticket_essence_serializer[] = {
 };
 
 static struct serializer facepill_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(23) },
 	{ "major_type", _INT32 },
 	{ "minor_type", _INT32 },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "duration", _INT32 },
 	{ "camera_scale", _FLOAT },
 	{ "character_combo_id", _INT32 },
@@ -1049,12 +1071,12 @@ static struct serializer facepill_essence_serializer[] = {
 };
 
 static struct serializer gm_generator_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(24) },
 	{ "id_type", _INT32 },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "id_object", _INT32 },
 	{ "pile_num_max", _INT32 },
 	{ "has_guid", _INT32 },
@@ -1063,11 +1085,11 @@ static struct serializer gm_generator_essence_serializer[] = {
 };
 
 static struct serializer pet_egg_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(25) },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "id_pet", _INT32 },
 	{ "money_hatched", _INT32 },
 	{ "money_restored", _INT32 },
@@ -1088,11 +1110,11 @@ static struct serializer pet_egg_essence_serializer[] = {
 };
 
 static struct serializer pet_food_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(26) },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "level", _INT32 },
 	{ "hornor", _INT32 },
 	{ "exp", _INT32 },
@@ -1106,11 +1128,11 @@ static struct serializer pet_food_essence_serializer[] = {
 };
 
 static struct serializer pet_faceticket_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(27) },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "price", _INT32 },
 	{ "shop_price", _INT32 },
 	{ "pile_num_max", _INT32 },
@@ -1120,11 +1142,11 @@ static struct serializer pet_faceticket_essence_serializer[] = {
 };
 
 static struct serializer fireworks_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(28) },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "file_fw", _STRING(128) },
 	{ "level", _INT32 },
 	{ "time_to_fire", _INT32 },
@@ -1137,11 +1159,11 @@ static struct serializer fireworks_essence_serializer[] = {
 };
 
 static struct serializer war_tankcallin_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(29) },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "price", _INT32 },
 	{ "shop_price", _INT32 },
 	{ "pile_num_max", _INT32 },
@@ -1151,11 +1173,11 @@ static struct serializer war_tankcallin_essence_serializer[] = {
 };
 
 static struct serializer skillmatter_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(30) },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "level_required", _INT32 },
 	{ "id_skill", _INT32 },
 	{ "level_skill", _INT32 },
@@ -1168,11 +1190,11 @@ static struct serializer skillmatter_essence_serializer[] = {
 };
 
 static struct serializer refine_ticket_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(31) },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "desc", _WSTRING(16) },
 	{ "ext_reserved_prob", _FLOAT },
 	{ "ext_succeed_prob", _FLOAT },
@@ -1189,11 +1211,11 @@ static struct serializer refine_ticket_essence_serializer[] = {
 };
 
 static struct serializer bible_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(32) },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "addon_ids", _ARRAY_START(10) },
 		{ "", _INT32 },
 	{ "", _ARRAY_END },
@@ -1206,11 +1228,11 @@ static struct serializer bible_essence_serializer[] = {
 };
 
 static struct serializer speaker_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(33) },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "id_icon_set", _INT32 },
 	{ "price", _INT32 },
 	{ "shop_price", _INT32 },
@@ -1221,11 +1243,11 @@ static struct serializer speaker_essence_serializer[] = {
 };
 
 static struct serializer autohp_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(34) },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "total_hp", _INT32 },
 	{ "trigger_amount", _FLOAT },
 	{ "cool_time", _INT32 },
@@ -1238,11 +1260,11 @@ static struct serializer autohp_essence_serializer[] = {
 };
 
 static struct serializer automp_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(35) },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "total_mp", _INT32 },
 	{ "trigger_amount", _FLOAT },
 	{ "cool_time", _INT32 },
@@ -1255,11 +1277,11 @@ static struct serializer automp_essence_serializer[] = {
 };
 
 static struct serializer double_exp_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(36) },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "double_exp_time", _INT32 },
 	{ "price", _INT32 },
 	{ "shop_price", _INT32 },
@@ -1270,11 +1292,11 @@ static struct serializer double_exp_essence_serializer[] = {
 };
 
 static struct serializer transmitscroll_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(37) },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "price", _INT32 },
 	{ "shop_price", _INT32 },
 	{ "pile_num_max", _INT32 },
@@ -1284,11 +1306,11 @@ static struct serializer transmitscroll_essence_serializer[] = {
 };
 
 static struct serializer dye_ticket_essence_serializer[] = {
-	{ "id", _CUSTOM, serialize_item_id_fn },
+	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(38) },
 	{ "name", _WSTRING(32) },
 	{ "file_matter", _STRING(128) },
-	{ "icon", _CUSTOM, icon_serialize_fn },
+	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "h_min", _FLOAT },
 	{ "h_max", _FLOAT },
 	{ "s_min", _FLOAT },
