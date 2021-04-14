@@ -88,7 +88,11 @@ load_icons(void) {
 	unsigned i = 0;
 	while (i < PW_ELEMENTS_ICON_COUNT &&
 			(read = getline(&line, &len, fp)) != -1) {
-		snprintf(g_icon_names[i], sizeof(g_icon_names[0]), "%s", line);
+		int printed_cnt = snprintf(g_icon_names[i], sizeof(g_icon_names[0]), "%s", line);
+		if (g_icon_names[i][printed_cnt - 1] == '\n') {
+			g_icon_names[i][printed_cnt - 1] = 0;
+		}
+
 		i++;
 		len = 0;
 	}
