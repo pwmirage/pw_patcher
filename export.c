@@ -22,6 +22,7 @@
 #include "pw_elements.h"
 #include "pw_npc.h"
 #include "pw_tasks.h"
+#include "pw_pck.h"
 
 static int
 print_elements(const char *path)
@@ -89,6 +90,22 @@ print_tasks(const char *path)
 	return 0;
 }
 
+static int
+print_pck(const char *path)
+{
+	struct pw_pck pck;
+	int rc;
+
+	rc = pw_pck_read(&pck, path);
+	if (rc) {
+		PWLOG(LOG_ERROR, "pw_pck_read(%s) failed: %d\n", path, rc);
+		return rc;
+	}
+
+	return 0;
+}
+
+
 static void
 print_help(char *argv[0])
 {
@@ -115,6 +132,8 @@ main(int argc, char *argv[])
 		rc = print_tasks(argv[2]);
 	} else if (strcmp(type, "npcs") == 0) {
 		print_npcgen();
+	} else if (strcmp(type, "pck") == 0) {
+		print_pck(argv[2]);
 	} else {
 		print_help(argv);
 		return 1;

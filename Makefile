@@ -1,4 +1,4 @@
-OBJECTS = common.o serializer.o chain_arr.o pw_elements.o cjson.o idmap.o pw_npc.o pw_tasks.o pw_tasks_npc.o
+OBJECTS = common.o serializer.o chain_arr.o pw_elements.o cjson.o idmap.o pw_npc.o pw_tasks.o pw_tasks_npc.o pw_pck.o
 ALL_OBJECTS := $(OBJECTS) export.o srv_patcher.o idmap_gen.o
 _CFLAGS := -O0 -g -MD -MP -fno-strict-aliasing -Wall -Wno-format-truncation $(CFLAGS)
 
@@ -21,7 +21,7 @@ build/gcc_ver.h:
 	cp build/gcc_ver_tmp.h build/gcc_ver.h
 
 build/export: build/gcc_ver.h $(OBJECTS:%.o=build/%.o) build/export.o
-	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ -Wl,--no-whole-archive
+	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ -Wl,--no-whole-archive -Wl,-Bstatic -lz -Wl,-Bdynamic
 
 build/srv_patcher: build/gcc_ver.h $(OBJECTS:%.o=build/%.o) build/srv_patcher.o
 	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ -Wl,--no-whole-archive
