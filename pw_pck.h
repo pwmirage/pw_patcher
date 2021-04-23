@@ -36,6 +36,7 @@ struct pw_pck {
 	uint32_t ver;
 	uint32_t entry_cnt;
 	struct pw_pck_footer ftr;
+	struct pck_alias_tree *aliases;
 };
 
 struct pw_pck_entry_header {
