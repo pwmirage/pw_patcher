@@ -9,6 +9,8 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <assert.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #include <zlib.h>
 
@@ -221,7 +223,7 @@ get_alias(struct pck_alias_tree *aliases, char *filename)
 }
 
 static int
-read_entry(struct pw_pck *pck, FILE *fp, size_t compressed_size)
+read_entry(struct pw_pck *pck, FILE *fp, size_t compressed_size, int action)
 {
 	struct pw_pck_entry_header ent_hdr;
 	int rc;
@@ -247,6 +249,7 @@ read_entry(struct pw_pck *pck, FILE *fp, size_t compressed_size)
 	}
 
 	char utf8_name[396];
+	char tmp[476];
 	char utf8_aliased_name[396];
 	size_t aliased_len = 0;
 	char *c;
@@ -264,10 +267,15 @@ read_entry(struct pw_pck *pck, FILE *fp, size_t compressed_size)
 			/* translate a dir */
 
 			if (alias) {
-				aliased_len += snprintf(utf8_aliased_name + aliased_len, sizeof(utf8_aliased_name) - aliased_len, "%s\\", alias->new_name);
+				aliased_len += snprintf(utf8_aliased_name + aliased_len, sizeof(utf8_aliased_name) - aliased_len, "%s/", alias->new_name);
 				aliases = alias->sub_aliases;
 			} else {
-				aliased_len += snprintf(utf8_aliased_name + aliased_len, sizeof(utf8_aliased_name) - aliased_len, "%s\\", word);
+				aliased_len += snprintf(utf8_aliased_name + aliased_len, sizeof(utf8_aliased_name) - aliased_len, "%s/", word);
+			}
+
+			if (action == PW_PCK_ACTION_EXTRACT) {
+				snprintf(tmp, sizeof(tmp), "%s.files/%s", pck->name, utf8_aliased_name);
+				mkdir(tmp, 0755);
 			}
 
 			word = c + 1;
@@ -289,24 +297,76 @@ read_entry(struct pw_pck *pck, FILE *fp, size_t compressed_size)
 
 
 	PWLOG(LOG_INFO, "entry: %s\n", utf8_aliased_name);
+
+	if (action == PW_PCK_ACTION_EXTRACT) {
+		size_t cur_pos = ftell(fp);
+
+		fseek(fp, ent_hdr.offset, SEEK_SET);
+		snprintf(tmp, sizeof(tmp), "%s.files/%s", pck->name, utf8_aliased_name);
+		FILE *fp_out = fopen(tmp, "wb");
+
+		if (ent_hdr.compressed_length >= ent_hdr.length) {
+			/* not compressed */
+			char buf[16384];
+			size_t remaining_bytes = ent_hdr.length;
+			size_t read_bytes, buf_size;
+
+			do {
+				buf_size = MIN(sizeof(buf), remaining_bytes);
+				read_bytes = fread(buf, 1, buf_size, fp);
+				if (read_bytes != buf_size) {
+					PWLOG(LOG_ERROR, "read error on %s:%s\n", pck->name, utf8_aliased_name);
+					fclose(fp_out);
+					return -1;
+				}
+
+				fwrite(buf, 1, read_bytes, fp_out);
+				remaining_bytes -= read_bytes;
+			} while (remaining_bytes > 0);
+		} else {
+			rc = zpipe_uncompress(fp_out, fp, ent_hdr.compressed_length);
+			if (rc != Z_OK) {
+				PWLOG(LOG_ERROR, "uncompress error (%d) on %s:%s\n", rc, pck->name, utf8_aliased_name);
+				return -rc;
+			}
+		}
+
+		fclose(fp_out);
+		fseek(fp, cur_pos, SEEK_SET);
+	}
+
 	return 0;
 }
 
 int
-pw_pck_read(struct pw_pck *pck, const char *path)
+pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 {
 	FILE *fp;
 	size_t fsize;
 	int rc;
 	char *buf;
 	size_t buflen;
+	const char *c;
 
 	readfile("patcher/shaders_alias.txt", &buf, &buflen);
 	read_aliases(pck, buf);
 
+	c = path + strlen(path) - 1;
+	while (c != path && *c != '\\' && *c != '/') {
+		c--;
+	}
+	
+	if (*c == 0) {
+		PWLOG(LOG_ERROR, "invalid file path: \"%s\"\n", path);
+		return -EINVAL;
+	}
+
+	c++;
+	snprintf(pck->name, sizeof(pck->name), "%s", c);
+
 	fp = fopen(path, "rb");
 	if (fp == NULL) {
-		PWLOG(LOG_ERROR, "fopen() failed: %d\n", errno);
+		PWLOG(LOG_ERROR, "fopen(\"%s\") failed: %d\n", path, errno);
 		return -errno;
 	}
 
@@ -351,6 +411,13 @@ pw_pck_read(struct pw_pck *pck, const char *path)
 	pck->ftr.entry_list_off ^= PW_PCK_XOR1;
 	fseek(fp, pck->ftr.entry_list_off, SEEK_SET);
 
+	if (action == PW_PCK_ACTION_EXTRACT) {
+		char tmp[64];
+
+		snprintf(tmp, sizeof(tmp), "%s.files", pck->name);
+		mkdir(tmp, 0755);
+	}
+
 	for (int i = 0; i < pck->entry_cnt; i++) {
 		uint32_t compressed_size;
 		uint32_t compressed_size2;
@@ -367,7 +434,7 @@ pw_pck_read(struct pw_pck *pck, const char *path)
 			goto err_cleanup;
 		}
 
-		rc = read_entry(pck, fp, compressed_size);
+		rc = read_entry(pck, fp, compressed_size, action);
 		if (rc != 0) {
 			PWLOG(LOG_ERROR, "read_entry() failed: %d\n", rc);
 			goto err_cleanup;

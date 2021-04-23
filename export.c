@@ -96,7 +96,7 @@ print_pck(const char *path)
 	struct pw_pck pck;
 	int rc;
 
-	rc = pw_pck_read(&pck, path);
+	rc = pw_pck_open(&pck, path, PW_PCK_ACTION_EXTRACT);
 	if (rc) {
 		PWLOG(LOG_ERROR, "pw_pck_read(%s) failed: %d\n", path, rc);
 		return rc;
@@ -116,7 +116,7 @@ print_help(char *argv[0])
 int
 main(int argc, char *argv[])
 {
-	int rc;
+	int rc = 0;
 
 	if (argc < 2) {
 		print_help(argv);

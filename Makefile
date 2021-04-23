@@ -1,6 +1,6 @@
-OBJECTS = common.o serializer.o chain_arr.o pw_elements.o cjson.o idmap.o pw_npc.o pw_tasks.o pw_tasks_npc.o pw_pck.o avl.o
+OBJECTS = common.o serializer.o chain_arr.o pw_elements.o cjson.o idmap.o pw_npc.o pw_tasks.o pw_tasks_npc.o pw_pck.o avl.o zpipe.o
 ALL_OBJECTS := $(OBJECTS) export.o srv_patcher.o idmap_gen.o
-_CFLAGS := -O0 -g -MD -MP -fno-strict-aliasing -Wall -Wno-format-truncation $(CFLAGS)
+_CFLAGS := -O3 -MD -MP -fno-strict-aliasing -Wall -Wno-format-truncation $(CFLAGS)
 
 ifeq ($(OS),Windows_NT)
 	ALL_OBJECTS := $(ALL_OBJECTS) gui.o client_patcher.o client_launcher.o updater.o sha1.o
