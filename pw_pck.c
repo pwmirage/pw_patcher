@@ -223,10 +223,24 @@ get_alias(struct pck_alias_tree *aliases, char *filename)
 }
 
 static int
-read_entry(struct pw_pck *pck, FILE *fp, size_t compressed_size, int action)
+read_entry(struct pw_pck *pck, FILE *fp, int action)
 {
 	struct pw_pck_entry_header ent_hdr;
+	uint32_t compressed_size;
+	uint32_t compressed_size2;
 	int rc;
+
+	fread(&compressed_size, 4, 1, fp);
+	compressed_size ^= PW_PCK_XOR1;
+
+	fread(&compressed_size2, 4, 1, fp);
+	compressed_size2 ^= PW_PCK_XOR2;
+
+	if (compressed_size != compressed_size2) {
+		PWLOG(LOG_ERROR, "entry size mismatch: size1=%u, size2=%u\n",
+				i, compressed_size, compressed_size2);
+		return -EIO;
+	}
 
 	if (compressed_size == sizeof(ent_hdr)) {
 		fread(&ent_hdr, compressed_size, 1, fp);
@@ -294,7 +308,6 @@ read_entry(struct pw_pck *pck, FILE *fp, size_t compressed_size, int action)
 
 		c++;
 	}
-
 
 	PWLOG(LOG_INFO, "entry: %s\n", utf8_aliased_name);
 
@@ -419,24 +432,9 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 	}
 
 	for (int i = 0; i < pck->entry_cnt; i++) {
-		uint32_t compressed_size;
-		uint32_t compressed_size2;
-
-		fread(&compressed_size, 4, 1, fp);
-		compressed_size ^= PW_PCK_XOR1;
-
-		fread(&compressed_size2, 4, 1, fp);
-		compressed_size2 ^= PW_PCK_XOR2;
-
-		if (compressed_size != compressed_size2) {
-			PWLOG(LOG_ERROR, "Entry size mismatch: idx=%d, size1=%u, size2=%u\n",
-					i, compressed_size, compressed_size2);
-			goto err_cleanup;
-		}
-
-		rc = read_entry(pck, fp, compressed_size, action);
+		rc = read_entry(pck, fp, action);
 		if (rc != 0) {
-			PWLOG(LOG_ERROR, "read_entry() failed: %d\n", rc);
+			PWLOG(LOG_ERROR, "read_entry(%d) failed: %d\n", i, rc);
 			goto err_cleanup;
 		}
 	}
