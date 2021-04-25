@@ -33,6 +33,8 @@ struct pw_pck_footer {
 #define PW_PCK_XOR2 0xf1a43653
 struct pw_pck {
 	char name[64];
+	FILE *fp;
+	FILE *fp_log;
 	struct pw_pck_header hdr;
 	uint32_t ver;
 	uint32_t entry_cnt;
@@ -47,11 +49,16 @@ struct pw_pck_entry_header {
 	uint32_t compressed_length;
 };
 
+struct pw_pck_entry {
+	struct pw_pck_entry_header hdr;
+	char path_aliased_utf8[396];
+};
+
 enum pw_pck_action {
 	PW_PCK_ACTION_EXTRACT,
-	PW_PCK_ACTION_COMPRESS,
 	PW_PCK_ACTION_UPDATE,
 	PW_PCK_ACTION_GEN_PATCH,
+	PW_PCK_ACTION_APPLY_PATCH,
 };
 
 int pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action);
