@@ -16,6 +16,11 @@
 
 #include <zlib.h>
 
+/* windows specific */
+#include <tchar.h>
+#include <windows.h>
+#include <winbase.h>
+
 #include "pw_pck.h"
 #include "avl.h"
 
@@ -335,6 +340,11 @@ extract_entry(struct pw_pck *pck, struct pw_pck_entry *ent, FILE *fp)
 	fseek(fp, ent->hdr.offset, SEEK_SET);
 
 	FILE *fp_out = fopen(ent->path_aliased_utf8, "wb");
+	if (fp_out == NULL) {
+		PWLOG(LOG_ERROR, "can't open %s\n", ent->path_aliased_utf8);
+		fseek(fp, cur_pos, SEEK_SET);
+		return -1;
+	}
 
 	if (ent->hdr.compressed_length >= ent->hdr.length) {
 		/* not compressed */
@@ -344,6 +354,7 @@ extract_entry(struct pw_pck *pck, struct pw_pck_entry *ent, FILE *fp)
 			read_bytes = fread(buf, 1, buf_size, fp);
 			if (read_bytes != buf_size) {
 				PWLOG(LOG_ERROR, "read error on %s:%s\n", pck->name, ent->path_aliased_utf8);
+				fseek(fp, cur_pos, SEEK_SET);
 				fclose(fp_out);
 				return -1;
 			}
@@ -354,6 +365,7 @@ extract_entry(struct pw_pck *pck, struct pw_pck_entry *ent, FILE *fp)
 	} else {
 		rc = zpipe_uncompress(fp_out, fp, ent->hdr.compressed_length);
 		if (rc != Z_OK) {
+			fseek(fp, cur_pos, SEEK_SET);
 			PWLOG(LOG_ERROR, "uncompress error (%d) on %s:%s\n", rc, pck->name, ent->path_aliased_utf8);
 			return -rc;
 		}
@@ -399,7 +411,9 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 		return -EINVAL;
 	}
 
-	c++;
+	if (c != path) {
+		c++;
+	}
 	snprintf(pck->name, sizeof(pck->name), "%.*s", strlen(c) - strlen(".pck"), c);
 
 	/* read the file and check magic numbers at the very beginning */
@@ -484,10 +498,10 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 
 	if (rc != 0) {
 		/* first write */
-		fprintf(pck->fp_log, "#PW Mirage PCK Log: 1.0\r\n");
-		fprintf(pck->fp_log, "#Keeps track of when each file was modified.\r\n");
-		fprintf(pck->fp_log, "#This file is both written and read by mgpck.\r\n");
-		fprintf(pck->fp_log, "\r\n");
+		fprintf(pck->fp_log, "#PW Mirage PCK Log: 1.0\n");
+		fprintf(pck->fp_log, "#Keeps track of when each file was modified.\n");
+		fprintf(pck->fp_log, "#This file is both written and read by mgpck.\n");
+		fprintf(pck->fp_log, "\n");
 	}
 
 	fseek(pck->fp_log, 0, SEEK_END);
@@ -512,7 +526,7 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 			return -1;
 	}
 
-	fprintf(pck->fp_log, ":%s:%"PRIu64"\r\n", action_str, cur_time);
+	fprintf(pck->fp_log, ":%s:%"PRIu64"\n", action_str, cur_time);
 
 	pck->ftr.entry_list_off ^= PW_PCK_XOR1;
 	fseek(fp, pck->ftr.entry_list_off, SEEK_SET);
@@ -531,13 +545,13 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 			snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
 
 			FILE *fp_tmp = fopen(tmp, "w");
-			fprintf(fp_tmp, "#PW Mirage Filename Aliases: 1.0\r\n");
-			fprintf(fp_tmp, "#Enables renaming chinese filenames to english. The filenames are translated\r\n");
-			fprintf(fp_tmp, "#once when the pck is unpacked, then they are translated back when pck is updated.\r\n");
-			fprintf(fp_tmp, "#\r\n");
-			fprintf(fp_tmp, "#somedir = 布香\r\n");
-			fprintf(fp_tmp, "#\tsomefile.sdr = 葬心林晶体.sdr\r\n");
-			fprintf(fp_tmp, "#\tsomefile2.sdr = 焚香谷瀑布.sdr\r\n");
+			fprintf(fp_tmp, "#PW Mirage Filename Aliases: 1.0\n");
+			fprintf(fp_tmp, "#Enables renaming chinese filenames to english. The filenames are translated\n");
+			fprintf(fp_tmp, "#once when the pck is unpacked, then they are translated back when pck is updated.\n");
+			fprintf(fp_tmp, "#\n");
+			fprintf(fp_tmp, "#somedir = 布香\n");
+			fprintf(fp_tmp, "#\tsomefile.sdr = 葬心林晶体.sdr\n");
+			fprintf(fp_tmp, "#\tsomefile2.sdr = 焚香谷瀑布.sdr\n");
 			fclose(fp_tmp);
 
 			fprintf(pck->fp_log, "%s\n", tmp);
@@ -547,33 +561,33 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 		char tmp[100];
 		/* a mirage package! */
 
-		/* read the aliases first, to know how to extract the rest */
-		rc = read_entry_hdr(&ent.hdr, fp);
-		if (rc != 0) {
-			PWLOG(LOG_ERROR, "read_entry_hdr() failed: %d\n", rc);
-			return rc;
-		}
-
-		snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
-		if (strcmp(ent.hdr.path, tmp) != 0) {
-			PWLOG(LOG_ERROR, "Alias filename mismatch, got=\"%s\", expected=\"%s\"\n",
-					ent.hdr.path, tmp);
-			return -1;
-		}
-
-		rc = extract_entry(pck, &ent, fp);
-		if (rc != 0) {
-			PWLOG(LOG_ERROR, "extract_entry(%d) failed: %d\n", entry_idx, rc);
-			goto err_cleanup;
-		}
-
-		readfile(ent.path_aliased_utf8, &alias_buf, &alias_buflen);
-		read_aliases(pck, alias_buf);
-
 		if (action == PW_PCK_ACTION_EXTRACT) {
+			/* read the aliases first, to know how to extract the rest */
+			rc = read_entry_hdr(&ent.hdr, fp);
+			if (rc != 0) {
+				PWLOG(LOG_ERROR, "read_entry_hdr() failed: %d\n", rc);
+				return rc;
+			}
+
+			snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
+			if (strcmp(ent.hdr.path, tmp) != 0) {
+				PWLOG(LOG_ERROR, "Alias filename mismatch, got=\"%s\", expected=\"%s\"\n",
+						ent.hdr.path, tmp);
+				return -1;
+			}
+
+			rc = extract_entry(pck, &ent, fp);
+			if (rc != 0) {
+				PWLOG(LOG_ERROR, "extract_entry(%d) failed: %d\n", entry_idx, rc);
+				goto err_cleanup;
+			}
+
+			readfile(ent.path_aliased_utf8, &alias_buf, &alias_buflen);
+			read_aliases(pck, alias_buf);
+
 			fprintf(pck->fp_log, "%s\n", ent.path_aliased_utf8);
+			entry_idx++;
 		}
-		entry_idx++;
 	}
 
 	for (; entry_idx < pck->entry_cnt; entry_idx++) {
@@ -586,7 +600,7 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 		}
 
 		alias_entry_path(pck, &ent, action == PW_PCK_ACTION_EXTRACT);
-		PWLOG(LOG_INFO, "entry: %s\n", ent.path_aliased_utf8);
+//		PWLOG(LOG_INFO, "entry: %s\n", ent.path_aliased_utf8);
 
 		if (action == PW_PCK_ACTION_EXTRACT) {
 			rc = extract_entry(pck, &ent, fp);
