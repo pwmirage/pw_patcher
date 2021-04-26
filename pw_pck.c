@@ -463,7 +463,8 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 
 	/* begin extracting */
 	rc = GetCurrentDirectory(sizeof(tmp), tmp);
-	snprintf(tmp + rc, sizeof(tmp) - rc, "\\%s.pck.files\x0\x0", pck->name);
+	snprintf(tmp + rc, sizeof(tmp) - rc, "\\%s.pck.files%c", pck->name, 0);
+	/* ^ rmrf needs this to be double NULL-terminated */
 	rc = access(tmp, F_OK);
 	if (action == PW_PCK_ACTION_EXTRACT) {
 		if (rc == 0) {
