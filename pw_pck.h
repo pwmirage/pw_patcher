@@ -29,19 +29,6 @@ struct pw_pck_footer {
 	uint32_t magic1;
 };
 
-#define PW_PCK_XOR1 0xa8937462
-#define PW_PCK_XOR2 0xf1a43653
-struct pw_pck {
-	char name[64];
-	FILE *fp;
-	FILE *fp_log;
-	struct pw_pck_header hdr;
-	uint32_t ver;
-	uint32_t entry_cnt;
-	struct pw_pck_footer ftr;
-	struct pck_alias_tree *aliases;
-};
-
 struct pw_pck_entry_header {
 	char path[260]; /* GB2312. always 260 bytes = MAX_PATH */
 	uint32_t offset;
@@ -52,6 +39,21 @@ struct pw_pck_entry_header {
 struct pw_pck_entry {
 	struct pw_pck_entry_header hdr;
 	char path_aliased_utf8[396];
+};
+
+#define PW_PCK_XOR1 0xa8937462
+#define PW_PCK_XOR2 0xf1a43653
+struct pw_pck {
+	char name[64];
+	unsigned mg_version;
+	FILE *fp;
+	FILE *fp_log;
+	struct pw_pck_header hdr;
+	uint32_t ver;
+	uint32_t entry_cnt;
+	struct pw_pck_footer ftr;
+	struct pck_alias_tree *aliases;
+	struct pw_pck_entry *entries;
 };
 
 enum pw_pck_action {
