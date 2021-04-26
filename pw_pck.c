@@ -35,7 +35,36 @@ struct pck_alias {
 	struct pck_alias_tree *sub_aliases;
 };
 
-static void rmrf(char *path)
+static FILE *
+wfopen(const char *path, const char *flags)
+{
+	size_t path_len = strlen(path);
+	wchar_t *wpath = calloc(1, sizeof(wchar_t) * (path_len + 1));
+	wchar_t wflags[4];
+	FILE *fp;
+
+	if (!wpath) {
+		return NULL;
+	}
+
+	path_len = MultiByteToWideChar(CP_UTF8, 0, path, path_len, wpath, path_len);
+	wpath[path_len] = 0;
+
+	for (int i = 0; i < 4; i++) {
+		wflags[i] = flags[i];
+		if (wflags[i] == 0) {
+			break;
+		}
+	}
+
+	fp = _wfopen(wpath, wflags);
+
+	free(wpath);
+	return fp;
+}
+
+static void
+rmrf(char *path)
 {
 	SHFILEOPSTRUCT file_op = {
 		NULL, FO_DELETE, path, "",
@@ -339,7 +368,7 @@ extract_entry(struct pw_pck *pck, struct pw_pck_entry *ent, FILE *fp)
 
 	fseek(fp, ent->hdr.offset, SEEK_SET);
 
-	FILE *fp_out = fopen(ent->path_aliased_utf8, "wb");
+	FILE *fp_out = wfopen(ent->path_aliased_utf8, "wb");
 	if (fp_out == NULL) {
 		PWLOG(LOG_ERROR, "can't open %s\n", ent->path_aliased_utf8);
 		fseek(fp, cur_pos, SEEK_SET);
@@ -389,43 +418,27 @@ get_cur_time(void)
 	return (((uint64_t)ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
 }
 
-int
-pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
+static int
+read_pck(struct pw_pck *pck, enum pw_pck_action action)
 {
 	FILE *fp;
 	size_t fsize;
 	int rc;
 	char *alias_buf = NULL;
 	size_t alias_buflen = 0;
-	const char *c;
 	char tmp[296];
 
-	/* set pck->name to basename, without .pck extension */
-	c = path + strlen(path) - 1;
-	while (c != path && *c != '\\' && *c != '/') {
-		c--;
-	}
-	
-	if (*c == 0) {
-		PWLOG(LOG_ERROR, "invalid file path: \"%s\"\n", path);
-		return -EINVAL;
-	}
-
-	if (c != path) {
-		c++;
-	}
-	snprintf(pck->name, sizeof(pck->name), "%.*s", strlen(c) - strlen(".pck"), c);
-
 	/* read the file and check magic numbers at the very beginning */
-	fp = fopen(path, "rb");
+	snprintf(tmp, sizeof(tmp), "%s.pck", pck->name);
+	fp = fopen(tmp, "rb");
 	if (fp == NULL) {
-		PWLOG(LOG_ERROR, "fopen(\"%s\") failed: %d\n", path, errno);
+		PWLOG(LOG_ERROR, "fopen(\"%s\") failed: %d\n", tmp, errno);
 		return -errno;
 	}
 
 	fread(&pck->hdr, sizeof(pck->hdr), 1, fp);
 	if (pck->hdr.magic0 != PCK_HEADER_MAGIC0 || pck->hdr.magic1 != PCK_HEADER_MAGIC1) {
-		PWLOG(LOG_ERROR, "invalid pck header: %s\n", path);
+		PWLOG(LOG_ERROR, "invalid pck header: %s\n", tmp);
 		goto err_close;
 	}
 
@@ -621,10 +634,38 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 	SetCurrentDirectory("..");
 	fclose(pck->fp_log);
 	fclose(fp);
-	return 0;
 
+	return 0;
 err_cleanup:
 err_close:
 	fclose(fp);
 	return -1;
+}
+
+int
+pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
+{
+	const char *c;
+
+	/* set pck->name to basename, without .pck extension */
+	c = path + strlen(path) - 1;
+	while (c != path && *c != '\\' && *c != '/') {
+		c--;
+	}
+	
+	if (*c == 0) {
+		PWLOG(LOG_ERROR, "invalid file path: \"%s\"\n", path);
+		return -EINVAL;
+	}
+
+	if (c != path) {
+		c++;
+	}
+	snprintf(pck->name, sizeof(pck->name), "%.*s", strlen(c) - strlen(".pck"), c);
+
+	if (action == PW_PCK_ACTION_EXTRACT) {
+		read_pck(pck, action);
+	}
+
+	return 0;
 }
