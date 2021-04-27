@@ -40,6 +40,8 @@ struct pw_pck_entry {
 	struct pw_pck_entry_header hdr;
 	char path_aliased_utf8[396];
 	uint64_t mod_time;
+	bool is_present;
+	struct pw_pck_entry *next; /**< for putting in temporary lists */
 };
 
 #define PW_PCK_XOR1 0xa8937462

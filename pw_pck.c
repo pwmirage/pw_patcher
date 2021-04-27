@@ -405,7 +405,18 @@ process_entry_path(struct pw_pck *pck, struct pw_pck_entry *ent, enum pw_pck_act
 			if (action == PW_PCK_ACTION_EXTRACT) {
 				mkdir(ent->path_aliased_utf8, 0755);
 			} else {
-				file = set_file(files, alias ? alias->new_name : word, NULL);
+				if (alias) {
+					file = set_file(files, alias->new_name, NULL);
+				} else {
+					char *word_d = strdup(word); /* memleak, don't care */
+					if (!word_d) {
+						PWLOG(LOG_ERROR, "strdup() failed\n");
+						return -ENOMEM;
+					}
+
+					file = set_file(files, word_d, NULL);
+				}
+
 				if (!file) {
 					PWLOG(LOG_ERROR, "set_file() failed\n");
 					return -1;
@@ -422,7 +433,18 @@ process_entry_path(struct pw_pck *pck, struct pw_pck_entry *ent, enum pw_pck_act
 			aliased_len += snprintf(ent->path_aliased_utf8 + aliased_len, sizeof(ent->path_aliased_utf8) - aliased_len, "%s", alias ? alias->new_name : word);
 
 			if (action != PW_PCK_ACTION_EXTRACT) {
-				file = set_file(files, alias ? alias->new_name : word, ent);
+				if (alias) {
+					file = set_file(files, alias->new_name, ent);
+				} else {
+					char *word_d = strdup(word); /* memleak, don't care */
+					if (!word_d) {
+						PWLOG(LOG_ERROR, "strdup() failed\n");
+						return -ENOMEM;
+					}
+
+					file = set_file(files, word_d, ent);
+				}
+
 				if (!file) {
 					PWLOG(LOG_ERROR, "set_file() failed\n");
 					return -1;
@@ -777,7 +799,9 @@ read_log(struct pw_pck *pck, bool ignore_updates)
 
 				files = file->nested;
 				word = c + 1;
-			} else if (*c == 0) {
+			} else if (*c == '\n' || *c == 0) {
+				*c = 0;
+
 				file = get_file(files, word);
 				if (!file) {
 					/* same as above */
@@ -801,6 +825,108 @@ read_log(struct pw_pck *pck, bool ignore_updates)
 
 	return 0;
 }
+
+#ifdef __MINGW32__
+#include <tchar.h>
+#include <windows.h>
+#include <winbase.h>
+#include <errno.h>
+
+#define FindExInfoBasic 1
+
+static int
+find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files, struct pw_pck_entry **list)
+{
+	struct pck_file *file;
+	WIN32_FIND_DATAW fdata;
+	HANDLE handle;
+	DWORD rc;
+
+	handle = FindFirstFileExW(path, FindExInfoBasic, &fdata, FindExSearchNameMatch, NULL, 0);
+	if (handle == INVALID_HANDLE_VALUE) {
+		return -1;
+	}
+
+	do {
+		uint64_t write_time = (((uint64_t)fdata.ftLastWriteTime.dwHighDateTime) << 32) |
+				fdata.ftLastWriteTime.dwLowDateTime;
+		uint32_t fsize = fdata.nFileSizeLow; /**< dont expect files > 4gb */
+
+		char utf8_name[1024];
+		WideCharToMultiByte(CP_UTF8, 0, fdata.cFileName, -1, utf8_name, sizeof(utf8_name), NULL, NULL);
+
+		if (fdata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+			if (strcmp(utf8_name, ".") == 0 || strcmp(utf8_name, "..") == 0) {
+				continue;
+			}
+
+			wchar_t buf[512];
+			if (path[0] == '.' && path[1] == '\\') {
+				_snwprintf(buf, sizeof(buf) / sizeof(buf[0]), L"%s\\*", fdata.cFileName);
+			} else {
+				_snwprintf(buf, sizeof(buf) / sizeof(buf[0]), L"%.*s\\%s\\*", wcslen(path) - 2, path, fdata.cFileName);
+			}
+
+			file = get_file(files, utf8_name);
+			find_modified_files(pck, buf, file ? file->nested : NULL, list);
+		} else {
+			struct pw_pck_entry *entry;
+
+			if (strstr(utf8_name, "_mgpck.log") != NULL) {
+				continue;
+			}
+
+			file = get_file(files, utf8_name);
+			if (file) {
+				entry = file->entry;
+				if (write_time <= entry->mod_time && fsize == entry->hdr.length) {
+					/* nothing new */
+					continue;
+				}
+			} else {
+				/* a brand new file */
+				entry = calloc(1, sizeof(*entry));
+				if (!entry) {
+					PWLOG(LOG_ERROR, "calloc() failed\n");
+					return -ENOMEM;
+				}
+
+				if (path[0] == '.' && path[1] == '\\') {
+					snprintf(entry->path_aliased_utf8, sizeof(entry->path_aliased_utf8),
+							"%.*S\\%s", wcslen(path) - 2, path, utf8_name);
+				} else {
+					snprintf(entry->path_aliased_utf8, sizeof(entry->path_aliased_utf8),
+							"%s", utf8_name);
+				}
+			}
+
+			entry->next = *list;
+			entry->is_present = true;
+			*list = entry;
+
+			//fprintf(stderr, "file=%s, wtime=%"PRIu64" last_modtime=%"PRIu64"\r\n", entry->path_aliased_utf8, write_time, entry->mod_time);
+		}
+	} while (FindNextFileW(handle, &fdata) != 0);
+
+	rc = GetLastError();
+	FindClose(handle);
+
+	if (rc != ERROR_NO_MORE_FILES) {
+		return -rc;
+	}
+
+	return 0;
+}
+
+#else
+
+static int
+find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files, struct pw_pck_entry **list)
+{
+	return -ENOSYS;
+}
+
+#endif
 
 int
 pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
@@ -829,7 +955,7 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 
 	pck->fp = fopen(path, "rb");
 	if (pck->fp == NULL) {
-		PWLOG(LOG_ERROR, "fopen(\"%s\") failed: %d\n", tmp, errno);
+		PWLOG(LOG_ERROR, "fopen(\"%s\") failed: %d\n", path, errno);
 		return -errno;
 	}
 
@@ -858,12 +984,32 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 	if (action == PW_PCK_ACTION_EXTRACT) {
 		rc = read_pck(pck, action);
 		rc = rc || extract_pck(pck);
-	} else if (action == PW_PCK_ACTION_UPDATE) {
+		return rc;
+	}
+
+	struct pw_pck_entry *modified = NULL;
+
+	if (action == PW_PCK_ACTION_UPDATE) {
 		snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
 		readfile(tmp, &alias_buf, &alias_buflen);
+
 		rc = read_aliases(pck, alias_buf);
-		rc = rc || read_pck(pck, false);
+		rc = rc || read_pck(pck, action);
 		rc = rc || read_log(pck, false);
+		rc = rc || find_modified_files(pck, L".\\*", pck->entries_tree, &modified);
+		/* if it's not a mirage archive -> repack everything and return */
+
+		/* find entries with is_present == false
+		 *  -> add them to the free blocks list
+		 * iterate through the modified/newly added entries
+		 *  -> compress to a file with prefixed "dot", get size
+		 *  -> try to find a smallest fitting free block first, if ok -> write into the pck->fp, remove the dot file, remove from the list, also update the free-block list
+		 *  if the list empty -> return
+		 *  fseek into the footer pos
+		 *  iterate throught the rest of modified/added entries:
+		 *    * pipe the dot file into fp, append an entry
+		 *  if entry overflow flag set, rewrite the entry table entirely
+		 */
 	}
 
 	return rc;
