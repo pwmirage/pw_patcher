@@ -44,6 +44,11 @@ struct pw_pck_entry {
 	struct pw_pck_entry *next; /**< for putting in temporary lists */
 };
 
+enum {
+	PW_PCK_ENTRY_FREE_BLOCKS = 0,
+	PW_PCK_ENTRY_ALIASES = 1, /* subsequent entries will be parsed as regular files */
+}
+
 #define PW_PCK_XOR1 0xa8937462
 #define PW_PCK_XOR2 0xf1a43653
 struct pw_pck {
@@ -54,11 +59,13 @@ struct pw_pck {
 	struct pw_pck_header hdr;
 	uint32_t ver;
 	uint32_t entry_cnt;
+	uint32_t entry_max_cnt;
 	struct pw_pck_footer ftr;
 	struct pck_alias_tree *alias_tree;
 	struct pw_pck_entry *entries;
 	/** avl indexed by the alias name (or the org name if there's no alias) */
 	struct pw_avl *entries_tree;
+	struct pw_avl *free_blocks_tree;
 };
 
 enum pw_pck_action {

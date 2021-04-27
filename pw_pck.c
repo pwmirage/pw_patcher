@@ -529,7 +529,7 @@ read_pck(struct pw_pck *pck, enum pw_pck_action action)
 
 	/* Also extract the aliases -> we'll need them early */
 	if (pck->mg_version > 0 && action == PW_PCK_ACTION_EXTRACT) {
-		struct pw_pck_entry *ent = &pck->entries[0];
+		struct pw_pck_entry *ent = &pck->entries[PW_PCK_ENTRY_ALIASES];
 
 		snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
 		if (strcmp(ent->hdr.path, tmp) != 0) {
@@ -549,6 +549,11 @@ read_pck(struct pw_pck *pck, enum pw_pck_action action)
 		read_aliases(pck, alias_buf);
 	}
 
+	if (pck->mg_version == 0) {
+		/* setup a few defaults */
+		pck->entry_max_cnt = pck->entry_cnt;
+	}
+
 	/* for anything but extract we'll need a file db to compare to */
 	if (action != PW_PCK_ACTION_EXTRACT) {
 		pck->entries_tree = pw_avl_init(sizeof(struct pw_pck_entry));
@@ -559,7 +564,7 @@ read_pck(struct pw_pck *pck, enum pw_pck_action action)
 	}
 
 	fseek(pck->fp, pck->ftr.entry_list_off, SEEK_SET);
-	for (int i = 0; i < pck->entry_cnt; i++) {
+	for (int i = PW_PCK_ENTRY_ALIASES; i < pck->entry_cnt; i++) {
 		struct pw_pck_entry *ent = &pck->entries[i];
 
 		rc = read_entry_hdr(pck, &ent->hdr);
@@ -692,7 +697,11 @@ extract_pck(struct pw_pck *pck)
 
 		fprintf(pck->fp_log, "%s\n", tmp);
 	} else {
-		/* the log must have been extracted earlier, skip it now */
+		/* the first entry is always the list of free blocks, don't extract
+		 * it -> it should live inside the pck only */
+		entry_idx++;
+
+		/* the second entry is the log and it must have been extracted earlier, skip it now */
 		entry_idx++;
 	}
 
@@ -928,6 +937,99 @@ find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files, str
 
 #endif
 
+/** unused space inside the pck */
+struct pck_free_block {
+	uint32_t offset;
+	uint32_t size;
+};
+
+struct pck_free_blocks_meta {
+	uint32_t block_cnt;
+	uint32_t max_entry_cnt;
+};
+
+static int
+read_free_blocks(struct pw_pck *pck)
+{
+	struct pw_avl *avl;
+	struct pw_pck_entry *entry;
+	struct pck_free_blocks_meta meta;
+	struct pck_free_block *blocks;
+
+	assert(pck->mg_version > 0);
+
+	avl = pck->free_blocks_tree = pw_avl_init(sizeof(struct pck_free_block));
+	if (!avl) {
+		PWLOG(LOG_ERROR, "pw_avl_init() failed\n");
+		return -1;
+	}
+
+	entry = &pck->entries[PW_PCK_ENTRY_FREE_BLOCKS];
+
+	fseek(pck->fp, entry->hdr.offset, SEEK_SET);
+	fread(&meta, sizeof(meta), 1, pck->fp);
+
+	pck->entry_max_cnt = meta.max_entry_cnt;
+
+	assert(meta.block_cnt > 0);
+	for (int i = 0; i < meta.block_cnt; i++) {
+		struct pck_free_block *block = pw_avl_alloc(avl);
+
+		fread(block, sizeof(*block), 1, pck->fp);
+		pw_avl_insert(avl, block->size, block);
+	}
+
+	return 0;
+}
+
+static void
+write_free_block(FILE *fp, struct pw_avl_node *node)
+{
+	struct pck_free_block *block;
+
+	if (!node) {
+		return;
+	}
+
+	block = (void *)node->data;
+	fwrite(block, sizeof(*block), 1, fp);
+
+	write_free_block(fp, node->next);
+	write_free_block(fp, node->left);
+	write_free_block(fp, node->right);
+}
+
+static int
+write_free_blocks(struct pw_pck *pck, struct pw_pck_entry_header *ent_hdr)
+{
+	struct pck_free_blocks_meta meta;
+	struct pck_free_block *blocks;
+	size_t off = ftell(pck->fp);
+	size_t off_end;
+
+	snprintf(entry_hdr->path, sizeof(entry_hdr->path), "%s_fragm.dat", pck->name);
+	entry_hdr->offset = off;
+
+	meta.block_cnt = 0; /* dummy, will be overritten later */
+	meta.max_entry_cnt = pck->entry_max_cnt;
+
+	fwrite(&meta, sizeof(meta), 1, pck->fp);
+
+	pck->entry_max_cnt = meta.max_entry_cnt;
+
+	write_free_block(pck->fp, pck->free_blocks_tree->root);
+	off_end = ftell(pck->fp);
+
+	/* write the header again */
+	fseek(pck->fp, off, SEEK_SET);
+	meta.block_cnt = (off_end - off - sizeof(meta)) / sizeof(struct pck_free_block);
+	fwrite(&meta, sizeof(meta), 1, pck->fp);
+
+	fseek(pck->fp, off_end, SEEK_SET);
+
+	return 0;
+}
+
 int
 pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 {
@@ -997,7 +1099,17 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 		rc = rc || read_pck(pck, action);
 		rc = rc || read_log(pck, false);
 		rc = rc || find_modified_files(pck, L".\\*", pck->entries_tree, &modified);
-		/* if it's not a mirage archive -> repack everything and return */
+
+		if (modified == NULL) {
+			return 0;
+		}
+
+		if (pck->mg_version == 0) {
+			/* TODO: repack everything and return */
+			return 0;
+		}
+
+		read_free_blocks(pck);
 
 		/* find entries with is_present == false
 		 *  -> add them to the free blocks list
