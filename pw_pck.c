@@ -24,17 +24,6 @@
 #include "pw_pck.h"
 #include "avl.h"
 
-struct pck_alias_tree {
-	struct pck_alias_tree *parent;
-	struct pw_avl *avl;
-};
-
-struct pck_alias {
-	char *org_name;
-	char *new_name;
-	struct pck_alias_tree *sub_aliases;
-};
-
 static FILE *
 wfopen(const char *path, const char *flags)
 {
@@ -86,8 +75,19 @@ djb2(const char *str) {
 	return hash;
 }
 
+struct pck_alias_tree {
+	struct pck_alias_tree *parent;
+	struct pw_avl *avl;
+};
+
+struct pck_alias {
+	char *org_name;
+	char *new_name;
+	struct pck_alias_tree *sub_aliases;
+};
+
 static struct pck_alias_tree *
-alloc_tree(void)
+alloc_alias_tree(void)
 {
 	struct pck_alias_tree *tree;
 
@@ -114,7 +114,7 @@ read_aliases(struct pw_pck *pck, char *buf)
 	unsigned lineno = 0;
 	int nest_level = 0;
 
-	root_avl = cur_avl = alloc_tree();
+	root_avl = cur_avl = alloc_alias_tree();
 	if (!root_avl) {
 		return -1;
 	}
@@ -168,10 +168,10 @@ read_aliases(struct pw_pck *pck, char *buf)
 
 			/* set previous entry as root */
 			assert(!alias->sub_aliases);
-			alias->sub_aliases = alloc_tree();
+			alias->sub_aliases = alloc_alias_tree();
 			alias->sub_aliases->parent = cur_avl;
 			if (!alias->sub_aliases) {
-				PWLOG(LOG_ERROR, "alloc_tree() failed\n");
+				PWLOG(LOG_ERROR, "alloc_alias_tree() failed\n");
 				return -1;
 			}
 			cur_avl = alias->sub_aliases;
@@ -245,7 +245,7 @@ read_aliases(struct pw_pck *pck, char *buf)
 		lineno++;
 	}
 
-	pck->aliases = root_avl;
+	pck->alias_tree = root_avl;
 	return 0;
 }
 
@@ -311,12 +311,79 @@ read_entry_hdr(struct pw_pck *pck, struct pw_pck_entry_header *hdr)
 	return 0;
 }
 
-static void
-alias_entry_path(struct pw_pck *pck, struct pw_pck_entry *ent, bool create_dirs)
+/* each file or directory inside an entry's path */
+struct pck_file {
+	char *name; /* this particular file/dir basename */
+	struct pw_pck_entry *entry; /**< set for files, NULL for directories */
+	struct pw_avl *nested; /**< for directories only */
+};
+
+static struct pck_file *
+get_file(struct pw_avl *files, char *name)
+{
+	struct pck_file *file;
+	unsigned hash;
+
+	if (!files) {
+		return NULL;
+	}
+
+	hash = djb2(name);
+	file = pw_avl_get(files, hash);
+	while (file && strcmp(file->name, name) != 0) {
+		file = pw_avl_get_next(files, file);
+	}
+
+	return file;
+}
+
+static struct pck_file *
+set_file(struct pw_avl *files, char *name, struct pw_pck_entry *ent)
+{
+	struct pck_file *file;
+	unsigned hash;
+
+	if (!files) {
+		return NULL;
+	}
+
+	hash = djb2(name);
+	file = pw_avl_get(files, hash);
+	while (file && strcmp(file->name, name) != 0) {
+		file = pw_avl_get_next(files, file);
+	}
+
+	if (file) {
+		return file;
+	}
+
+	file = pw_avl_alloc(files);
+	if (!file) {
+		PWLOG(LOG_ERROR, "pw_avl_alloc() failed\n");
+		return NULL;
+	}
+
+	file->name = name;
+	if (ent) {
+		file->entry = ent;
+	} else {
+		file->nested = pw_avl_init(sizeof(struct pck_file));
+	}
+
+	pw_avl_insert(files, hash, file);
+	return file;
+}
+
+
+/** convert the path to utf8, find an alias for it, fill in the entry avl */
+static int
+process_entry_path(struct pw_pck *pck, struct pw_pck_entry *ent, enum pw_pck_action action)
 {
 	char utf8_path[396];
 	char *c, *word;
-	struct pck_alias_tree *aliases = pck->aliases;
+	struct pck_alias_tree *aliases = pck->alias_tree;
+	struct pw_avl *files = pck->entries_tree;
+	struct pck_file *file;
 	struct pck_alias *alias;
 	size_t aliased_len = 0;
 
@@ -327,35 +394,166 @@ alias_entry_path(struct pw_pck *pck, struct pw_pck_entry *ent, bool create_dirs)
 		if (*c == '\\' || *c == '/') {
 			*c = 0;
 			alias = get_alias(aliases, word);
-			/* translate a dir */
+			/* a dir */
+
+			aliased_len += snprintf(ent->path_aliased_utf8 + aliased_len, sizeof(ent->path_aliased_utf8) - aliased_len, "%s/", alias ? alias->new_name : word);
 
 			if (alias) {
-				aliased_len += snprintf(ent->path_aliased_utf8 + aliased_len, sizeof(ent->path_aliased_utf8) - aliased_len, "%s/", alias->new_name);
 				aliases = alias->sub_aliases;
-			} else {
-				aliased_len += snprintf(ent->path_aliased_utf8 + aliased_len, sizeof(ent->path_aliased_utf8) - aliased_len, "%s/", word);
 			}
 
-			if (create_dirs) {
+			if (action == PW_PCK_ACTION_EXTRACT) {
 				mkdir(ent->path_aliased_utf8, 0755);
+			} else {
+				file = set_file(files, alias ? alias->new_name : word, NULL);
+				if (!file) {
+					PWLOG(LOG_ERROR, "set_file() failed\n");
+					return -1;
+				}
+
+				files = file->nested;
 			}
 
 			word = c + 1;
 		} else if (*c == 0) {
 			alias = get_alias(aliases, word);
-			/* translate the basename */
+			/* a file (because there can't be empty dirs in the pck) */
 
-			if (alias) {
-				aliased_len += snprintf(ent->path_aliased_utf8 + aliased_len, sizeof(ent->path_aliased_utf8) - aliased_len, "%s", alias->new_name);
-				aliases = alias->sub_aliases;
-			} else {
-				aliased_len += snprintf(ent->path_aliased_utf8 + aliased_len, sizeof(ent->path_aliased_utf8) - aliased_len, "%s", word);
+			aliased_len += snprintf(ent->path_aliased_utf8 + aliased_len, sizeof(ent->path_aliased_utf8) - aliased_len, "%s", alias ? alias->new_name : word);
+
+			if (action != PW_PCK_ACTION_EXTRACT) {
+				file = set_file(files, alias ? alias->new_name : word, ent);
+				if (!file) {
+					PWLOG(LOG_ERROR, "set_file() failed\n");
+					return -1;
+				}
 			}
+
 			break;
 		}
 
 		c++;
 	}
+
+	return 0;
+}
+
+static int extract_entry(struct pw_pck *pck, struct pw_pck_entry *ent);
+
+static int
+read_pck(struct pw_pck *pck, enum pw_pck_action action)
+{
+	FILE *fp = pck->fp;
+	char tmp[296];
+	char *alias_buf = NULL;
+	size_t alias_buflen = 0;
+	size_t fsize;
+	int rc;
+
+	/* read the file and check magic numbers at the very beginning */
+
+	fread(&pck->hdr, sizeof(pck->hdr), 1, fp);
+	if (pck->hdr.magic0 != PCK_HEADER_MAGIC0 || pck->hdr.magic1 != PCK_HEADER_MAGIC1) {
+		PWLOG(LOG_ERROR, "not a pck file\n");
+		goto err_close;
+	}
+
+	fseek(fp, 0, SEEK_END);
+	fsize = ftell(fp);
+
+	if (fsize < 4) {
+		goto err_close;
+	}
+
+	/* now check similar magic numbers at the end of file */
+	fseek(fp, fsize - 4, SEEK_SET);
+	fread(&pck->ver, 4, 1, fp);
+
+	if (pck->ver != 0x20002 && pck->ver != 0x20001) {
+		PWLOG(LOG_ERROR, "invalid pck version: 0x%x\n", pck->ver);
+		goto err_close;
+	}
+
+	fseek(fp, fsize - 8, SEEK_SET);
+	fread(&pck->entry_cnt, 4, 1, fp);
+
+	fseek(fp, fsize - 8 - sizeof(struct pw_pck_footer), SEEK_SET);
+	fread(&pck->ftr, sizeof(pck->ftr), 1, fp);
+
+	if (pck->ftr.magic0 != PCK_FOOTER_MAGIC0 || pck->ftr.magic1 != PCK_FOOTER_MAGIC1) {
+		PWLOG(LOG_ERROR, "invalid footer magic\n");
+		goto err_close;
+	}
+
+	if(strstr(pck->ftr.description, "lica File Package") == NULL) {
+		PWLOG(LOG_ERROR, "invalid pck description: \"%s\"\n", pck->ftr.description);
+		goto err_close;
+	}
+
+	rc = sscanf(pck->ftr.description, " pwmirage : %u : %[^:]", &pck->mg_version, tmp);
+	if (rc != 2) {
+		pck->mg_version = 0;
+	}
+
+	pck->ftr.entry_list_off ^= PW_PCK_XOR1;
+
+	pck->entries = calloc(1, sizeof(*pck->entries) * pck->entry_cnt);
+	if (!pck->entries) {
+		PWLOG(LOG_ERROR, "calloc() failed\n");
+		goto err_close;
+	}
+
+	fseek(pck->fp, pck->ftr.entry_list_off, SEEK_SET);
+
+	/* Also extract the aliases -> we'll need them early */
+	if (pck->mg_version > 0 && action == PW_PCK_ACTION_EXTRACT) {
+		struct pw_pck_entry *ent = &pck->entries[0];
+
+		snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
+		if (strcmp(ent->hdr.path, tmp) != 0) {
+			PWLOG(LOG_ERROR, "Alias filename mismatch, got=\"%s\", expected=\"%s\"\n",
+					ent->hdr.path, tmp);
+			rc = -EIO;
+			goto err_cleanup;
+		}
+
+		rc = extract_entry(pck, ent);
+		if (rc != 0) {
+			PWLOG(LOG_ERROR, "extract_entry(%d) failed: %d\n", 0, rc);
+			goto err_cleanup;
+		}
+
+		readfile(ent->path_aliased_utf8, &alias_buf, &alias_buflen);
+		read_aliases(pck, alias_buf);
+	}
+
+	/* for anything but extract we'll need a file db to compare to */
+	if (action != PW_PCK_ACTION_EXTRACT) {
+		pck->entries_tree = pw_avl_init(sizeof(struct pw_pck_entry));
+		if (!pck->entries_tree) {
+			PWLOG(LOG_ERROR, "pw_avl_init() failed\n");
+			return -1;
+		}
+	}
+
+	fseek(pck->fp, pck->ftr.entry_list_off, SEEK_SET);
+	for (int i = 0; i < pck->entry_cnt; i++) {
+		struct pw_pck_entry *ent = &pck->entries[i];
+
+		rc = read_entry_hdr(pck, &ent->hdr);
+		if (rc != 0) {
+			PWLOG(LOG_ERROR, "read_entry_hdr() failed: %d\n", rc);
+			goto err_cleanup;
+		}
+
+		process_entry_path(pck, ent, action);
+	}
+
+	return 0;
+err_cleanup:
+err_close:
+	fclose(fp);
+	return -1;
 }
 
 static int
@@ -433,11 +631,11 @@ get_cur_time(char *buf, size_t buflen)
 static int
 extract_pck(struct pw_pck *pck)
 {
-	char *alias_buf = NULL;
-	size_t alias_buflen = 0;
 	char tmp[296];
 	int rc;
 	unsigned entry_idx = 0;
+
+	fseek(pck->fp, pck->ftr.entry_list_off, SEEK_SET);
 
 	/* begin extracting */
 	snprintf(tmp, sizeof(tmp), "%s_mgpck.log", pck->name);
@@ -472,27 +670,7 @@ extract_pck(struct pw_pck *pck)
 
 		fprintf(pck->fp_log, "%s\n", tmp);
 	} else {
-		struct pw_pck_entry *ent = &pck->entries[0];
-		/* a mirage package! */
-
-		snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
-		if (strcmp(ent->hdr.path, tmp) != 0) {
-			PWLOG(LOG_ERROR, "Alias filename mismatch, got=\"%s\", expected=\"%s\"\n",
-					ent->hdr.path, tmp);
-			rc = -EIO;
-			goto out;
-		}
-
-		rc = extract_entry(pck, ent);
-		if (rc != 0) {
-			PWLOG(LOG_ERROR, "extract_entry(%d) failed: %d\n", entry_idx, rc);
-			goto out;
-		}
-
-		readfile(ent->path_aliased_utf8, &alias_buf, &alias_buflen);
-		read_aliases(pck, alias_buf);
-
-		fprintf(pck->fp_log, "%s\n", ent->path_aliased_utf8);
+		/* the log must have been extracted earlier, skip it now */
 		entry_idx++;
 	}
 
@@ -519,92 +697,13 @@ out:
 	return rc;
 }
 
-static int
-read_pck(struct pw_pck *pck, enum pw_pck_action action)
-{
-	FILE *fp = pck->fp;
-	size_t fsize;
-	int rc;
-	char tmp[296];
-
-	/* read the file and check magic numbers at the very beginning */
-
-	fread(&pck->hdr, sizeof(pck->hdr), 1, fp);
-	if (pck->hdr.magic0 != PCK_HEADER_MAGIC0 || pck->hdr.magic1 != PCK_HEADER_MAGIC1) {
-		PWLOG(LOG_ERROR, "not a pck file\n");
-		goto err_close;
-	}
-
-	fseek(fp, 0, SEEK_END);
-	fsize = ftell(fp);
-
-	if (fsize < 4) {
-		goto err_close;
-	}
-
-	/* now check similar magic numbers at the end of file */
-	fseek(fp, fsize - 4, SEEK_SET);
-	fread(&pck->ver, 4, 1, fp);
-
-	if (pck->ver != 0x20002 && pck->ver != 0x20001) {
-		PWLOG(LOG_ERROR, "invalid pck version: 0x%x\n", pck->ver);
-		goto err_close;
-	}
-
-	fseek(fp, fsize - 8, SEEK_SET);
-	fread(&pck->entry_cnt, 4, 1, fp);
-
-	fseek(fp, fsize - 8 - sizeof(struct pw_pck_footer), SEEK_SET);
-	fread(&pck->ftr, sizeof(pck->ftr), 1, fp);
-
-	if (pck->ftr.magic0 != PCK_FOOTER_MAGIC0 || pck->ftr.magic1 != PCK_FOOTER_MAGIC1) {
-		PWLOG(LOG_ERROR, "invalid footer magic\n");
-		goto err_close;
-	}
-
-	if(strstr(pck->ftr.description, "lica File Package") == NULL) {
-		PWLOG(LOG_ERROR, "invalid pck description: \"%s\"\n", pck->ftr.description);
-		goto err_close;
-	}
-
-	rc = sscanf(pck->ftr.description, " pwmirage : %u : %[^:]", &pck->mg_version, tmp);
-	if (rc != 2) {
-		pck->mg_version = 0;
-	}
-
-	pck->ftr.entry_list_off ^= PW_PCK_XOR1;
-
-	pck->entries = calloc(1, sizeof(*pck->entries) * pck->entry_cnt);
-	if (!pck->entries) {
-		PWLOG(LOG_ERROR, "calloc() failed\n");
-		goto err_close;
-	}
-
-	fseek(pck->fp, pck->ftr.entry_list_off, SEEK_SET);
-	for (int i = 0; i < pck->entry_cnt; i++) {
-		struct pw_pck_entry *ent = &pck->entries[i];
-
-		rc = read_entry_hdr(pck, &ent->hdr);
-		if (rc != 0) {
-			PWLOG(LOG_ERROR, "read_entry_hdr() failed: %d\n", rc);
-			goto err_cleanup;
-		}
-
-		alias_entry_path(pck, ent, action == PW_PCK_ACTION_EXTRACT);
-	}
-
-	return 0;
-err_cleanup:
-err_close:
-	fclose(fp);
-	return -1;
-}
-
 int
 pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 {
 	int rc;
 	const char *c;
+	char *alias_buf;
+	size_t alias_buflen;
 	char tmp[296];
 
 	/* set pck->name to basename, without .pck extension */
@@ -654,6 +753,11 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 	if (action == PW_PCK_ACTION_EXTRACT) {
 		rc = read_pck(pck, action);
 		rc = rc || extract_pck(pck);
+	} else if (action == PW_PCK_ACTION_UPDATE) {
+		snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
+		readfile(tmp, &alias_buf, &alias_buflen);
+		rc = read_aliases(pck, alias_buf);
+		rc = rc || read_pck(pck, false);
 	}
 
 	return rc;

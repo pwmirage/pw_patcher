@@ -52,8 +52,10 @@ struct pw_pck {
 	uint32_t ver;
 	uint32_t entry_cnt;
 	struct pw_pck_footer ftr;
-	struct pck_alias_tree *aliases;
+	struct pck_alias_tree *alias_tree;
 	struct pw_pck_entry *entries;
+	/** avl indexed by the alias name (or the org name if there's no alias) */
+	struct pw_avl *entries_tree;
 };
 
 enum pw_pck_action {
