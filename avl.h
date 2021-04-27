@@ -9,7 +9,19 @@
 #include <stdint.h>
 #include <inttypes.h>
 
-struct pw_avl;
+struct pw_avl_node {
+	struct pw_avl_node *left;
+	struct pw_avl_node *right;
+	struct pw_avl_node *next; /**< same key */
+	unsigned key;
+	int height;
+	char data[0];
+};
+
+struct pw_avl {
+	size_t el_size;
+	struct pw_avl_node *root;
+};
 
 struct pw_avl *pw_avl_init(size_t el_size);
 void *pw_avl_alloc(struct pw_avl *avl);
