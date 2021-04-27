@@ -686,7 +686,8 @@ extract_pck(struct pw_pck *pck)
 		fprintf(pck->fp_log, "%s\n", ent->path_aliased_utf8);
 	}
 
-
+	/* newline for prettiness */
+	fprintf(pck->fp_log, "\n");
 	/* override the header to be greater than modification date of any extracted file */
 	fseek(pck->fp_log, log_hdr_pos, SEEK_SET);
 	cur_time = get_cur_time(tmp, sizeof(tmp));
@@ -695,6 +696,110 @@ extract_pck(struct pw_pck *pck)
 out:
 	fclose(pck->fp_log);
 	return rc;
+}
+
+static int
+read_log(struct pw_pck *pck, bool ignore_updates)
+{
+	char tmp[128];
+	FILE *fp;
+	char *line = NULL;
+	size_t len = 0;
+	ssize_t read;
+	int rc;
+	uint64_t cur_modtime = 0;
+	bool skip_cur_section = false;
+	unsigned lineno = 0;
+	struct pw_avl *files;
+	struct pck_file *file;
+
+	snprintf(tmp, sizeof(tmp), "%s_mgpck.log", pck->name);
+	fp = pck->fp_log = fopen(tmp, "r+");
+	if (fp == NULL) {
+		PWLOG(LOG_ERROR, "Cant open the log file: %d (\"%s\")\n", errno, tmp);
+		return -errno;
+	}
+
+	while ((read = getline(&line, &len, fp)) != -1) {
+		bool is_empty = true;
+		char *c, *word;
+
+		assert(line[0] != 0);
+		/* comment */
+		if (line[0] == '#' || line[0] == '\r' || line[0] == '\n') {
+			lineno++;
+			continue;
+		}
+
+		c = line;
+		while (*c) {
+			if(*c != '\n' && *c != '\t' && *c != '\r' && *c != ' ') {
+				is_empty = false;
+				break;
+			}
+
+			c++;
+		}
+
+		if (is_empty) {
+			continue;
+		}
+
+		/* header */
+		if (line[0] == ':') {
+			rc = sscanf(line, " : %[^:] : %"PRIu64" : %*s", tmp, &cur_modtime);
+			if (rc != 2) {
+				PWLOG(LOG_ERROR, "Incomplete header at line %u\n\t\"%s\"\n", lineno, line);
+				return -EIO;
+			}
+			lineno++;
+			continue;
+		}
+
+		/* filename */
+		if (skip_cur_section) {
+			lineno++;
+			continue;
+		}
+
+		files = pck->entries_tree;
+		c = word = line;
+		while (1) {
+			if (*c == '\\' || *c == '/') {
+				*c = 0;
+				file = get_file(files, word);
+				if (!file) {
+					/* we got a log entry for a file that doesn't exist in the pck.
+					 * it could have been removed or aliased - no problem.
+					 */
+					break;
+				}
+
+				files = file->nested;
+				word = c + 1;
+			} else if (*c == 0) {
+				file = get_file(files, word);
+				if (!file) {
+					/* same as above */
+					break;
+				}
+
+				if (!file->entry) {
+					/* we got a log entry for a directory? weird, ignore it */
+					break;
+				}
+
+				file->entry->mod_time = cur_modtime;
+				break;
+			}
+
+			c++;
+		}
+
+		lineno++;
+	}
+
+	return 0;
 }
 
 int
@@ -758,6 +863,7 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 		readfile(tmp, &alias_buf, &alias_buflen);
 		rc = read_aliases(pck, alias_buf);
 		rc = rc || read_pck(pck, false);
+		rc = rc || read_log(pck, false);
 	}
 
 	return rc;

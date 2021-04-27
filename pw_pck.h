@@ -39,6 +39,7 @@ struct pw_pck_entry_header {
 struct pw_pck_entry {
 	struct pw_pck_entry_header hdr;
 	char path_aliased_utf8[396];
+	uint64_t mod_time;
 };
 
 #define PW_PCK_XOR1 0xa8937462
