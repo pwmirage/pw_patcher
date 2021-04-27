@@ -61,13 +61,11 @@ print_help(char *argv[0])
 static void
 enable_console(void)
 {
-	FILE *fpstdin = stdin, *fpstdout = stdout, *fpstderr = stderr;
-
 	AttachConsole(ATTACH_PARENT_PROCESS);
 
-	freopen_s(&fpstdin, "CONIN$", "r", stdin);
-	freopen_s(&fpstdout, "CONOUT$", "w", stdout);
-	freopen_s(&fpstderr, "CONOUT$", "w", stderr);
+	freopen("CONIN$", "r", stdin);
+	freopen("CONOUT$", "w", stdout);
+	freopen("CONOUT$", "w", stderr);
 }
 
 int
@@ -96,7 +94,7 @@ main(int argc, char *argv[])
 			a++;
 			argc--;
 		} else if (argc >= 2 && (strcmp(*a, "-u") == 0 || strcmp(*a, "--update") == 0)) {
-			action = PW_PCK_ACTION_EXTRACT;
+			action = PW_PCK_ACTION_UPDATE;
 			pck_path = *(a + 1);
 			a++;
 			argc--;
