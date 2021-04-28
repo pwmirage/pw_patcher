@@ -41,13 +41,14 @@ struct pw_pck_entry {
 	char path_aliased_utf8[396];
 	uint64_t mod_time;
 	bool is_present;
+	int pck_idx;
 	struct pw_pck_entry *next; /**< for putting in temporary lists */
 };
 
 enum {
 	PW_PCK_ENTRY_FREE_BLOCKS = 0,
 	PW_PCK_ENTRY_ALIASES = 1, /* subsequent entries will be parsed as regular files */
-}
+};
 
 #define PW_PCK_XOR1 0xa8937462
 #define PW_PCK_XOR2 0xf1a43653

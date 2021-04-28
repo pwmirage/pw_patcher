@@ -573,6 +573,7 @@ read_pck(struct pw_pck *pck, enum pw_pck_action action)
 			goto err_cleanup;
 		}
 
+		ent->pck_idx = i;
 		process_entry_path(pck, ent, action);
 	}
 
@@ -586,7 +587,6 @@ err_close:
 static int
 extract_entry(struct pw_pck *pck, struct pw_pck_entry *ent)
 {
-	char buf[16384];
 	size_t remaining_bytes = ent->hdr.length;
 	size_t read_bytes, buf_size;
 	FILE *fp = pck->fp;
@@ -601,6 +601,7 @@ extract_entry(struct pw_pck *pck, struct pw_pck_entry *ent)
 	}
 
 	if (ent->hdr.compressed_length >= ent->hdr.length) {
+		char buf[16384];
 		/* not compressed */
 
 		do {
@@ -900,6 +901,8 @@ find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files, str
 					return -ENOMEM;
 				}
 
+				entry->pck_idx = -1;
+				entry->hdr.length = fsize;
 				if (path[0] == '.' && path[1] == '\\') {
 					snprintf(entry->path_aliased_utf8, sizeof(entry->path_aliased_utf8),
 							"%.*S\\%s", wcslen(path) - 2, path, utf8_name);
@@ -954,7 +957,6 @@ read_free_blocks(struct pw_pck *pck)
 	struct pw_avl *avl;
 	struct pw_pck_entry *entry;
 	struct pck_free_blocks_meta meta;
-	struct pck_free_block *blocks;
 
 	assert(pck->mg_version > 0);
 
@@ -982,8 +984,50 @@ read_free_blocks(struct pw_pck *pck)
 	return 0;
 }
 
+static int
+add_free_block(struct pw_pck *pck, uint32_t offset, uint32_t size)
+{
+	struct pck_free_block *block;
+
+	block = pw_avl_alloc(pck->free_blocks_tree);
+	if (!block) {
+		PWLOG(LOG_ERROR, "calloc() failed\n");
+		return -ENOMEM;
+	}
+
+	block->offset = offset;
+	block->size = size;
+	pw_avl_insert(pck->free_blocks_tree, block->size, block);
+	return 0;
+}
+
+static struct pck_free_block *
+get_free_block(struct pw_pck *pck, uint32_t min_size)
+{
+	struct pw_avl_node *node = pck->free_blocks_tree->root;
+	struct pw_avl_node *prev_node = NULL;
+
+	while (node) {
+		if (min_size > node->key) {
+			/* node not big enough */
+			node = node->right;
+		} else {
+			/* store the last big enough node, then try a smaller one */
+			prev_node = node;
+			node = node->left;
+		}
+	}
+
+	if (prev_node) {
+		pw_avl_remove(pck->free_blocks_tree, prev_node);
+		return (void *)prev_node->data;
+	}
+
+	return NULL;
+}
+
 static void
-write_free_block(FILE *fp, struct pw_avl_node *node)
+_write_free_block(FILE *fp, struct pw_avl_node *node)
 {
 	struct pck_free_block *block;
 
@@ -994,21 +1038,20 @@ write_free_block(FILE *fp, struct pw_avl_node *node)
 	block = (void *)node->data;
 	fwrite(block, sizeof(*block), 1, fp);
 
-	write_free_block(fp, node->next);
-	write_free_block(fp, node->left);
-	write_free_block(fp, node->right);
+	_write_free_block(fp, node->next);
+	_write_free_block(fp, node->left);
+	_write_free_block(fp, node->right);
 }
 
 static int
 write_free_blocks(struct pw_pck *pck, struct pw_pck_entry_header *ent_hdr)
 {
 	struct pck_free_blocks_meta meta;
-	struct pck_free_block *blocks;
 	size_t off = ftell(pck->fp);
 	size_t off_end;
 
-	snprintf(entry_hdr->path, sizeof(entry_hdr->path), "%s_fragm.dat", pck->name);
-	entry_hdr->offset = off;
+	snprintf(ent_hdr->path, sizeof(ent_hdr->path), "%s_fragm.dat", pck->name);
+	ent_hdr->offset = off;
 
 	meta.block_cnt = 0; /* dummy, will be overritten later */
 	meta.max_entry_cnt = pck->entry_max_cnt;
@@ -1017,7 +1060,7 @@ write_free_blocks(struct pw_pck *pck, struct pw_pck_entry_header *ent_hdr)
 
 	pck->entry_max_cnt = meta.max_entry_cnt;
 
-	write_free_block(pck->fp, pck->free_blocks_tree->root);
+	_write_free_block(pck->fp, pck->free_blocks_tree->root);
 	off_end = ftell(pck->fp);
 
 	/* write the header again */
@@ -1027,6 +1070,84 @@ write_free_blocks(struct pw_pck *pck, struct pw_pck_entry_header *ent_hdr)
 
 	fseek(pck->fp, off_end, SEEK_SET);
 
+	return 0;
+}
+
+static int
+compress_tmp(struct pw_pck *pck, struct pw_pck_entry *ent, FILE **compressed, FILE **uncompressed)
+{
+	int rc;
+
+	FILE *fp_out = tmpfile();
+	if (fp_out == NULL) {
+		PWLOG(LOG_ERROR, "tmpfile() failed: %d\n", errno);
+		return -errno;
+	}
+
+	FILE *fp_in = wfopen(ent->path_aliased_utf8, "rb");
+	if (fp_in == NULL) {
+		PWLOG(LOG_ERROR, "can't open \"%s\": %d\n", ent->path_aliased_utf8, errno);
+		return -errno;
+	}
+
+	fseek(fp_in, 0, SEEK_END);
+	ent->hdr.length = ftell(fp_in);
+	fseek(fp_in, 0, SEEK_SET);
+
+	rc = zpipe_compress(fp_out, fp_in, 0, Z_DEFAULT_COMPRESSION);
+	if (rc != 0) {
+		PWLOG(LOG_ERROR, "zpipe_compress() failed: %d\n", rc);
+		return rc;
+	}
+
+	ent->hdr.compressed_length = ftell(fp_out);
+
+	*compressed = fp_out;
+	*uncompressed = fp_in;
+	return 0;
+}
+
+static int
+write_entry_hdr(struct pw_pck *pck, FILE **fp_hdr, struct pw_pck_entry *ent)
+{
+	int rc;
+
+	if (*fp_hdr) {
+		ent->pck_idx = pck->entry_cnt++;
+		return 0;
+	}
+
+	if (ent->pck_idx == -1) {
+		if (*fp_hdr == NULL && pck->entry_cnt >= pck->entry_max_cnt) {
+			/* we've run out of space! need to rewrite the entry list */
+			*fp_hdr = tmpfile();
+			if (!*fp_hdr) {
+				PWLOG(LOG_ERROR, "tmpfile() failed: %d\n", errno);
+				return -errno;
+			}
+
+			rc = add_free_block(pck, pck->ftr.entry_list_off,
+					pck->entry_max_cnt * sizeof(ent->hdr));
+			if (rc) {
+				return rc;
+			}
+
+			fseek(pck->fp, pck->ftr.entry_list_off, SEEK_SET);
+			rc = zpipe_compress(*fp_hdr, pck->fp,
+					pck->entry_max_cnt * sizeof(ent->hdr), Z_NO_COMPRESSION);
+			if (rc != 0) {
+				PWLOG(LOG_ERROR, "zpipe_compress() failed: %d\n", rc);
+				return rc;
+			}
+		}
+
+		ent->pck_idx = pck->entry_cnt++;
+	}
+
+	FILE *fp = *fp_hdr ? *fp_hdr : pck->fp;
+	fseek(fp, pck->ftr.entry_list_off + ent->pck_idx *
+			sizeof(struct pw_pck_entry_header), SEEK_SET);
+	fwrite(&ent->hdr, sizeof(ent->hdr), 1, fp);
 	return 0;
 }
 
@@ -1044,7 +1165,7 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 	while (c != path && *c != '\\' && *c != '/') {
 		c--;
 	}
-	
+
 	if (*c == 0) {
 		PWLOG(LOG_ERROR, "invalid file path: \"%s\"\n", path);
 		return -EINVAL;
@@ -1111,17 +1232,100 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 
 		read_free_blocks(pck);
 
-		/* find entries with is_present == false
-		 *  -> add them to the free blocks list
-		 * iterate through the modified/newly added entries
-		 *  -> compress to a file with prefixed "dot", get size
-		 *  -> try to find a smallest fitting free block first, if ok -> write into the pck->fp, remove the dot file, remove from the list, also update the free-block list
-		 *  if the list empty -> return
-		 *  fseek into the footer pos
-		 *  iterate throught the rest of modified/added entries:
-		 *    * pipe the dot file into fp, append an entry
-		 *  if entry overflow flag set, rewrite the entry table entirely
-		 */
+		for (int i = PW_PCK_ENTRY_ALIASES; i < pck->entry_cnt; i++) {
+			struct pw_pck_entry *entry = &pck->entries[i];
+
+			if (entry->is_present) {
+				continue;
+			}
+
+			add_free_block(pck, entry->hdr.offset,
+					MAX(entry->hdr.compressed_length, entry->hdr.length));
+		}
+
+		struct pw_pck_entry **ep = &modified;
+		FILE *fp_hdr = NULL;
+		uint32_t file_append_offset = 0;
+
+		while (*ep) {
+			struct pw_pck_entry *e = *ep;
+			struct pck_free_block *block;
+			FILE *fp_compressed, *fp_uncompressed;
+			uint32_t prev_len = 0;
+			uint32_t new_len;
+
+			prev_len = MIN(e->hdr.compressed_length, e->hdr.length);
+			rc = compress_tmp(pck, e, &fp_compressed, &fp_uncompressed);
+			if (rc) {
+				PWLOG(LOG_ERROR, "compress_tmp(\"%s\") failed: %d\n", e->path_aliased_utf8, rc);
+				return -1;
+			}
+
+			new_len = MIN(e->hdr.compressed_length, e->hdr.length);
+			/* compressed_length is always 0 for newly added files */
+			if (new_len != prev_len) {
+				if (prev_len) {
+					rc = add_free_block(pck, e->hdr.offset, prev_len);
+					if (rc) {
+						return rc;
+					}
+				}
+
+				block = get_free_block(pck, new_len);
+				if (block) {
+					e->hdr.offset = block->offset;
+					/* TODO add free block from unused space? */
+				} else {
+					if (file_append_offset == 0) {
+						fseek(pck->fp, - 8 - sizeof(struct pw_pck_footer), SEEK_END);
+						file_append_offset = ftell(pck->fp);
+						e->hdr.offset = file_append_offset;
+					} else {
+						e->hdr.offset = file_append_offset;
+						file_append_offset += new_len;
+					}
+				}
+			}
+
+			rc = write_entry_hdr(pck, &fp_hdr, e);
+			if (rc != 0) {
+				PWLOG(LOG_ERROR, "write_entry_hdr(\"%s\") failed: %d\n",
+						e->path_aliased_utf8, rc);
+				return rc;
+			}
+
+			fseek(pck->fp, block->offset, SEEK_SET);
+
+			if (e->hdr.length < e->hdr.compressed_length) {
+				rc = zpipe_compress(pck->fp, fp_uncompressed, e->hdr.length,
+						Z_NO_COMPRESSION);
+			} else {
+				rc = zpipe_compress(pck->fp, fp_compressed,
+						e->hdr.compressed_length, Z_DEFAULT_COMPRESSION);
+			}
+
+			if (rc != 0) {
+				PWLOG(LOG_ERROR, "zpipe_compress(\"%s\") failed: %d\n",
+						e->path_aliased_utf8, rc);
+				return rc;
+			}
+
+			fclose(fp_uncompressed);
+			fclose(fp_compressed);
+
+			/* remove from the "modifed" list */
+			*ep = (*ep)->next;
+		}
+
+		/* XXX: fseek, write_free_blocks(), update hdr entry */
+
+		if (fp_hdr) {
+			/* XXX: rewrite the entries hdr */
+		}
+
+		if (file_append_offset) {
+			/* XXX: rewrite the ftr */
+		}
 	}
 
 	return rc;
