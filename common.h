@@ -76,7 +76,7 @@ void pwlog(int type, const char *filename, unsigned lineno, const char *fnname, 
 int pw_version_load(struct pw_version *ver);
 int pw_version_save(struct pw_version *ver);
 
-int zpipe_compress(FILE *dest, FILE *source, int level);
+int zpipe_compress(FILE *dest, FILE *source, size_t source_bytes, int level);
 int zpipe_uncompress(FILE *dest, FILE *source, size_t source_bytes);
 
 #endif /* PW_COMMON_H */

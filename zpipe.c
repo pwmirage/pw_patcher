@@ -34,7 +34,7 @@
    level is supplied, Z_VERSION_ERROR if the version of zlib.h and the
    version of the library linked do not match, or Z_ERRNO if there is
    an error reading or writing the files. */
-int zpipe_compress(FILE *dest, FILE *source, int level)
+int zpipe_compress(FILE *dest, FILE *source, size_t source_bytes, int level)
 {
     int ret, flush;
     unsigned have;
@@ -53,6 +53,13 @@ int zpipe_compress(FILE *dest, FILE *source, int level)
     /* compress until end of file */
     do {
         strm.avail_in = fread(in, 1, CHUNK, source);
+	if (source_bytes) {
+		if (strm.avail_in > source_bytes) {
+			strm.avail_in = source_bytes;
+		}
+		source_bytes -= strm.avail_in;
+	}
+
         if (ferror(source)) {
             (void)deflateEnd(&strm);
             return Z_ERRNO;
