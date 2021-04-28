@@ -28,6 +28,7 @@ void *pw_avl_alloc(struct pw_avl *avl);
 void pw_avl_insert(struct pw_avl *avl, unsigned key, void *data);
 void *pw_avl_get(struct pw_avl *avl, unsigned key);
 void *pw_avl_get_next(struct pw_avl *avl, void *data);
+void pw_avl_remove(struct pw_avl *avl, void *data);
 void pw_avl_print(struct pw_avl *avl);
 
 #endif /* PW_AVL_H */

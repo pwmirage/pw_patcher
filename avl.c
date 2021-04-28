@@ -130,6 +130,115 @@ pw_avl_insert(struct pw_avl *avl, unsigned key, void *data)
 	avl->root = insert(avl->root, node);
 }
 
+static struct pw_avl_node *
+remove_node(struct pw_avl_node *parent, struct pw_avl_node *node)
+{
+	if (!parent) {
+		return node;
+	}
+
+	if (node->key < parent->key) {
+		parent->left  = remove_node(parent->left, node);
+	} else if (node->key > parent->key) {
+		parent->right = remove_node(parent->right, node);
+	} else {
+		if (parent->next) {
+			if (parent == node) {
+				/* make the next entry act as this one, then replace it */
+				parent->next->left = parent->left;
+				parent->next->right = parent->right;
+				parent->next->next = parent->next->next->next;
+				parent->next->height = parent->height;
+				return parent->next;
+			}
+
+			struct pw_avl_node *tmp = parent;
+			while (tmp->next) {
+				if (tmp->next == node) {
+					/* just remove it from the chain */
+					tmp->next = tmp->next->next;
+					return parent;
+				}
+				tmp = tmp->next;
+			}
+
+			/* node not in the chain -> nothing removed */
+			return parent;
+		}
+
+		if (parent != node) {
+			/* that's not the node we're looking for, despite having
+			 * the same key */
+			return parent;
+		}
+
+		if (!parent->left || !parent->right) {
+			/* zero or just one branch present */
+			struct pw_avl_node *tmp = parent->left ? parent->left : parent->right;
+
+			if (!tmp) {
+				/* perfect case, nothing to do */
+				return NULL;
+			}
+
+			/* move that one branch up in the tree */
+			parent = tmp;
+		} else {
+			/* both branches present */
+			struct pw_avl_node *tmp = parent->right;
+
+			/* parent->right branch is just bigger numbers, so
+			 * move that branch up in the tree */
+			if (!tmp->left) {
+				tmp->left = parent->left;
+				parent = tmp;
+			} else {
+				/* get the smallest number of those bigger than parent
+				 * and replace it with parent */
+				while (tmp->left) {
+					tmp = tmp->left;
+				}
+
+				parent->right = remove_node(parent->right, tmp);
+				tmp->left = parent->left;
+				tmp->right = parent->right;
+				tmp->next = parent->next;
+				parent = tmp;
+			}
+		}
+	}
+
+	calc_height(parent);
+
+	int balance = height(parent->left) - height(parent->right);
+	int balance_left = parent->left ? height(parent->left->left) - height(parent->left->right) : 0;
+	int balance_right = parent->right ? height(parent->right->left) - height(parent->right->right) : 0;
+
+	if (balance > 1) {
+		if (balance_left < 0) {
+			parent->left = rotate_left(parent->left);
+		}
+		return rotate_right(parent);
+	}
+
+	if (balance < -1) {
+		if (balance_right > 0) {
+			parent->right = rotate_right(parent->right);
+		}
+		return rotate_left(parent);
+	}
+
+	return parent;
+}
+
+void
+pw_avl_remove(struct pw_avl *avl, void *data)
+{
+	struct pw_avl_node *node = (void *)(data - offsetof(struct pw_avl_node, data));
+
+	avl->root = remove_node(avl->root, node);
+}
+
 void *
 pw_avl_get(struct pw_avl *avl, unsigned key)
 {
