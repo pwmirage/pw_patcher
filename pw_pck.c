@@ -564,7 +564,7 @@ read_pck(struct pw_pck *pck, enum pw_pck_action action)
 	}
 
 	fseek(pck->fp, pck->ftr.entry_list_off, SEEK_SET);
-	for (int i = PW_PCK_ENTRY_ALIASES; i < pck->entry_cnt; i++) {
+	for (int i = 0; i < pck->entry_cnt; i++) {
 		struct pw_pck_entry *ent = &pck->entries[i];
 
 		rc = read_entry_hdr(pck, &ent->hdr);
@@ -882,7 +882,7 @@ find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files, str
 		} else {
 			struct pw_pck_entry *entry;
 
-			if (strstr(utf8_name, "_mgpck.log") != NULL) {
+			if (strstr(utf8_name, "_mgpck.log") != NULL || strstr(utf8_name, "_fragm.dat") != NULL) {
 				continue;
 			}
 
@@ -1324,15 +1324,54 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 			*ep = (*ep)->next;
 		}
 
-		/* XXX: fseek, write_free_blocks(), update hdr entry */
+		struct pw_pck_entry *free_blocks = &pck->entries[PW_PCK_ENTRY_FREE_BLOCKS];
+		add_free_block(pck, free_blocks->hdr.offset, free_blocks->hdr.length);
+		size_t fsize = sizeof(struct pck_free_blocks_meta) +
+				pck->free_blocks_tree->el_count * sizeof(struct pck_free_block);
+		free_blocks->hdr.offset = get_free_block(pck, fsize);
+
+		rc = write_entry_hdr(pck, &fp_hdr, free_blocks);
+		if (rc != 0) {
+			PWLOG(LOG_ERROR, "write_entry_hdr(\"%s\") failed: %d\n",
+					e->path_aliased_utf8, rc);
+			return rc;
+		}
+
+		fseek(pck->fp, free_blocks->hdr.offset, SEEK_SET);
+		write_free_blocks(pck, free_blocks);
 
 		if (fp_hdr) {
-			/* XXX: rewrite the entries hdr */
+			uint32_t fsize = ftell(fp_hdr);
+			uint32_t off = get_free_block(pck, fsize);
+
+			rc = zpipe_compress(pck->fp, fp_hdr, fsize, Z_NO_COMPRESSION);
+			if (rc != 0) {
+				PWLOG(LOG_ERROR, "zpipe_compress(\"%s\") failed: %d\n",
+						e->path_aliased_utf8, rc);
+				return rc;
+			}
+
+			fclose(fp_hdr);
+			fp_hdr = NULL;
 		}
 
 		if (pck->file_append_offset) {
-			/* XXX: rewrite the ftr */
+			fseek(pck->fp, pck->file_append_offset, SEEK_SET);
+			uint32_t off = get_free_block(pck, fsize);
+
+			fwrite(&pck->ftr, sizeof(pck->ftr), 1, pck->fp);
+		} else {
+			fseek(pck->fp, -8, SEEK_END)
 		}
+
+		fwrite(&pck->entry_cnt, 4, 1, fp);
+		fwrite(&pck->ver, 4, 1, fp);
+	}
+
+	fclose(pck->fp);
+	if (pck->file_append_offset) {
+		SetCurrentDirectory("..");
+		truncate(pck->fp, pck->file_append_offset);
 	}
 
 	return rc;
