@@ -4,6 +4,7 @@
 
 #include <stddef.h>
 #include <stdio.h>
+#include <assert.h>
 
 #include "avl.h"
 
@@ -136,6 +137,7 @@ pw_avl_insert(struct pw_avl *avl, unsigned key, void *data)
 
 	node->key = key;
 	avl->root = insert(avl->root, node);
+	avl->el_count++;
 }
 
 static struct pw_avl_node *
@@ -245,6 +247,8 @@ pw_avl_remove(struct pw_avl *avl, void *data)
 	struct pw_avl_node *node = (void *)(data - offsetof(struct pw_avl_node, data));
 
 	avl->root = remove_node(avl->root, node);
+	assert(avl->el_count > 0);
+	avl->el_count--;
 }
 
 void *

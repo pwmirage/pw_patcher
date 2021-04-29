@@ -20,6 +20,7 @@ struct pw_avl_node {
 
 struct pw_avl {
 	size_t el_size;
+	size_t el_count;
 	struct pw_avl_node *root;
 };
 
