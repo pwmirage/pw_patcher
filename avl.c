@@ -35,6 +35,14 @@ pw_avl_alloc(struct pw_avl *avl)
 	return (void *)node->data;
 }
 
+void
+pw_avl_free(struct pw_avl *avl, void *data)
+{
+	struct pw_avl_node *node = (void *)(data - offsetof(struct pw_avl_node, data));
+
+	free(node);
+}
+
 static int
 height(struct pw_avl_node *node)
 {
