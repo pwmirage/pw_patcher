@@ -1001,9 +1001,10 @@ add_free_block(struct pw_pck *pck, uint32_t offset, uint32_t size)
 	return 0;
 }
 
-static struct pck_free_block *
+static uint32_t
 get_free_block(struct pw_pck *pck, uint32_t min_size)
 {
+	uint32_t ret;
 	struct pw_avl_node *node = pck->free_blocks_tree->root;
 	struct pw_avl_node *prev_node = NULL;
 
@@ -1019,11 +1020,32 @@ get_free_block(struct pw_pck *pck, uint32_t min_size)
 	}
 
 	if (prev_node) {
+		struct pck_free_block *block = (void *)prev_node->data;
+
 		pw_avl_remove(pck->free_blocks_tree, prev_node);
-		return (void *)prev_node->data;
+		ret = block->offset;
+
+		/* if the remainder is smaller than sizeof(pck_free_block) then there's
+		 * no point storing it ... */
+		if (block->size - min_size > 8) {
+			block->offset += min_size;
+			block->size -= min_size;
+			pw_avl_insert(pck->free_blocks_tree, block->size, block);
+		} else {
+			pw_avl_free(pck->free_blocks_tree, block);
+		}
+
+		return ret;
 	}
 
-	return NULL;
+	if (pck->file_append_offset == 0) {
+		fseek(pck->fp, - 8 - sizeof(struct pw_pck_footer), SEEK_END);
+		pck->file_append_offset = ftell(pck->fp);
+	}
+	ret = pck->file_append_offset;
+	pck->file_append_offset += min_size;
+
+	return ret;
 }
 
 static void
@@ -1245,11 +1267,9 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 
 		struct pw_pck_entry **ep = &modified;
 		FILE *fp_hdr = NULL;
-		uint32_t file_append_offset = 0;
 
 		while (*ep) {
 			struct pw_pck_entry *e = *ep;
-			struct pck_free_block *block;
 			FILE *fp_compressed, *fp_uncompressed;
 			uint32_t prev_len = 0;
 			uint32_t new_len;
@@ -1271,20 +1291,7 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 					}
 				}
 
-				block = get_free_block(pck, new_len);
-				if (block) {
-					e->hdr.offset = block->offset;
-					/* TODO add free block from unused space? */
-				} else {
-					if (file_append_offset == 0) {
-						fseek(pck->fp, - 8 - sizeof(struct pw_pck_footer), SEEK_END);
-						file_append_offset = ftell(pck->fp);
-						e->hdr.offset = file_append_offset;
-					} else {
-						e->hdr.offset = file_append_offset;
-						file_append_offset += new_len;
-					}
-				}
+				e->hdr.offset = get_free_block(pck, new_len);
 			}
 
 			rc = write_entry_hdr(pck, &fp_hdr, e);
@@ -1294,7 +1301,7 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 				return rc;
 			}
 
-			fseek(pck->fp, block->offset, SEEK_SET);
+			fseek(pck->fp, e->hdr.offset, SEEK_SET);
 
 			if (e->hdr.length < e->hdr.compressed_length) {
 				rc = zpipe_compress(pck->fp, fp_uncompressed, e->hdr.length,
@@ -1323,7 +1330,7 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 			/* XXX: rewrite the entries hdr */
 		}
 
-		if (file_append_offset) {
+		if (pck->file_append_offset) {
 			/* XXX: rewrite the ftr */
 		}
 	}

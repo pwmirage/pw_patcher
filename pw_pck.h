@@ -67,6 +67,7 @@ struct pw_pck {
 	/** avl indexed by the alias name (or the org name if there's no alias) */
 	struct pw_avl *entries_tree;
 	struct pw_avl *free_blocks_tree;
+	uint32_t file_append_offset;
 };
 
 enum pw_pck_action {
