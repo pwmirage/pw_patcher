@@ -248,6 +248,12 @@ pw_avl_remove(struct pw_avl *avl, void *data)
 	avl->root = remove_node(avl->root, node);
 	assert(avl->el_count > 0);
 	avl->el_count--;
+
+	/* deinitialize in case it's inserted again */
+	node->left = NULL;
+	node->right = NULL;
+	node->next = NULL;
+	node->height = 1;
 }
 
 void *
