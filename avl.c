@@ -157,7 +157,6 @@ remove_node(struct pw_avl_node *parent, struct pw_avl_node *node)
 				/* make the next entry act as this one, then replace it */
 				parent->next->left = parent->left;
 				parent->next->right = parent->right;
-				parent->next->next = parent->next->next->next;
 				parent->next->height = parent->height;
 				return parent->next;
 			}
