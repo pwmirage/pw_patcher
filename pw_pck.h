@@ -29,6 +29,7 @@ struct pw_pck_footer {
 	uint32_t magic1;
 };
 
+#define PW_PCK_ENTRY_SIZE (sizeof(struct pw_pck_entry_header) + 8)
 struct pw_pck_entry_header {
 	char path[260]; /* GB2312. always 260 bytes = MAX_PATH */
 	uint32_t offset;
@@ -41,13 +42,15 @@ struct pw_pck_entry {
 	char path_aliased_utf8[396];
 	uint64_t mod_time;
 	bool is_present;
-	int pck_idx;
+	bool is_modified;
 	struct pw_pck_entry *next; /**< for putting in temporary lists */
 };
 
+/* special entries */
 enum {
 	PW_PCK_ENTRY_FREE_BLOCKS = 0,
-	PW_PCK_ENTRY_ALIASES = 1, /* subsequent entries will be parsed as regular files */
+	PW_PCK_ENTRY_ALIASES = 1,
+	PW_PCK_ENTRY_MAX,
 };
 
 #define PW_PCK_XOR1 0xa8937462
@@ -57,16 +60,18 @@ struct pw_pck {
 	unsigned mg_version;
 	FILE *fp;
 	FILE *fp_log;
+	FILE *fp_hdr;
 	struct pw_pck_header hdr;
 	uint32_t ver;
-	uint32_t entry_cnt;
-	uint32_t entry_max_cnt;
+	uint32_t entry_cnt; /**< count of entries in pck->entries */
+	uint32_t new_entry_cnt; /**< count of entries to be written back into the pck */
 	struct pw_pck_footer ftr;
 	struct pck_alias_tree *alias_tree;
 	struct pw_pck_entry *entries;
 	/** avl indexed by the alias name (or the org name if there's no alias) */
 	struct pw_avl *entries_tree;
 	struct pw_avl *free_blocks_tree;
+	struct pw_pck_entry *new_entries;
 	uint32_t file_append_offset;
 };
 

@@ -13,6 +13,7 @@
 #include <assert.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include <zlib.h>
 
@@ -23,6 +24,7 @@
 
 #include "pw_pck.h"
 #include "avl.h"
+#include "common.h"
 
 static FILE *
 wfopen(const char *path, const char *flags)
@@ -61,6 +63,29 @@ rmrf(char *path)
 		false, 0, ""
 	};
 	SHFileOperation(&file_op);
+
+	/* apparently some files can still persist for a while */
+	Sleep(1000);
+}
+
+int
+pipe(FILE *dest, FILE *source, size_t remaining_bytes)
+{
+	size_t read_bytes, buf_size;
+	char buf[16384];
+
+	while (remaining_bytes > 0) {
+		buf_size = MIN(sizeof(buf), remaining_bytes);
+		read_bytes = fread(buf, 1, buf_size, source);
+		if (read_bytes == 0 || ferror(source)) {
+			return -errno;
+		}
+
+		fwrite(buf, 1, read_bytes, dest);
+		remaining_bytes -= read_bytes;
+	}
+
+	return 0;
 }
 
 static uint32_t
@@ -208,18 +233,20 @@ read_aliases(struct pw_pck *pck, char *buf)
 		}
 
 		orgname = c;
-		while (*c != '\r' && *c != '\n') {
+		while (*c != '\r' && *c != '\n' && *c != 0) {
 			c++;
 		}
-		*c++ = 0;
 
 		/* trim the end of orgname */
-		c2 = c - 2;
+		c2 = c - 1;
 		while (*c2 == ' ' || *c2 == '\t') {
 			*c2 = 0;
 			c2--;
 		}
 
+		if (*c != 0) {
+			*c++ = 0;
+		}
 		if (*c == '\r') {
 			c++;
 		}
@@ -269,8 +296,9 @@ get_alias(struct pck_alias_tree *aliases, char *filename)
 }
 
 static int
-read_entry_hdr(struct pw_pck *pck, struct pw_pck_entry_header *hdr)
+read_entry_hdr(struct pw_pck *pck, struct pw_pck_entry *ent)
 {
+	struct pw_pck_entry_header *hdr = &ent->hdr;
 	FILE *fp = pck->fp;
 	uint32_t compressed_size;
 	uint32_t compressed_size2;
@@ -310,6 +338,49 @@ read_entry_hdr(struct pw_pck *pck, struct pw_pck_entry_header *hdr)
 
 	return 0;
 }
+
+static int
+write_entry_hdr(struct pw_pck *pck, struct pw_pck_entry *ent)
+{
+	struct pw_pck_entry_header *hdr = &ent->hdr;
+	uint32_t compressed_size;
+	char *buf;
+	uLongf bufsize = compressBound(sizeof(*hdr));
+	int rc;
+
+	/* TODO set hdr->path if unset */
+
+	buf = calloc(1, bufsize);
+	if (!buf) {
+		PWLOG(LOG_ERROR, "calloc() failed: %u\n", bufsize);
+		return -ENOMEM;
+	}
+
+	rc = compress((Bytef *)buf, &bufsize, (const Bytef *)hdr, sizeof(*hdr));
+	if (rc != Z_OK) {
+		return rc;
+	}
+
+	/* don't fseek every time -> expect it to set correctly */
+	pck->file_append_offset += bufsize;
+
+	compressed_size = ((uint32_t)bufsize) ^ PW_PCK_XOR1;
+	fwrite(&compressed_size, 4, 1, pck->fp);
+
+	compressed_size = ((uint32_t)bufsize) ^ PW_PCK_XOR2;
+	fwrite(&compressed_size, 4, 1, pck->fp);
+
+	if (bufsize >= sizeof(*hdr)) {
+		fwrite(hdr, sizeof(*hdr), 1, pck->fp);
+	} else {
+		fwrite(buf, bufsize, 1, pck->fp);
+	}
+
+	free(buf);
+	pck->new_entry_cnt++;
+	return 0;
+}
+
 
 /* each file or directory inside an entry's path */
 struct pck_file {
@@ -519,6 +590,11 @@ read_pck(struct pw_pck *pck, enum pw_pck_action action)
 
 	pck->ftr.entry_list_off ^= PW_PCK_XOR1;
 
+	if (pck->mg_version == 0) {
+		/* make space for hardcoded entries */
+		pck->entry_cnt += PW_PCK_ENTRY_MAX;
+	}
+
 	pck->entries = calloc(1, sizeof(*pck->entries) * pck->entry_cnt);
 	if (!pck->entries) {
 		PWLOG(LOG_ERROR, "calloc() failed\n");
@@ -531,6 +607,14 @@ read_pck(struct pw_pck *pck, enum pw_pck_action action)
 	if (pck->mg_version > 0 && action == PW_PCK_ACTION_EXTRACT) {
 		struct pw_pck_entry *ent = &pck->entries[PW_PCK_ENTRY_ALIASES];
 
+		/* skip the first entry */
+		rc = read_entry_hdr(pck, ent);
+		rc = rc || read_entry_hdr(pck, ent);
+		if (rc != 0) {
+			PWLOG(LOG_ERROR, "read_entry_hdr() failed: %d\n", rc);
+			goto err_cleanup;
+		}
+
 		snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
 		if (strcmp(ent->hdr.path, tmp) != 0) {
 			PWLOG(LOG_ERROR, "Alias filename mismatch, got=\"%s\", expected=\"%s\"\n",
@@ -539,19 +623,16 @@ read_pck(struct pw_pck *pck, enum pw_pck_action action)
 			goto err_cleanup;
 		}
 
+		process_entry_path(pck, ent, action);
+
 		rc = extract_entry(pck, ent);
 		if (rc != 0) {
 			PWLOG(LOG_ERROR, "extract_entry(%d) failed: %d\n", 0, rc);
 			goto err_cleanup;
 		}
 
-		readfile(ent->path_aliased_utf8, &alias_buf, &alias_buflen);
+		readfile(ent->hdr.path, &alias_buf, &alias_buflen);
 		read_aliases(pck, alias_buf);
-	}
-
-	if (pck->mg_version == 0) {
-		/* setup a few defaults */
-		pck->entry_max_cnt = pck->entry_cnt;
 	}
 
 	/* for anything but extract we'll need a file db to compare to */
@@ -564,18 +645,39 @@ read_pck(struct pw_pck *pck, enum pw_pck_action action)
 	}
 
 	fseek(pck->fp, pck->ftr.entry_list_off, SEEK_SET);
-	for (int i = 0; i < pck->entry_cnt; i++) {
-		struct pw_pck_entry *ent = &pck->entries[i];
+	uint32_t entry_idx = 0;
 
-		rc = read_entry_hdr(pck, &ent->hdr);
+	if (pck->mg_version == 0) {
+		/* if it's not a mirage package we need a few extra entry slots at the beginning */
+		struct pw_pck_entry *ent;
+		
+		ent = &pck->entries[PW_PCK_ENTRY_FREE_BLOCKS];
+		snprintf(ent->hdr.path, sizeof(ent->hdr.path),
+				"%s_fragm.dat", pck->name);
+		process_entry_path(pck, ent, action);
+		entry_idx++;
+
+		ent = &pck->entries[PW_PCK_ENTRY_ALIASES];
+		snprintf(ent->hdr.path, sizeof(ent->hdr.path),
+				"%s_aliases.cfg", pck->name);
+		process_entry_path(pck, ent, action);
+		entry_idx++;
+	}
+
+	for (; entry_idx < pck->entry_cnt; entry_idx++) {
+		struct pw_pck_entry *ent = &pck->entries[entry_idx];
+
+		rc = read_entry_hdr(pck, ent);
 		if (rc != 0) {
 			PWLOG(LOG_ERROR, "read_entry_hdr() failed: %d\n", rc);
 			goto err_cleanup;
 		}
 
-		ent->pck_idx = i;
 		process_entry_path(pck, ent, action);
 	}
+
+	pck->file_append_offset = pck->ftr.entry_list_off;
+	pck->ftr.entry_list_off = 0;
 
 	return 0;
 err_cleanup:
@@ -587,8 +689,6 @@ err_close:
 static int
 extract_entry(struct pw_pck *pck, struct pw_pck_entry *ent)
 {
-	size_t remaining_bytes = ent->hdr.length;
-	size_t read_bytes, buf_size;
 	FILE *fp = pck->fp;
 	int rc;
 
@@ -601,27 +701,18 @@ extract_entry(struct pw_pck *pck, struct pw_pck_entry *ent)
 	}
 
 	if (ent->hdr.compressed_length >= ent->hdr.length) {
-		char buf[16384];
-		/* not compressed */
-
-		do {
-			buf_size = MIN(sizeof(buf), remaining_bytes);
-			read_bytes = fread(buf, 1, buf_size, fp);
-			if (read_bytes != buf_size) {
-				PWLOG(LOG_ERROR, "read error on %s:%s\n", pck->name, ent->path_aliased_utf8);
-				fclose(fp_out);
-				return -1;
-			}
-
-			fwrite(buf, 1, read_bytes, fp_out);
-			remaining_bytes -= read_bytes;
-		} while (remaining_bytes > 0);
+		rc = pipe(fp_out, fp, ent->hdr.length);
+		if (rc) {
+			PWLOG(LOG_ERROR, "read error on %s:%s\n", pck->name, ent->path_aliased_utf8);
+			fclose(fp_out);
+			return rc;
+		}
 	} else {
 		rc = zpipe_uncompress(fp_out, fp, ent->hdr.compressed_length);
 		if (rc != Z_OK) {
-			PWLOG(LOG_ERROR, "uncompress error (%d) on %s:%s\n", rc, pck->name, ent->path_aliased_utf8);
+			PWLOG(LOG_ERROR, "uncompress error (%d - %d) on %s:%s\n", rc, errno, pck->name, ent->path_aliased_utf8);
 			fclose(fp_out);
-			return -rc;
+			return rc;
 		}
 	}
 
@@ -697,14 +788,15 @@ extract_pck(struct pw_pck *pck)
 		fclose(fp_tmp);
 
 		fprintf(pck->fp_log, "%s\n", tmp);
-	} else {
-		/* the first entry is always the list of free blocks, don't extract
-		 * it -> it should live inside the pck only */
-		entry_idx++;
-
-		/* the second entry is the log and it must have been extracted earlier, skip it now */
-		entry_idx++;
 	}
+
+	/* the first entry is always the list of free blocks, don't extract
+	 * it -> it should live inside the pck only */
+	entry_idx++;
+
+	/* the second entry is the log and it must have been extracted earlier, skip it now */
+	entry_idx++;
+	fprintf(pck->fp_log, "%s\n", pck->entries[1].path_aliased_utf8);
 
 	for (; entry_idx < pck->entry_cnt; entry_idx++) {
 		struct pw_pck_entry *ent = &pck->entries[entry_idx];
@@ -845,7 +937,7 @@ read_log(struct pw_pck *pck, bool ignore_updates)
 #define FindExInfoBasic 1
 
 static int
-find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files, struct pw_pck_entry **list)
+find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files)
 {
 	struct pck_file *file;
 	WIN32_FIND_DATAW fdata;
@@ -878,7 +970,7 @@ find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files, str
 			}
 
 			file = get_file(files, utf8_name);
-			find_modified_files(pck, buf, file ? file->nested : NULL, list);
+			find_modified_files(pck, buf, file ? file->nested : NULL);
 		} else {
 			struct pw_pck_entry *entry;
 
@@ -889,10 +981,14 @@ find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files, str
 			file = get_file(files, utf8_name);
 			if (file) {
 				entry = file->entry;
+				entry->is_present = true;
 				if (write_time <= entry->mod_time && fsize == entry->hdr.length) {
 					/* nothing new */
 					continue;
 				}
+
+				entry->is_modified = true;
+				entry->hdr.length = fsize;
 			} else {
 				/* a brand new file */
 				entry = calloc(1, sizeof(*entry));
@@ -901,22 +997,22 @@ find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files, str
 					return -ENOMEM;
 				}
 
-				entry->pck_idx = -1;
+				entry->is_present = true;
+				entry->is_modified = true;
 				entry->hdr.length = fsize;
 				if (path[0] == '.' && path[1] == '\\') {
 					snprintf(entry->path_aliased_utf8, sizeof(entry->path_aliased_utf8),
-							"%.*S\\%s", wcslen(path) - 2, path, utf8_name);
+							"%s", utf8_name);
 				} else {
 					snprintf(entry->path_aliased_utf8, sizeof(entry->path_aliased_utf8),
-							"%s", utf8_name);
+							"%.*S\\%s", wcslen(path) - 2, path, utf8_name);
 				}
+
+				entry->next = pck->new_entries;
+				pck->new_entries = entry;
 			}
 
-			entry->next = *list;
-			entry->is_present = true;
-			*list = entry;
-
-			//fprintf(stderr, "file=%s, wtime=%"PRIu64" last_modtime=%"PRIu64"\r\n", entry->path_aliased_utf8, write_time, entry->mod_time);
+			fprintf(stderr, "file=%s, wtime=%"PRIu64" last_modtime=%"PRIu64"\r\n", entry->path_aliased_utf8, write_time, entry->mod_time);
 		}
 	} while (FindNextFileW(handle, &fdata) != 0);
 
@@ -933,7 +1029,7 @@ find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files, str
 #else
 
 static int
-find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files, struct pw_pck_entry **list)
+find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files)
 {
 	return -ENOSYS;
 }
@@ -948,40 +1044,27 @@ struct pck_free_block {
 
 struct pck_free_blocks_meta {
 	uint32_t block_cnt;
-	uint32_t max_entry_cnt;
 };
 
-static int
+static void
 read_free_blocks(struct pw_pck *pck)
 {
-	struct pw_avl *avl;
 	struct pw_pck_entry *entry;
 	struct pck_free_blocks_meta meta;
 
 	assert(pck->mg_version > 0);
-
-	avl = pck->free_blocks_tree = pw_avl_init(sizeof(struct pck_free_block));
-	if (!avl) {
-		PWLOG(LOG_ERROR, "pw_avl_init() failed\n");
-		return -1;
-	}
 
 	entry = &pck->entries[PW_PCK_ENTRY_FREE_BLOCKS];
 
 	fseek(pck->fp, entry->hdr.offset, SEEK_SET);
 	fread(&meta, sizeof(meta), 1, pck->fp);
 
-	pck->entry_max_cnt = meta.max_entry_cnt;
-
-	assert(meta.block_cnt > 0);
 	for (int i = 0; i < meta.block_cnt; i++) {
-		struct pck_free_block *block = pw_avl_alloc(avl);
+		struct pck_free_block *block = pw_avl_alloc(pck->free_blocks_tree);
 
 		fread(block, sizeof(*block), 1, pck->fp);
-		pw_avl_insert(avl, block->size, block);
+		pw_avl_insert(pck->free_blocks_tree, block->size, block);
 	}
-
-	return 0;
 }
 
 static int
@@ -1022,12 +1105,12 @@ get_free_block(struct pw_pck *pck, uint32_t min_size)
 	if (prev_node) {
 		struct pck_free_block *block = (void *)prev_node->data;
 
-		pw_avl_remove(pck->free_blocks_tree, prev_node);
+		pw_avl_remove(pck->free_blocks_tree, block);
 		ret = block->offset;
 
-		/* if the remainder is smaller than sizeof(pck_free_block) then there's
+		/* if the remainder is smaller than 2*sizeof(pck_free_block) then there's
 		 * no point storing it ... */
-		if (block->size - min_size > 8) {
+		if (block->size - min_size > 16) {
 			block->offset += min_size;
 			block->size -= min_size;
 			pw_avl_insert(pck->free_blocks_tree, block->size, block);
@@ -1038,10 +1121,6 @@ get_free_block(struct pw_pck *pck, uint32_t min_size)
 		return ret;
 	}
 
-	if (pck->file_append_offset == 0) {
-		fseek(pck->fp, - 8 - sizeof(struct pw_pck_footer), SEEK_END);
-		pck->file_append_offset = ftell(pck->fp);
-	}
 	ret = pck->file_append_offset;
 	pck->file_append_offset += min_size;
 
@@ -1065,111 +1144,128 @@ _write_free_block(FILE *fp, struct pw_avl_node *node)
 	_write_free_block(fp, node->right);
 }
 
-static int
-write_free_blocks(struct pw_pck *pck, struct pw_pck_entry_header *ent_hdr)
+static void
+write_free_blocks(struct pw_pck *pck)
 {
+	struct pw_pck_entry *ent = &pck->entries[PW_PCK_ENTRY_FREE_BLOCKS];
 	struct pck_free_blocks_meta meta;
-	size_t off = ftell(pck->fp);
-	size_t off_end;
+	size_t fsize;
 
-	snprintf(ent_hdr->path, sizeof(ent_hdr->path), "%s_fragm.dat", pck->name);
-	ent_hdr->offset = off;
+	/* re-write free blocks */
+	if (ent->hdr.offset) {
+		add_free_block(pck, ent->hdr.offset, ent->hdr.length);
+	}
 
-	meta.block_cnt = 0; /* dummy, will be overritten later */
-	meta.max_entry_cnt = pck->entry_max_cnt;
+	fsize = sizeof(struct pck_free_blocks_meta) + pck->free_blocks_tree->el_count *
+			sizeof(struct pck_free_block);
+	ent->hdr.offset = get_free_block(pck, fsize);
 
+	fseek(pck->fp, ent->hdr.offset, SEEK_SET);
+	/* we want this file uncompressed, so fake the compress length */
+	ent->hdr.compressed_length = fsize + 1;
+
+	meta.block_cnt = pck->free_blocks_tree->el_count;
 	fwrite(&meta, sizeof(meta), 1, pck->fp);
-
-	pck->entry_max_cnt = meta.max_entry_cnt;
 
 	_write_free_block(pck->fp, pck->free_blocks_tree->root);
-	off_end = ftell(pck->fp);
+}
 
-	/* write the header again */
-	fseek(pck->fp, off, SEEK_SET);
-	meta.block_cnt = (off_end - off - sizeof(meta)) / sizeof(struct pck_free_block);
-	fwrite(&meta, sizeof(meta), 1, pck->fp);
+static uint32_t
+fp_int_at(FILE *fp, uint32_t off)
+{
+	uint32_t cur_off = ftell(fp);
+	uint32_t ret;
 
-	fseek(pck->fp, off_end, SEEK_SET);
+	fseek(fp, off, SEEK_SET);
+	fread(&ret, 4, 1, fp);
+	fseek(fp, cur_off, SEEK_SET);
 
+	return ret;
+}
+
+static int
+write_ftr(struct pw_pck *pck)
+{
+	fseek(pck->fp, pck->file_append_offset, SEEK_SET);
+
+	pck->ftr.entry_list_off ^= PW_PCK_XOR1;
+	snprintf(pck->ftr.description, sizeof(pck->ftr.description), "pwmirage :1 :Angelica File Package");
+
+	fwrite(&pck->ftr, sizeof(pck->ftr), 1, pck->fp);
+	fwrite(&pck->new_entry_cnt, 4, 1, pck->fp);
+	fwrite(&pck->ver, 4, 1, pck->fp);
+
+	pck->file_append_offset += 8 + sizeof(pck->ftr);
 	return 0;
 }
 
 static int
-compress_tmp(struct pw_pck *pck, struct pw_pck_entry *ent, FILE **compressed, FILE **uncompressed)
+write_entry(struct pw_pck *pck, struct pw_pck_entry *e)
 {
+	char *buf_compressed, *buf_uncompressed;
+	uLongf buf_compsize;
+	uint32_t prev_len = 0;
+	uint32_t new_len;
 	int rc;
 
-	FILE *fp_out = tmpfile();
-	if (fp_out == NULL) {
-		PWLOG(LOG_ERROR, "tmpfile() failed: %d\n", errno);
-		return -errno;
-	}
-
-	FILE *fp_in = wfopen(ent->path_aliased_utf8, "rb");
+	FILE *fp_in = wfopen(e->path_aliased_utf8, "rb");
 	if (fp_in == NULL) {
-		PWLOG(LOG_ERROR, "can't open \"%s\": %d\n", ent->path_aliased_utf8, errno);
+		PWLOG(LOG_ERROR, "can't open \"%s\": %d\n", e->path_aliased_utf8, errno);
 		return -errno;
 	}
 
-	fseek(fp_in, 0, SEEK_END);
-	ent->hdr.length = ftell(fp_in);
-	fseek(fp_in, 0, SEEK_SET);
+	buf_uncompressed = calloc(1, e->hdr.length);
+	if (!buf_uncompressed) {
+		PWLOG(LOG_ERROR, "calloc(%u) failed\n", buf_compsize);
+		return -ENOMEM;
+	}
 
-	rc = zpipe_compress(fp_out, fp_in, 0, Z_DEFAULT_COMPRESSION);
-	if (rc != 0) {
-		PWLOG(LOG_ERROR, "zpipe_compress() failed: %d\n", rc);
+	buf_compsize = compressBound(e->hdr.length);
+	buf_compressed = calloc(1, buf_compsize);
+	if (!buf_compressed) {
+		PWLOG(LOG_ERROR, "calloc(%u) failed\n", buf_compsize);
+		free(buf_uncompressed);
+		return -ENOMEM;
+	}
+
+	fread(buf_uncompressed, e->hdr.length, 1, fp_in);
+	fclose(fp_in);
+
+	rc = compress((Bytef *)buf_compressed, &buf_compsize, (const Bytef *)buf_uncompressed, e->hdr.length);
+	if (rc != Z_OK) {
+		free(buf_uncompressed);
+		free(buf_compressed);
 		return rc;
 	}
 
-	ent->hdr.compressed_length = ftell(fp_out);
-
-	*compressed = fp_out;
-	*uncompressed = fp_in;
-	return 0;
-}
-
-static int
-write_entry_hdr(struct pw_pck *pck, FILE **fp_hdr, struct pw_pck_entry *ent)
-{
-	int rc;
-
-	if (*fp_hdr) {
-		ent->pck_idx = pck->entry_cnt++;
-		return 0;
-	}
-
-	if (ent->pck_idx == -1) {
-		if (*fp_hdr == NULL && pck->entry_cnt >= pck->entry_max_cnt) {
-			/* we've run out of space! need to rewrite the entry list */
-			*fp_hdr = tmpfile();
-			if (!*fp_hdr) {
-				PWLOG(LOG_ERROR, "tmpfile() failed: %d\n", errno);
-				return -errno;
-			}
-
-			rc = add_free_block(pck, pck->ftr.entry_list_off,
-					pck->entry_max_cnt * sizeof(ent->hdr));
+	prev_len = MIN(e->hdr.compressed_length, e->hdr.length);
+	e->hdr.compressed_length = buf_compsize;
+	new_len = MIN(e->hdr.compressed_length, e->hdr.length);
+	/* prev_len will be always 0 for newly added files */
+	if (new_len != prev_len) {
+		if (prev_len) {
+			rc = add_free_block(pck, e->hdr.offset, prev_len);
 			if (rc) {
-				return rc;
-			}
-
-			fseek(pck->fp, pck->ftr.entry_list_off, SEEK_SET);
-			rc = zpipe_compress(*fp_hdr, pck->fp,
-					pck->entry_max_cnt * sizeof(ent->hdr), Z_NO_COMPRESSION);
-			if (rc != 0) {
-				PWLOG(LOG_ERROR, "zpipe_compress() failed: %d\n", rc);
+				free(buf_compressed);
+				free(buf_uncompressed);
 				return rc;
 			}
 		}
 
-		ent->pck_idx = pck->entry_cnt++;
+		e->hdr.offset = get_free_block(pck, new_len);
 	}
 
-	FILE *fp = *fp_hdr ? *fp_hdr : pck->fp;
-	fseek(fp, pck->ftr.entry_list_off + ent->pck_idx *
-			sizeof(struct pw_pck_entry_header), SEEK_SET);
-	fwrite(&ent->hdr, sizeof(ent->hdr), 1, fp);
+	fseek(pck->fp, e->hdr.offset, SEEK_SET);
+	if (e->hdr.length <= e->hdr.compressed_length) {
+		fwrite(buf_uncompressed, e->hdr.length, 1, pck->fp);
+	} else {
+		fwrite(buf_compressed, e->hdr.compressed_length, 1, pck->fp);
+	}
+
+	free(buf_compressed);
+	free(buf_uncompressed);
+
+	/* TODO: add log entry */
 	return 0;
 }
 
@@ -1198,7 +1294,7 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 	}
 	snprintf(pck->name, sizeof(pck->name), "%.*s", strlen(c) - strlen(".pck"), c);
 
-	pck->fp = fopen(path, "rb");
+	pck->fp = fopen(path, "r+b");
 	if (pck->fp == NULL) {
 		PWLOG(LOG_ERROR, "fopen(\"%s\") failed: %d\n", path, errno);
 		return -errno;
@@ -1232,7 +1328,11 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 		return rc;
 	}
 
-	struct pw_pck_entry *modified = NULL;
+	pck->free_blocks_tree = pw_avl_init(sizeof(struct pck_free_block));
+	if (!pck->free_blocks_tree) {
+		PWLOG(LOG_ERROR, "pw_avl_init() failed\n");
+		return -1;
+	}
 
 	if (action == PW_PCK_ACTION_UPDATE) {
 		snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
@@ -1241,137 +1341,78 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 		rc = read_aliases(pck, alias_buf);
 		rc = rc || read_pck(pck, action);
 		rc = rc || read_log(pck, false);
-		rc = rc || find_modified_files(pck, L".\\*", pck->entries_tree, &modified);
+		rc = rc || find_modified_files(pck, L".\\*", pck->entries_tree);
 
-		if (modified == NULL) {
-			return 0;
-		}
-
-		if (pck->mg_version == 0) {
-			/* TODO: repack everything and return */
-			return 0;
-		}
-
-		read_free_blocks(pck);
-
-		for (int i = PW_PCK_ENTRY_ALIASES; i < pck->entry_cnt; i++) {
+		/* add existing files to the new_entries list ; also free the space after
+		 * any removed files */
+		for (int i = pck->entry_cnt - 1; i >= PW_PCK_ENTRY_ALIASES; i--) {
 			struct pw_pck_entry *entry = &pck->entries[i];
 
 			if (entry->is_present) {
+				entry->next = pck->new_entries;
+				pck->new_entries = entry;
 				continue;
 			}
 
 			add_free_block(pck, entry->hdr.offset,
-					MAX(entry->hdr.compressed_length, entry->hdr.length));
+					MIN(entry->hdr.compressed_length, entry->hdr.length));
 		}
 
-		struct pw_pck_entry **ep = &modified;
-		FILE *fp_hdr = NULL;
+		if (pck->mg_version > 0) {
+			read_free_blocks(pck);
+		}
 
-		while (*ep) {
-			struct pw_pck_entry *e = *ep;
-			FILE *fp_compressed, *fp_uncompressed;
-			uint32_t prev_len = 0;
-			uint32_t new_len;
-
-			prev_len = MIN(e->hdr.compressed_length, e->hdr.length);
-			rc = compress_tmp(pck, e, &fp_compressed, &fp_uncompressed);
-			if (rc) {
-				PWLOG(LOG_ERROR, "compress_tmp(\"%s\") failed: %d\n", e->path_aliased_utf8, rc);
-				return -1;
+		/* write modified files into the pck */
+		struct pw_pck_entry *e = pck->new_entries;
+		while (e) {
+			if (!e->is_modified) {
+				e = e->next;
+				continue;
 			}
 
-			new_len = MIN(e->hdr.compressed_length, e->hdr.length);
-			/* compressed_length is always 0 for newly added files */
-			if (new_len != prev_len) {
-				if (prev_len) {
-					rc = add_free_block(pck, e->hdr.offset, prev_len);
-					if (rc) {
-						return rc;
-					}
-				}
-
-				e->hdr.offset = get_free_block(pck, new_len);
+			rc = write_entry(pck, e);
+			if (rc != 0) {
+				PWLOG(LOG_ERROR, "write_entry(\"%s\") failed: %d\n",
+						e->path_aliased_utf8, rc);
+				return rc;
 			}
 
-			rc = write_entry_hdr(pck, &fp_hdr, e);
+			e = e->next;
+		}
+
+		write_free_blocks(pck);
+
+		/* iterate once again to fill in the entry list */
+		fseek(pck->fp, pck->file_append_offset, SEEK_SET);
+		pck->ftr.entry_list_off = pck->file_append_offset;
+
+		rc = write_entry_hdr(pck, &pck->entries[PW_PCK_ENTRY_FREE_BLOCKS]);
+		if (rc != 0) {
+			PWLOG(LOG_ERROR, "write_entry_hdr() failed: %d\n", rc);
+			return rc;
+		}
+
+		e = pck->new_entries;
+		while (e) {
+			rc = write_entry_hdr(pck, e);
 			if (rc != 0) {
 				PWLOG(LOG_ERROR, "write_entry_hdr(\"%s\") failed: %d\n",
 						e->path_aliased_utf8, rc);
 				return rc;
 			}
 
-			fseek(pck->fp, e->hdr.offset, SEEK_SET);
-
-			if (e->hdr.length < e->hdr.compressed_length) {
-				rc = zpipe_compress(pck->fp, fp_uncompressed, e->hdr.length,
-						Z_NO_COMPRESSION);
-			} else {
-				rc = zpipe_compress(pck->fp, fp_compressed,
-						e->hdr.compressed_length, Z_DEFAULT_COMPRESSION);
-			}
-
-			if (rc != 0) {
-				PWLOG(LOG_ERROR, "zpipe_compress(\"%s\") failed: %d\n",
-						e->path_aliased_utf8, rc);
-				return rc;
-			}
-
-			fclose(fp_uncompressed);
-			fclose(fp_compressed);
-
-			/* remove from the "modifed" list */
-			*ep = (*ep)->next;
+			e = e->next;
 		}
 
-		struct pw_pck_entry *free_blocks = &pck->entries[PW_PCK_ENTRY_FREE_BLOCKS];
-		add_free_block(pck, free_blocks->hdr.offset, free_blocks->hdr.length);
-		size_t fsize = sizeof(struct pck_free_blocks_meta) +
-				pck->free_blocks_tree->el_count * sizeof(struct pck_free_block);
-		free_blocks->hdr.offset = get_free_block(pck, fsize);
-
-		rc = write_entry_hdr(pck, &fp_hdr, free_blocks);
-		if (rc != 0) {
-			PWLOG(LOG_ERROR, "write_entry_hdr(\"%s\") failed: %d\n",
-					e->path_aliased_utf8, rc);
-			return rc;
-		}
-
-		fseek(pck->fp, free_blocks->hdr.offset, SEEK_SET);
-		write_free_blocks(pck, free_blocks);
-
-		if (fp_hdr) {
-			uint32_t fsize = ftell(fp_hdr);
-			uint32_t off = get_free_block(pck, fsize);
-
-			rc = zpipe_compress(pck->fp, fp_hdr, fsize, Z_NO_COMPRESSION);
-			if (rc != 0) {
-				PWLOG(LOG_ERROR, "zpipe_compress(\"%s\") failed: %d\n",
-						e->path_aliased_utf8, rc);
-				return rc;
-			}
-
-			fclose(fp_hdr);
-			fp_hdr = NULL;
-		}
-
-		if (pck->file_append_offset) {
-			fseek(pck->fp, pck->file_append_offset, SEEK_SET);
-			uint32_t off = get_free_block(pck, fsize);
-
-			fwrite(&pck->ftr, sizeof(pck->ftr), 1, pck->fp);
-		} else {
-			fseek(pck->fp, -8, SEEK_END)
-		}
-
-		fwrite(&pck->entry_cnt, 4, 1, fp);
-		fwrite(&pck->ver, 4, 1, fp);
+		pck->file_append_offset = ftell(pck->fp);
 	}
+
+	write_ftr(pck);
 
 	fclose(pck->fp);
 	if (pck->file_append_offset) {
 		SetCurrentDirectory("..");
-		truncate(pck->fp, pck->file_append_offset);
+		truncate(path, pck->file_append_offset);
 	}
 
 	return rc;
