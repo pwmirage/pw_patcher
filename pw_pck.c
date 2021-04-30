@@ -102,7 +102,8 @@ djb2(const char *str) {
 
 struct pck_alias_tree {
 	struct pck_alias_tree *parent;
-	struct pw_avl *avl;
+	struct pw_avl *avl; /**< indexed by org name */
+	struct pw_avl *reverse_avl; /**< indexed by alias name */
 };
 
 struct pck_alias {
@@ -127,6 +128,13 @@ alloc_alias_tree(void)
 		return NULL;
 	}
 
+	tree->reverse_avl = pw_avl_init(sizeof(void *));
+	if (!tree->reverse_avl) {
+		free(tree->avl);
+		free(tree);
+		return NULL;
+	}
+
 	return tree;
 }
 
@@ -136,6 +144,7 @@ read_aliases(struct pw_pck *pck, char *buf)
 	struct pck_alias_tree *root_avl;
 	struct pck_alias_tree *cur_avl;
 	struct pck_alias *alias;
+	struct pck_alias **reverse_alias;
 	unsigned lineno = 0;
 	int nest_level = 0;
 
@@ -254,9 +263,9 @@ read_aliases(struct pw_pck *pck, char *buf)
 			c++;
 		}
 
-		if (!orgname) {
-			PWLOG(LOG_ERROR, "empty filename at line %u\n", lineno);
-			return -1;
+		if (!*orgname) {
+			/* it's not really an alias, just a directory for nesting */
+			orgname = newname;
 		}
 
 		alias = pw_avl_alloc(cur_avl->avl);
@@ -265,10 +274,20 @@ read_aliases(struct pw_pck *pck, char *buf)
 			return -1;
 		}
 
+		reverse_alias = pw_avl_alloc(cur_avl->reverse_avl);
+		if (!reverse_alias) {
+			PWLOG(LOG_ERROR, "pw_avl_alloc() failed\n");
+			return -1;
+		}
+
 		alias->new_name = newname;
 		alias->org_name = orgname;
 		unsigned hash = djb2(alias->org_name);
 		pw_avl_insert(cur_avl->avl, hash, alias);
+
+		*reverse_alias = alias;
+		hash = djb2(alias->new_name);
+		pw_avl_insert(cur_avl->reverse_avl, hash, reverse_alias);
 		lineno++;
 	}
 
@@ -290,6 +309,25 @@ get_alias(struct pck_alias_tree *aliases, char *filename)
 	alias = pw_avl_get(aliases->avl, hash);
 	while (alias && strcmp(alias->org_name, filename) != 0) {
 		alias = pw_avl_get_next(aliases->avl, alias);
+	}
+
+	return alias;
+}
+
+static struct pck_alias *
+get_name_by_alias(struct pck_alias_tree *aliases, char *filename)
+{
+	struct pck_alias *alias;
+	unsigned hash;
+
+	if (!aliases) {
+		return NULL;
+	}
+
+	hash = djb2(filename);
+	alias = *(void **)pw_avl_get(aliases->reverse_avl, hash);
+	while (alias && strcmp(alias->new_name, filename) != 0) {
+		alias = *(void **)pw_avl_get_next(aliases->reverse_avl, alias);
 	}
 
 	return alias;
@@ -340,6 +378,48 @@ read_entry_hdr(struct pw_pck *pck, struct pw_pck_entry *ent)
 }
 
 static int
+undo_path_translation(struct pw_pck *pck, char *org_buf, size_t orgsize, char *aliased)
+{
+	char *c, *word;
+	char bak;
+	struct pck_alias_tree *aliases = pck->alias_tree;
+	struct pck_alias *alias;
+	size_t org_buf_pos = 0;
+
+	c = word = aliased;
+	while (*c) {
+		if (*c == '\\' || *c == '/') {
+			bak = *c;
+			*c = 0;
+
+			alias = get_name_by_alias(aliases, word);
+			if (alias) {
+				aliases = alias->sub_aliases;
+			}
+
+			org_buf_pos += snprintf(org_buf + org_buf_pos, orgsize - org_buf_pos,
+					"%s/", alias ? alias->org_name : word);
+			*c = bak;
+			word = c + 1;
+		} else if (*c == 0) {
+
+			alias = get_name_by_alias(aliases, word);
+			if (alias) {
+				aliases = alias->sub_aliases;
+			}
+
+			org_buf_pos += snprintf(org_buf + org_buf_pos, orgsize - org_buf_pos,
+					"%s", alias ? alias->org_name : word);
+			break;
+		}
+
+		c++;
+	}
+
+	return 0;
+}
+
+static int
 write_entry_hdr(struct pw_pck *pck, struct pw_pck_entry *ent)
 {
 	struct pw_pck_entry_header *hdr = &ent->hdr;
@@ -348,7 +428,14 @@ write_entry_hdr(struct pw_pck *pck, struct pw_pck_entry *ent)
 	uLongf bufsize = compressBound(sizeof(*hdr));
 	int rc;
 
-	/* TODO set hdr->path if unset */
+	if (hdr->path[0] == '0') {
+		/* TODO lookup a non-aliased name */
+		char buf[396];
+		undo_path_translation(pck, buf, sizeof(buf), ent->path_aliased_utf8);
+
+		change_charset("UTF-8", "GB2312", buf, sizeof(buf),
+				hdr->path, sizeof(hdr->path));
+	}
 
 	buf = calloc(1, bufsize);
 	if (!buf) {
@@ -786,8 +873,6 @@ extract_pck(struct pw_pck *pck)
 		fprintf(fp_tmp, "#\tsomefile.sdr = 葬心林晶体.sdr\n");
 		fprintf(fp_tmp, "#\tsomefile2.sdr = 焚香谷瀑布.sdr\n");
 		fclose(fp_tmp);
-
-		fprintf(pck->fp_log, "%s\n", tmp);
 	}
 
 	/* the first entry is always the list of free blocks, don't extract
