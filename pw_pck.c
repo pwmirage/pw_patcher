@@ -1110,7 +1110,7 @@ find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files)
 
 				entry->is_modified = true;
 				entry->hdr.length = fsize;
-				print_colored_utf8(COLOR_YELLOW, "\t%s\n", entry->path_aliased_utf8);
+				print_colored_utf8(COLOR_YELLOW, "\t+%s\n", entry->path_aliased_utf8);
 			} else {
 				/* a brand new file */
 				entry = calloc(1, sizeof(*entry));
@@ -1132,7 +1132,7 @@ find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files)
 
 				entry->next = pck->new_entries;
 				pck->new_entries = entry;
-				print_colored_utf8(COLOR_GREEN, "\t%s\n", entry->path_aliased_utf8);
+				print_colored_utf8(COLOR_GREEN, "\t+%s\n", entry->path_aliased_utf8);
 			}
 
 		}
@@ -1330,6 +1330,8 @@ write_entry(struct pw_pck *pck, struct pw_pck_entry *e)
 	uint32_t new_len;
 	int rc;
 
+	pck->needs_update = true;
+
 	FILE *fp_in = wfopen(e->path_aliased_utf8, "rb");
 	if (fp_in == NULL) {
 		PWLOG(LOG_ERROR, "can't open \"%s\": %d\n", e->path_aliased_utf8, errno);
@@ -1387,7 +1389,7 @@ write_entry(struct pw_pck *pck, struct pw_pck_entry *e)
 	free(buf_compressed);
 	free(buf_uncompressed);
 
-	/* TODO: add log entry */
+	fprintf(pck->fp_log, "%s\n", e->path_aliased_utf8);
 	return 0;
 }
 
@@ -1428,7 +1430,7 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 
 	rc = access(tmp, F_OK);
 	if (action == PW_PCK_ACTION_EXTRACT) {
-		fprintf(stderr, "Extracting %s.pck ...\n", pck->name);
+		fprintf(stderr, "Extracting %s.pck ...\n\n", pck->name);
 
 		if (rc == 0) {
 			/* TODO implement -f */
@@ -1449,6 +1451,9 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 	if (action == PW_PCK_ACTION_EXTRACT) {
 		rc = read_pck(pck, action);
 		rc = rc || extract_pck(pck);
+		if (rc == 0) {
+			fprintf(stderr, "Done!\n");
+		}
 		return rc;
 	}
 
@@ -1459,7 +1464,7 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 	}
 
 	if (action == PW_PCK_ACTION_UPDATE) {
-		fprintf(stderr, "Updating %s.pck ...\n", pck->name);
+		fprintf(stderr, "Updating %s.pck ...\n\n", pck->name);
 
 		snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
 		readfile(tmp, &alias_buf, &alias_buflen);
@@ -1467,7 +1472,15 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 		rc = read_aliases(pck, alias_buf);
 		rc = rc || read_pck(pck, action);
 		rc = rc || read_log(pck, false);
-		rc = rc || find_modified_files(pck, L".\\*", pck->entries_tree);
+		if (rc) {
+			return rc;
+		}
+
+		fprintf(stderr, "Patching files:\n", pck->name);
+		rc = find_modified_files(pck, L".\\*", pck->entries_tree);
+		if (rc) {
+			return rc;
+		}
 
 		/* add existing files to the new_entries list ; also free the space after
 		 * any removed files */
@@ -1482,8 +1495,8 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 
 			add_free_block(pck, entry->hdr.offset,
 					MIN(entry->hdr.compressed_length, entry->hdr.length));
-			/* no need to add a log entry, if the file is added again it will
-			 * be detected through other means */
+			pck->needs_update = true;
+			print_colored_utf8(COLOR_RED, "\t-%s\n", entry->path_aliased_utf8);
 		}
 
 		if (pck->mg_version > 0) {
@@ -1506,6 +1519,12 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 			}
 
 			e = e->next;
+		}
+
+		if (!pck->needs_update) {
+			fprintf(stderr, "\t<nothing to be patched>\n");
+			fprintf(stderr, "Done!\n");
+			return 0;
 		}
 
 		write_free_blocks(pck);
@@ -1543,5 +1562,6 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 		truncate(path, pck->file_append_offset);
 	}
 
+	fprintf(stderr, "Done!\n");
 	return rc;
 }

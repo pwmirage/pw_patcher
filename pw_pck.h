@@ -66,14 +66,15 @@ struct pw_pck {
 	struct pw_pck_header hdr;
 	uint32_t ver;
 	uint32_t entry_cnt; /**< count of entries in pck->entries */
-	uint32_t new_entry_cnt; /**< count of entries to be written back into the pck */
+	uint32_t needs_update;
 	struct pw_pck_footer ftr;
 	struct pck_alias_tree *alias_tree;
 	struct pw_pck_entry *entries;
 	/** avl indexed by the alias name (or the org name if there's no alias) */
 	struct pw_avl *entries_tree;
 	struct pw_avl *free_blocks_tree;
-	struct pw_pck_entry *new_entries;
+	uint32_t new_entry_cnt; /**< count of entries to be written back into the pck */
+	struct pw_pck_entry *new_entries; /**< entries to be written back into the pck */
 	uint32_t file_append_offset;
 };
 
