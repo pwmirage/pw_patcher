@@ -84,20 +84,6 @@ fp_truncate(FILE *fp, uint32_t size)
 	SetEndOfFile(fh);
 }
 
-static void
-rmrf(char *path)
-{
-	SHFILEOPSTRUCT file_op = {
-		NULL, FO_DELETE, path, "",
-		FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT,
-		false, 0, ""
-	};
-	SHFileOperation(&file_op);
-
-	/* apparently some files can still persist for a while */
-	Sleep(1000);
-}
-
 static int
 pipe(FILE *dest, FILE *source, size_t remaining_bytes)
 {
@@ -1501,12 +1487,14 @@ write_ftr(struct pw_pck *pck)
 }
 
 int
-pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
+pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action, bool do_force)
 {
 	int rc;
 	const char *c;
 	char *alias_buf;
 	size_t alias_buflen;
+	uint64_t cur_time;
+	size_t log_hdr_pos;
 	char tmp[296];
 
 	/* set pck->name to basename, without .pck extension */
@@ -1540,9 +1528,11 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 		fprintf(stderr, "Extracting %s.pck ...\n\n", pck->name);
 
 		if (rc == 0) {
-			/* TODO implement -f */
-			//fprintf(stderr, "The pck was already extracted.\nPlease add \"-f\" flag if you want to override it");
-			rmrf(tmp);
+			if (!do_force) {
+				print_colored_utf8(COLOR_RED, "Error: ");
+				fprintf(stderr, "%s.pck.files already exists. Run mgpck with the `--force` flag to override files inside, or delete that directory manually.\n", pck->name);
+				return 0;
+			}
 		}
 		wmkdir(tmp);
 	} else {
@@ -1570,8 +1560,6 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 		return -1;
 	}
 
-	uint64_t cur_time;
-	size_t log_hdr_pos;
 
 	if (action == PW_PCK_ACTION_UPDATE) {
 		fprintf(stderr, "Updating %s.pck ...\n\n", pck->name);

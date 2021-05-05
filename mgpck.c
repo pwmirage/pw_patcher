@@ -28,10 +28,13 @@
 static void
 print_help(char *argv[0])
 {
-	printf("mgpck -x <path\\to\\archive.pck>\n");
+	printf("mgpck [-f] -x <path\\to\\archive.pck>\n");
 	printf("mgpck -u <path\\to\\archive.pck>\n");
-	printf("mgpck -g <path\\to\\archive.pck> <path\\for\\file.pck.patch>\n");
+	printf("mgpck [-f] -g <path\\to\\archive.pck> <path\\for\\file.pck.patch>\n");
 	printf("mgpck -a <path\\to\\archive.pck> <path\\to\\file.pck.patch>\n");
+	printf("\n");
+	printf("Flags:\n");
+	printf("  -f, --force          override files when extracting or creating a patch\n");
 	printf("\n");
 	printf("Actions:\n");
 	printf("  -x, --extract        extract *.pck archive into *.pck.files dir in the\n");
@@ -82,10 +85,16 @@ main(int argc, char *argv[])
 	int action = -1;
 	const char *pck_path = NULL;
 	const char *patch_path = NULL;
+	bool do_force = false;
 
 	char **a = argv;
 	while (argc > 0) {
-		if (argc >= 2 && (strcmp(*a, "-x") == 0 || strcmp(*a, "--extract") == 0)) {
+		if (strcmp(*a, "-h") == 0 || strcmp(*a, "--help") == 0) {
+			print_help(argv);
+			goto out;
+		} else if (strcmp(*a, "-f") == 0 || strcmp(*a, "--force") == 0) {
+			do_force = true;
+		} else if (argc >= 2 && (strcmp(*a, "-x") == 0 || strcmp(*a, "--extract") == 0)) {
 			action = PW_PCK_ACTION_EXTRACT;
 			pck_path = *(a + 1);
 			a++;
@@ -118,7 +127,7 @@ main(int argc, char *argv[])
 		goto out;
 	}
 
-	rc = pw_pck_open(&pck, pck_path, action);
+	rc = pw_pck_open(&pck, pck_path, action, do_force);
 	if (rc) {
 		PWLOG(LOG_ERROR, "pw_pck_open(%s) failed: %d\n", pck_path, rc);
 		goto out;

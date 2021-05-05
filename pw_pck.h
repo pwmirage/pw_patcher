@@ -85,6 +85,6 @@ enum pw_pck_action {
 	PW_PCK_ACTION_APPLY_PATCH,
 };
 
-int pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action);
+int pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action, bool do_force);
 
 #endif /* PW_PCK_H */
