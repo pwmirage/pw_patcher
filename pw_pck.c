@@ -1111,6 +1111,8 @@ find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files)
 				entry->is_modified = true;
 				entry->hdr.length = fsize;
 				print_colored_utf8(COLOR_YELLOW, "\t+%s\n", entry->path_aliased_utf8);
+
+				/* do not add into the new_entries just yet. it will be added later */
 			} else {
 				/* a brand new file */
 				entry = calloc(1, sizeof(*entry));
@@ -1134,6 +1136,7 @@ find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files)
 				pck->new_entries = entry;
 				print_colored_utf8(COLOR_GREEN, "\t+%s\n", entry->path_aliased_utf8);
 			}
+			fprintf(pck->fp_log, "%s\n", entry->path_aliased_utf8);
 
 		}
 	} while (FindNextFileW(handle, &fdata) != 0);
@@ -1463,11 +1466,18 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 		return -1;
 	}
 
+	uint64_t cur_time;
+	size_t log_hdr_pos;
+	cur_time = get_cur_time(tmp, sizeof(tmp));
+
 	if (action == PW_PCK_ACTION_UPDATE) {
 		fprintf(stderr, "Updating %s.pck ...\n\n", pck->name);
 
 		snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
 		readfile(tmp, &alias_buf, &alias_buflen);
+
+		log_hdr_pos = ftell(pck->fp_log);
+		fprintf(pck->fp_log, ":UPDATE:%020"PRIu64":%28s\n", cur_time, tmp);
 
 		rc = read_aliases(pck, alias_buf);
 		rc = rc || read_pck(pck, action);
@@ -1476,7 +1486,7 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 			return rc;
 		}
 
-		fprintf(stderr, "Patching files:\n", pck->name);
+		fprintf(stderr, "Patching files:\n");
 		rc = find_modified_files(pck, L".\\*", pck->entries_tree);
 		if (rc) {
 			return rc;
@@ -1496,6 +1506,7 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 			add_free_block(pck, entry->hdr.offset,
 					MIN(entry->hdr.compressed_length, entry->hdr.length));
 			pck->needs_update = true;
+			fprintf(pck->fp_log, "?%s\n", entry->path_aliased_utf8);
 			print_colored_utf8(COLOR_RED, "\t-%s\n", entry->path_aliased_utf8);
 		}
 
