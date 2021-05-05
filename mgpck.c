@@ -71,7 +71,7 @@ main(int argc, char *argv[])
 	struct pw_pck pck = {0};
 	int rc = -1;
 
-	setlocale(LC_ALL, "en_US.UTF-8");
+	setlocale(LC_ALL, "chinese");
 	enable_console();
 
 	if (argc < 2) {

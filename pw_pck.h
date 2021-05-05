@@ -31,12 +31,12 @@ struct pw_pck_footer {
 	uint32_t magic1;
 };
 
-#define PW_PCK_ENTRY_SIZE (sizeof(struct pw_pck_entry_header) + 8)
 struct pw_pck_entry_header {
-	char path[260]; /* GB2312. always 260 bytes = MAX_PATH */
+	char path[260]; /* GBK. always 260 bytes = MAX_PATH */
 	uint32_t offset;
 	uint32_t length;
 	uint32_t compressed_length;
+	uint32_t unknown;
 };
 
 struct pw_pck_entry {

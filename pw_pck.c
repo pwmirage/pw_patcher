@@ -26,6 +26,10 @@
 #include "avl.h"
 #include "common.h"
 
+/* enable fseek with uint32_t > 2GB */
+#define fseek _fseeki64
+#define ftell ftello64
+
 static FILE *
 wfopen(const char *path, const char *flags)
 {
@@ -52,6 +56,32 @@ wfopen(const char *path, const char *flags)
 
 	free(wpath);
 	return fp;
+}
+
+static void
+wmkdir(const char *path)
+{
+	size_t path_len = strlen(path);
+	wchar_t *wpath = calloc(1, sizeof(wchar_t) * (path_len + 1));
+
+	if (!wpath) {
+		return;
+	}
+
+	path_len = MultiByteToWideChar(CP_UTF8, 0, path, path_len, wpath, path_len);
+	wpath[path_len] = 0;
+	CreateDirectoryW(wpath, NULL);
+}
+
+static void
+fp_truncate(FILE *fp, uint32_t size)
+{
+	/* truncate() doesn't work on >2GB files, use WinApi */
+	fseek(fp, size, SEEK_SET);
+	fflush(fp);
+
+	HANDLE fh = _get_osfhandle(_fileno(fp));
+	SetEndOfFile(fh);
 }
 
 static void
@@ -180,7 +210,7 @@ read_aliases(struct pw_pck *pck, char *buf)
 {
 	struct pck_alias_tree *root_avl;
 	struct pck_alias_tree *cur_avl;
-	struct pck_alias *alias;
+	struct pck_alias *alias = NULL;
 	struct pck_alias **reverse_alias;
 	unsigned lineno = 0;
 	int nest_level = 0;
@@ -354,7 +384,7 @@ get_alias(struct pck_alias_tree *aliases, char *filename)
 static struct pck_alias *
 get_name_by_alias(struct pck_alias_tree *aliases, char *filename)
 {
-	struct pck_alias *alias;
+	struct pck_alias **alias_p;
 	unsigned hash;
 
 	if (!aliases) {
@@ -362,12 +392,12 @@ get_name_by_alias(struct pck_alias_tree *aliases, char *filename)
 	}
 
 	hash = djb2(filename);
-	alias = *(void **)pw_avl_get(aliases->reverse_avl, hash);
-	while (alias && strcmp(alias->new_name, filename) != 0) {
-		alias = *(void **)pw_avl_get_next(aliases->reverse_avl, alias);
+	alias_p = pw_avl_get(aliases->reverse_avl, hash);
+	while (alias_p && strcmp((*alias_p)->new_name, filename) != 0) {
+		alias_p = pw_avl_get_next(aliases->reverse_avl, *alias_p);
 	}
 
-	return alias;
+	return alias_p ? *alias_p : NULL;
 }
 
 static int
@@ -392,7 +422,7 @@ read_entry_hdr(struct pw_pck *pck, struct pw_pck_entry *ent)
 	}
 
 	if (compressed_size == sizeof(*hdr)) {
-		fread(hdr, compressed_size, 1, fp);
+		fread(hdr, sizeof(*hdr), 1, fp);
 	} else {
 		char *buf = calloc(1, compressed_size);
 
@@ -406,8 +436,9 @@ read_entry_hdr(struct pw_pck *pck, struct pw_pck_entry *ent)
 		uLongf uncompressed_size = sizeof(*hdr);
 		rc = uncompress((Bytef *)hdr, &uncompressed_size, (const Bytef *)buf, compressed_size);
 		free(buf);
-		if (rc != Z_OK || uncompressed_size != sizeof(*hdr)) {
-			return rc;
+		if (rc != Z_OK || (uncompressed_size != sizeof(*hdr) &&
+					uncompressed_size != sizeof(*hdr) - 4)) {
+			return rc || -ENOSPC;
 		}
 	}
 
@@ -424,7 +455,7 @@ undo_path_translation(struct pw_pck *pck, char *org_buf, size_t orgsize, char *a
 	size_t org_buf_pos = 0;
 
 	c = word = aliased;
-	while (*c) {
+	while (1) {
 		if (*c == '\\' || *c == '/') {
 			bak = *c;
 			*c = 0;
@@ -465,11 +496,11 @@ write_entry_hdr(struct pw_pck *pck, struct pw_pck_entry *ent)
 	uLongf bufsize = compressBound(sizeof(*hdr));
 	int rc;
 
-	if (hdr->path[0] == '0') {
+	if (hdr->path[0] == 0) {
 		char buf[396];
 		undo_path_translation(pck, buf, sizeof(buf), ent->path_aliased_utf8);
 
-		change_charset("UTF-8", "GB2312", buf, sizeof(buf),
+		change_charset("UTF-8", "GBK", buf, strlen(buf) + 1,
 				hdr->path, sizeof(hdr->path));
 	}
 
@@ -503,7 +534,6 @@ write_entry_hdr(struct pw_pck *pck, struct pw_pck_entry *ent)
 	pck->new_entry_cnt++;
 	return 0;
 }
-
 
 /* each file or directory inside an entry's path */
 struct pck_file {
@@ -568,7 +598,6 @@ set_file(struct pw_avl *files, char *name, struct pw_pck_entry *ent)
 	return file;
 }
 
-
 /** convert the path to utf8, find an alias for it, fill in the entry avl */
 static int
 process_entry_path(struct pw_pck *pck, struct pw_pck_entry *ent, enum pw_pck_action action)
@@ -581,7 +610,7 @@ process_entry_path(struct pw_pck *pck, struct pw_pck_entry *ent, enum pw_pck_act
 	struct pck_alias *alias;
 	size_t aliased_len = 0;
 
-	change_charset("GB2312", "UTF-8", ent->hdr.path, sizeof(ent->hdr.path), utf8_path, sizeof(utf8_path));
+	change_charset("GBK", "UTF-8", ent->hdr.path, sizeof(ent->hdr.path), utf8_path, sizeof(utf8_path));
 
 	c = word = utf8_path;
 	while (1) {
@@ -597,7 +626,7 @@ process_entry_path(struct pw_pck *pck, struct pw_pck_entry *ent, enum pw_pck_act
 			}
 
 			if (action == PW_PCK_ACTION_EXTRACT) {
-				mkdir(ent->path_aliased_utf8, 0755);
+				wmkdir(ent->path_aliased_utf8);
 			} else {
 				if (alias) {
 					file = set_file(files, alias->new_name, NULL);
@@ -663,7 +692,7 @@ read_pck(struct pw_pck *pck, enum pw_pck_action action)
 	char tmp[296];
 	char *alias_buf = NULL;
 	size_t alias_buflen = 0;
-	size_t fsize;
+	uint32_t fsize;
 	int rc;
 
 	/* read the file and check magic numbers at the very beginning */
@@ -851,9 +880,12 @@ get_cur_time(char *buf, size_t buflen)
 	FILETIME ft;
 	size_t date_len;
 
-	GetLocalTime(&st);
+	/* get utc time */
+	GetSystemTime(&st);
 	SystemTimeToFileTime(&st, &ft);
 
+	/* pretty print time in local timezone */
+	GetLocalTime(&st);
 	date_len = GetDateFormat(LOCALE_USER_DEFAULT, DATE_SHORTDATE, &st, NULL, buf, buflen);
 
 	if (date_len >= buflen) {
@@ -992,7 +1024,7 @@ read_log(struct pw_pck *pck, bool ignore_updates)
 
 		/* header */
 		if (line[0] == ':') {
-			rc = sscanf(line, " : %[^:] : %"PRIu64" : %*s", tmp, &cur_modtime);
+			rc = sscanf(line, " : %[^:] : %"SCNu64" : %*s", tmp, &cur_modtime);
 			if (rc != 2) {
 				PWLOG(LOG_ERROR, "Incomplete header at line %u\n\t\"%s\"\n", lineno, line);
 				return -EIO;
@@ -1046,6 +1078,7 @@ read_log(struct pw_pck *pck, bool ignore_updates)
 		lineno++;
 	}
 
+	fseek(pck->fp_log, 0, SEEK_END);
 	return 0;
 }
 
@@ -1252,6 +1285,32 @@ get_free_block(struct pw_pck *pck, uint32_t min_size)
 	return ret;
 }
 
+static bool
+process_pck_files(struct pw_pck *pck)
+{
+	bool ret = false;
+
+	/* add existing files to the new_entries list ; also free the space after
+	 * any removed files */
+	for (int i = pck->entry_cnt - 1; i >= PW_PCK_ENTRY_ALIASES; i--) {
+		struct pw_pck_entry *entry = &pck->entries[i];
+
+		if (entry->is_present) {
+			entry->next = pck->new_entries;
+			pck->new_entries = entry;
+			continue;
+		}
+
+		add_free_block(pck, entry->hdr.offset,
+				MIN(entry->hdr.compressed_length, entry->hdr.length));
+		fprintf(pck->fp_log, "?%s\n", entry->path_aliased_utf8);
+		print_colored_utf8(COLOR_RED, "\t-%s\n", entry->path_aliased_utf8);
+		ret = true;
+	}
+
+	return ret;
+}
+
 static void
 _write_free_block(FILE *fp, struct pw_avl_node *node)
 {
@@ -1295,35 +1354,6 @@ write_free_blocks(struct pw_pck *pck)
 	_write_free_block(pck->fp, pck->free_blocks_tree->root);
 }
 
-static uint32_t
-fp_int_at(FILE *fp, uint32_t off)
-{
-	uint32_t cur_off = ftell(fp);
-	uint32_t ret;
-
-	fseek(fp, off, SEEK_SET);
-	fread(&ret, 4, 1, fp);
-	fseek(fp, cur_off, SEEK_SET);
-
-	return ret;
-}
-
-static int
-write_ftr(struct pw_pck *pck)
-{
-	fseek(pck->fp, pck->file_append_offset, SEEK_SET);
-
-	pck->ftr.entry_list_off ^= PW_PCK_XOR1;
-	snprintf(pck->ftr.description, sizeof(pck->ftr.description), "pwmirage :1 :Angelica File Package");
-
-	fwrite(&pck->ftr, sizeof(pck->ftr), 1, pck->fp);
-	fwrite(&pck->new_entry_cnt, 4, 1, pck->fp);
-	fwrite(&pck->ver, 4, 1, pck->fp);
-
-	pck->file_append_offset += 8 + sizeof(pck->ftr);
-	return 0;
-}
-
 static int
 write_entry(struct pw_pck *pck, struct pw_pck_entry *e)
 {
@@ -1332,8 +1362,6 @@ write_entry(struct pw_pck *pck, struct pw_pck_entry *e)
 	uint32_t prev_len = 0;
 	uint32_t new_len;
 	int rc;
-
-	pck->needs_update = true;
 
 	FILE *fp_in = wfopen(e->path_aliased_utf8, "rb");
 	if (fp_in == NULL) {
@@ -1392,7 +1420,83 @@ write_entry(struct pw_pck *pck, struct pw_pck_entry *e)
 	free(buf_compressed);
 	free(buf_uncompressed);
 
-	fprintf(pck->fp_log, "%s\n", e->path_aliased_utf8);
+	return 0;
+}
+
+static bool
+write_modified_pck_files(struct pw_pck *pck)
+{
+	bool ret = false;
+	int rc;
+
+	struct pw_pck_entry *e = pck->new_entries;
+	while (e) {
+		if (!e->is_modified) {
+			e = e->next;
+			continue;
+		}
+
+		ret = true;
+		rc = write_entry(pck, e);
+		if (rc != 0) {
+			PWLOG(LOG_ERROR, "write_entry(\"%s\") failed: %d\n",
+					e->path_aliased_utf8, rc);
+			return rc;
+		}
+
+		e = e->next;
+	}
+
+	return ret;
+}
+
+static int
+rewrite_entry_hdr_list(struct pw_pck *pck)
+{
+	struct pw_pck_entry *e;
+	int rc;
+
+	fseek(pck->fp, pck->file_append_offset, SEEK_SET);
+	pck->ftr.entry_list_off = pck->file_append_offset;
+
+	rc = write_entry_hdr(pck, &pck->entries[PW_PCK_ENTRY_FREE_BLOCKS]);
+	if (rc != 0) {
+		PWLOG(LOG_ERROR, "write_entry_hdr() failed: %d\n", rc);
+		return rc;
+	}
+
+	e = pck->new_entries;
+	while (e) {
+		rc = write_entry_hdr(pck, e);
+		if (rc != 0) {
+			PWLOG(LOG_ERROR, "write_entry_hdr(\"%s\") failed: %d\n",
+					e->path_aliased_utf8, rc);
+			return rc;
+		}
+
+		e = e->next;
+	}
+
+	pck->file_append_offset = ftell(pck->fp);
+	return 0;
+}
+
+static int
+write_ftr(struct pw_pck *pck)
+{
+	/* newline for prettiness */
+	fprintf(pck->fp_log, "\n");
+
+	fseek(pck->fp, pck->file_append_offset, SEEK_SET);
+
+	pck->ftr.entry_list_off ^= PW_PCK_XOR1;
+	snprintf(pck->ftr.description, sizeof(pck->ftr.description), "pwmirage :1 :Angelica File Package");
+
+	fwrite(&pck->ftr, sizeof(pck->ftr), 1, pck->fp);
+	fwrite(&pck->new_entry_cnt, 4, 1, pck->fp);
+	fwrite(&pck->ver, 4, 1, pck->fp);
+
+	pck->file_append_offset += 8 + sizeof(pck->ftr);
 	return 0;
 }
 
@@ -1440,7 +1544,7 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 			//fprintf(stderr, "The pck was already extracted.\nPlease add \"-f\" flag if you want to override it");
 			rmrf(tmp);
 		}
-		mkdir(tmp, 0755);
+		wmkdir(tmp);
 	} else {
 		if (rc != 0) {
 			PWLOG(LOG_ERROR, "Can't find \"%s\"\n", tmp);
@@ -1468,16 +1572,12 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 
 	uint64_t cur_time;
 	size_t log_hdr_pos;
-	cur_time = get_cur_time(tmp, sizeof(tmp));
 
 	if (action == PW_PCK_ACTION_UPDATE) {
 		fprintf(stderr, "Updating %s.pck ...\n\n", pck->name);
 
 		snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
 		readfile(tmp, &alias_buf, &alias_buflen);
-
-		log_hdr_pos = ftell(pck->fp_log);
-		fprintf(pck->fp_log, ":UPDATE:%020"PRIu64":%28s\n", cur_time, tmp);
 
 		rc = read_aliases(pck, alias_buf);
 		rc = rc || read_pck(pck, action);
@@ -1486,83 +1586,37 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 			return rc;
 		}
 
+		log_hdr_pos = ftell(pck->fp_log);
+		cur_time = get_cur_time(tmp, sizeof(tmp));
+		fprintf(pck->fp_log, ":UPDATE:%020"PRIu64":%28s\n", cur_time, tmp);
+
 		fprintf(stderr, "Patching files:\n");
 		rc = find_modified_files(pck, L".\\*", pck->entries_tree);
 		if (rc) {
 			return rc;
 		}
 
-		/* add existing files to the new_entries list ; also free the space after
-		 * any removed files */
-		for (int i = pck->entry_cnt - 1; i >= PW_PCK_ENTRY_ALIASES; i--) {
-			struct pw_pck_entry *entry = &pck->entries[i];
-
-			if (entry->is_present) {
-				entry->next = pck->new_entries;
-				pck->new_entries = entry;
-				continue;
-			}
-
-			add_free_block(pck, entry->hdr.offset,
-					MIN(entry->hdr.compressed_length, entry->hdr.length));
-			pck->needs_update = true;
-			fprintf(pck->fp_log, "?%s\n", entry->path_aliased_utf8);
-			print_colored_utf8(COLOR_RED, "\t-%s\n", entry->path_aliased_utf8);
-		}
-
+		pck->needs_update = process_pck_files(pck);
 		if (pck->mg_version > 0) {
 			read_free_blocks(pck);
 		}
 
-		/* write modified files into the pck */
-		struct pw_pck_entry *e = pck->new_entries;
-		while (e) {
-			if (!e->is_modified) {
-				e = e->next;
-				continue;
-			}
-
-			rc = write_entry(pck, e);
-			if (rc != 0) {
-				PWLOG(LOG_ERROR, "write_entry(\"%s\") failed: %d\n",
-						e->path_aliased_utf8, rc);
-				return rc;
-			}
-
-			e = e->next;
-		}
+		bool modified = write_modified_pck_files(pck);
+		pck->needs_update = pck->needs_update || modified;
 
 		if (!pck->needs_update) {
 			fprintf(stderr, "\t<nothing to be patched>\n");
 			fprintf(stderr, "Done!\n");
+			fp_truncate(pck->fp_log, log_hdr_pos);
 			return 0;
 		}
 
 		write_free_blocks(pck);
 
-		/* iterate once again to fill in the entry list */
-		fseek(pck->fp, pck->file_append_offset, SEEK_SET);
-		pck->ftr.entry_list_off = pck->file_append_offset;
-
-		rc = write_entry_hdr(pck, &pck->entries[PW_PCK_ENTRY_FREE_BLOCKS]);
-		if (rc != 0) {
-			PWLOG(LOG_ERROR, "write_entry_hdr() failed: %d\n", rc);
+		rc = rewrite_entry_hdr_list(pck);
+		if (rc) {
 			return rc;
 		}
-
-		e = pck->new_entries;
-		while (e) {
-			rc = write_entry_hdr(pck, e);
-			if (rc != 0) {
-				PWLOG(LOG_ERROR, "write_entry_hdr(\"%s\") failed: %d\n",
-						e->path_aliased_utf8, rc);
-				return rc;
-			}
-
-			e = e->next;
-		}
-
-		pck->file_append_offset = ftell(pck->fp);
 	}
 
 	write_ftr(pck);
@@ -1571,11 +1625,10 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 	fseek(pck->fp, 0, SEEK_SET);
 	fwrite(&pck->hdr, sizeof(pck->hdr), 1, pck->fp);
 
-	fclose(pck->fp);
 	if (pck->file_append_offset) {
-		SetCurrentDirectory("..");
-		truncate(path, pck->file_append_offset);
+		fp_truncate(pck->fp, pck->file_append_offset);
 	}
+	fclose(pck->fp);
 
 	fprintf(stderr, "Done!\n");
 	return rc;

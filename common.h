@@ -22,9 +22,6 @@
 	   int rc = ftruncate(fd, sz); \
 	   close(fd); \
 	   rc; })
-
-/* linux compatibility */
-#define mkdir(A, B) mkdir(A)
 #endif
 
 #ifndef MIN
