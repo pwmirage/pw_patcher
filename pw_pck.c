@@ -80,7 +80,7 @@ fp_truncate(FILE *fp, uint32_t size)
 	fseek(fp, size, SEEK_SET);
 	fflush(fp);
 
-	HANDLE fh = _get_osfhandle(_fileno(fp));
+	HANDLE fh = (HANDLE)_get_osfhandle(_fileno(fp));
 	SetEndOfFile(fh);
 }
 
@@ -204,6 +204,10 @@ read_aliases(struct pw_pck *pck, char *buf)
 	root_avl = cur_avl = alloc_alias_tree();
 	if (!root_avl) {
 		return -1;
+	}
+
+	if (buf == NULL) {
+		return 0;
 	}
 
 	char *c = buf;
@@ -1015,6 +1019,7 @@ read_log(struct pw_pck *pck, bool ignore_updates)
 				PWLOG(LOG_ERROR, "Incomplete header at line %u\n\t\"%s\"\n", lineno, line);
 				return -EIO;
 			}
+
 			lineno++;
 			continue;
 		}
@@ -1284,6 +1289,9 @@ process_pck_files(struct pw_pck *pck)
 		if (entry->is_present) {
 			entry->next = pck->new_entries;
 			pck->new_entries = entry;
+			if (entry->is_modified) {
+				ret = true;
+			}
 			continue;
 		}
 
@@ -1409,10 +1417,9 @@ write_entry(struct pw_pck *pck, struct pw_pck_entry *e)
 	return 0;
 }
 
-static bool
+static int
 write_modified_pck_files(struct pw_pck *pck)
 {
-	bool ret = false;
 	int rc;
 
 	struct pw_pck_entry *e = pck->new_entries;
@@ -1422,7 +1429,6 @@ write_modified_pck_files(struct pw_pck *pck)
 			continue;
 		}
 
-		ret = true;
 		rc = write_entry(pck, e);
 		if (rc != 0) {
 			PWLOG(LOG_ERROR, "write_entry(\"%s\") failed: %d\n",
@@ -1433,7 +1439,7 @@ write_modified_pck_files(struct pw_pck *pck)
 		e = e->next;
 	}
 
-	return ret;
+	return 0;
 }
 
 static int
@@ -1486,15 +1492,87 @@ write_ftr(struct pw_pck *pck)
 	return 0;
 }
 
+static int
+update_pck(struct pw_pck *pck, enum pw_pck_action action)
+{
+	int rc;
+	char *alias_buf;
+	size_t alias_buflen;
+	uint64_t cur_time;
+	size_t log_hdr_pos;
+	char tmp[296];
+
+	snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
+	rc = readfile(tmp, &alias_buf, &alias_buflen);
+	if (rc) {
+		PWLOG(LOG_ERROR, "Can't open the log file. Please extract the .pck file again using mgpck\n");
+		return -1;
+	}
+
+	rc = read_aliases(pck, alias_buf);
+	rc = rc || read_pck(pck, PW_PCK_ACTION_UPDATE);
+	rc = rc || read_log(pck, false);
+	if (rc) {
+		return rc;
+	}
+
+	log_hdr_pos = ftell(pck->fp_log);
+	cur_time = get_cur_time(tmp, sizeof(tmp));
+	fprintf(pck->fp_log, ":UPDATE:%020"PRIu64":%28s\n", cur_time, tmp);
+
+	rc = find_modified_files(pck, L".\\*", pck->entries_tree);
+	if (rc) {
+		return rc;
+	}
+
+	pck->needs_update = process_pck_files(pck);
+
+	if (!pck->needs_update) {
+		if (action == PW_PCK_ACTION_UPDATE) {
+			fprintf(stderr, "Patching files:\n");
+			fprintf(stderr, "\t<everything up to date>\n");
+		}
+		fp_truncate(pck->fp_log, log_hdr_pos);
+		return 0;
+	} else if (action == PW_PCK_ACTION_GEN_PATCH) {
+		fprintf(stderr, "%s.pck needs to be patched first\n", pck->name);
+	}
+
+	fprintf(stderr, "Patching files:\n");
+
+	if (pck->mg_version > 0) {
+		read_free_blocks(pck);
+	}
+
+	rc = write_modified_pck_files(pck);
+	if (rc) {
+		return rc;
+	}
+
+	write_free_blocks(pck);
+	rc = rewrite_entry_hdr_list(pck);
+	if (rc) {
+		return rc;
+	}
+
+	write_ftr(pck);
+
+	pck->hdr.file_size = ftell(pck->fp);
+	fseek(pck->fp, 0, SEEK_SET);
+	fwrite(&pck->hdr, sizeof(pck->hdr), 1, pck->fp);
+
+	if (pck->file_append_offset) {
+		fp_truncate(pck->fp, pck->file_append_offset);
+	}
+
+	return 0;
+}
+
 int
 pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action, bool do_force)
 {
 	int rc;
 	const char *c;
-	char *alias_buf;
-	size_t alias_buflen;
-	uint64_t cur_time;
-	size_t log_hdr_pos;
 	char tmp[296];
 
 	/* set pck->name to basename, without .pck extension */
@@ -1560,63 +1638,21 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action, boo
 		return -1;
 	}
 
+	if (action == PW_PCK_ACTION_GEN_PATCH) {
+		fprintf(stderr, "Generating a patch for %s.pck ...\n\n", pck->name);
+		rc = update_pck(pck, action);
+		if (rc) {
+			return rc;
+		}
+	}
 
 	if (action == PW_PCK_ACTION_UPDATE) {
 		fprintf(stderr, "Updating %s.pck ...\n\n", pck->name);
-
-		snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
-		readfile(tmp, &alias_buf, &alias_buflen);
-
-		rc = read_aliases(pck, alias_buf);
-		rc = rc || read_pck(pck, action);
-		rc = rc || read_log(pck, false);
-		if (rc) {
-			return rc;
-		}
-
-		log_hdr_pos = ftell(pck->fp_log);
-		cur_time = get_cur_time(tmp, sizeof(tmp));
-		fprintf(pck->fp_log, ":UPDATE:%020"PRIu64":%28s\n", cur_time, tmp);
-
-		fprintf(stderr, "Patching files:\n");
-		rc = find_modified_files(pck, L".\\*", pck->entries_tree);
-		if (rc) {
-			return rc;
-		}
-
-		pck->needs_update = process_pck_files(pck);
-		if (pck->mg_version > 0) {
-			read_free_blocks(pck);
-		}
-
-		bool modified = write_modified_pck_files(pck);
-		pck->needs_update = pck->needs_update || modified;
-
-		if (!pck->needs_update) {
-			fprintf(stderr, "\t<nothing to be patched>\n");
-			fprintf(stderr, "Done!\n");
-			fp_truncate(pck->fp_log, log_hdr_pos);
-			return 0;
-		}
-
-		write_free_blocks(pck);
-
-		rc = rewrite_entry_hdr_list(pck);
+		rc = update_pck(pck, action);
 		if (rc) {
 			return rc;
 		}
 	}
-
-	write_ftr(pck);
-
-	pck->hdr.file_size = ftell(pck->fp);
-	fseek(pck->fp, 0, SEEK_SET);
-	fwrite(&pck->hdr, sizeof(pck->hdr), 1, pck->fp);
-
-	if (pck->file_append_offset) {
-		fp_truncate(pck->fp, pck->file_append_offset);
-	}
-	fclose(pck->fp);
 
 	fprintf(stderr, "Done!\n");
 	return rc;
