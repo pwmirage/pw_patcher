@@ -62,10 +62,7 @@ static void
 enable_console(void)
 {
 	AttachConsole(ATTACH_PARENT_PROCESS);
-
-	freopen("CONIN$", "r", stdin);
-	freopen("CONOUT$", "w", stdout);
-	freopen("CONOUT$", "w", stderr);
+	g_stdoutH = GetStdHandle(STD_OUTPUT_HANDLE);
 }
 
 int

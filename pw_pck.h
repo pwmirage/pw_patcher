@@ -10,6 +10,8 @@
 
 #include "common.h"
 
+extern HANDLE g_stdoutH;
+
 #define PCK_HEADER_MAGIC0 0x4dca23ef
 #define PCK_HEADER_MAGIC1 0x56a089b7
 struct pw_pck_header {

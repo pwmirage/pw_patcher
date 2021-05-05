@@ -42,7 +42,7 @@ build/updater: build/gcc_ver.h build/updater.o
 	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ updater_rc.o -Wl,--no-whole-archive -s -Wl,--subsystem,windows -lwininet -Wno-address-of-packed-member
 
 build/mgpck: build/gcc_ver.h build/cjson.o build/common.o build/mgpck.o build/pw_pck.o build/avl.o build/zpipe.o
-	gcc $(_CFLAGS) -o $@ $^ -Wl,--subsystem,windows -lwininet -mwindows -Wl,-Bstatic -lz -liconv -Wl,-Bdynamic
+	gcc $(_CFLAGS) -o $@ $^ -Wl,--subsystem,console -lwininet -Wl,-Bstatic -lz -liconv -Wl,-Bdynamic
 
 build/%.o: %.c
 	gcc $(_CFLAGS) -c -o $@ $<

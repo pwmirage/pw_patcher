@@ -68,7 +68,7 @@ rmrf(char *path)
 	Sleep(1000);
 }
 
-int
+static int
 pipe(FILE *dest, FILE *source, size_t remaining_bytes)
 {
 	size_t read_bytes, buf_size;
@@ -87,6 +87,43 @@ pipe(FILE *dest, FILE *source, size_t remaining_bytes)
 
 	return 0;
 }
+
+HANDLE g_stdoutH;
+
+enum {
+	COLOR_RED = FOREGROUND_INTENSITY | FOREGROUND_RED,
+	COLOR_GREEN = FOREGROUND_INTENSITY | FOREGROUND_GREEN,
+	COLOR_YELLOW = FOREGROUND_INTENSITY | FOREGROUND_RED | FOREGROUND_GREEN,
+	COLOR_DEFAULT = FOREGROUND_INTENSITY | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE,
+};
+
+static void
+print_colored_utf8(int color, const char *fmt, ...)
+{
+	char buf[4096];
+	va_list args;
+	int rc;
+
+	va_start(args, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, args);
+	va_end(args);
+
+	if (!g_stdoutH || g_stdoutH == INVALID_HANDLE_VALUE) {
+		fprintf(stderr, "%s", buf);
+		return;
+	}
+
+	SetConsoleTextAttribute(g_stdoutH, color);
+
+	wchar_t wbuf[sizeof(buf) + 1];
+	rc = MultiByteToWideChar(CP_UTF8, 0, buf, strlen(buf), wbuf, sizeof(buf));
+	wbuf[rc] = 0;
+
+	DWORD written = 0;
+	WriteConsoleW(g_stdoutH, wbuf, rc, &written, NULL);
+	SetConsoleTextAttribute(g_stdoutH, COLOR_DEFAULT);
+}
+
 
 static uint32_t
 djb2(const char *str) {
@@ -429,7 +466,6 @@ write_entry_hdr(struct pw_pck *pck, struct pw_pck_entry *ent)
 	int rc;
 
 	if (hdr->path[0] == '0') {
-		/* TODO lookup a non-aliased name */
 		char buf[396];
 		undo_path_translation(pck, buf, sizeof(buf), ent->path_aliased_utf8);
 
@@ -1074,6 +1110,7 @@ find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files)
 
 				entry->is_modified = true;
 				entry->hdr.length = fsize;
+				print_colored_utf8(COLOR_YELLOW, "\t%s\n", entry->path_aliased_utf8);
 			} else {
 				/* a brand new file */
 				entry = calloc(1, sizeof(*entry));
@@ -1095,9 +1132,9 @@ find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files)
 
 				entry->next = pck->new_entries;
 				pck->new_entries = entry;
+				print_colored_utf8(COLOR_GREEN, "\t%s\n", entry->path_aliased_utf8);
 			}
 
-			fprintf(stderr, "file=%s, wtime=%"PRIu64" last_modtime=%"PRIu64"\r\n", entry->path_aliased_utf8, write_time, entry->mod_time);
 		}
 	} while (FindNextFileW(handle, &fdata) != 0);
 
@@ -1391,6 +1428,8 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 
 	rc = access(tmp, F_OK);
 	if (action == PW_PCK_ACTION_EXTRACT) {
+		fprintf(stderr, "Extracting %s.pck ...\n", pck->name);
+
 		if (rc == 0) {
 			/* TODO implement -f */
 			//fprintf(stderr, "The pck was already extracted.\nPlease add \"-f\" flag if you want to override it");
@@ -1420,6 +1459,8 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 	}
 
 	if (action == PW_PCK_ACTION_UPDATE) {
+		fprintf(stderr, "Updating %s.pck ...\n", pck->name);
+
 		snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
 		readfile(tmp, &alias_buf, &alias_buflen);
 
@@ -1441,6 +1482,8 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 
 			add_free_block(pck, entry->hdr.offset,
 					MIN(entry->hdr.compressed_length, entry->hdr.length));
+			/* no need to add a log entry, if the file is added again it will
+			 * be detected through other means */
 		}
 
 		if (pck->mg_version > 0) {
