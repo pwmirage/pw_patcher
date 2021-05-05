@@ -1567,6 +1567,10 @@ pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action)
 
 	write_ftr(pck);
 
+	pck->hdr.file_size = ftell(pck->fp);
+	fseek(pck->fp, 0, SEEK_SET);
+	fwrite(&pck->hdr, sizeof(pck->hdr), 1, pck->fp);
+
 	fclose(pck->fp);
 	if (pck->file_append_offset) {
 		SetCurrentDirectory("..");

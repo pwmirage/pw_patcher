@@ -16,7 +16,7 @@ extern HANDLE g_stdoutH;
 #define PCK_HEADER_MAGIC1 0x56a089b7
 struct pw_pck_header {
 	uint32_t magic0;
-	uint32_t offset; /* ? */
+	uint32_t file_size;
 	uint32_t magic1;
 };
 
