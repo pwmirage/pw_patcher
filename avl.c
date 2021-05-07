@@ -281,6 +281,34 @@ pw_avl_get_next(struct pw_avl *avl, void *data)
 }
 
 static void
+foreach_cb(struct pw_avl_node *node, pw_avl_foreach_cb cb, void *ctx1, void *ctx2)
+{
+	cb(node, ctx1, ctx2);
+
+	if (node->next) {
+		foreach_cb(node->next, cb, ctx1, ctx2);
+	}
+
+	if (node->left) {
+		foreach_cb(node->left, cb, ctx1, ctx2);
+	}
+
+	if (node->right) {
+		foreach_cb(node->right, cb, ctx1, ctx2);
+	}
+}
+
+void
+pw_avl_foreach(struct pw_avl *avl, pw_avl_foreach_cb cb, void *ctx1, void *ctx2)
+{
+	if (!avl->root) {
+		return;
+	}
+
+	foreach_cb(avl->root, cb, ctx1, ctx2);
+}
+
+static void
 print_node(struct pw_avl_node *node)
 {
 	fprintf(stderr, "%d\n", node->key);
