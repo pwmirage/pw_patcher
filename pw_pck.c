@@ -676,107 +676,11 @@ set_path_nodes(struct pw_pck *pck, struct pw_pck_entry *ent, bool create_dirs)
 	return 0;
 }
 
-static int extract_entry(struct pw_pck *pck, struct pw_pck_entry *ent);
-
 static int
-read_pck(struct pw_pck *pck, enum pw_pck_action action)
+read_pck_entry_list(struct pw_pck *pck, bool create_dirs)
 {
-	FILE *fp = pck->fp;
-	char tmp[296];
-	uint32_t fsize;
 	int rc;
 
-	/* read the file and check magic numbers at the very beginning */
-
-	fread(&pck->hdr, sizeof(pck->hdr), 1, fp);
-	if (pck->hdr.magic0 != PCK_HEADER_MAGIC0 || pck->hdr.magic1 != PCK_HEADER_MAGIC1) {
-		PWLOG(LOG_ERROR, "not a pck file\n");
-		goto err_close;
-	}
-
-	fseek(fp, 0, SEEK_END);
-	fsize = ftell(fp);
-
-	if (fsize < sizeof(pck->hdr) + sizeof(pck->ftr)) {
-		goto err_close;
-	}
-
-	/* now check similar magic numbers at the end of file */
-	fseek(fp, fsize - sizeof(struct pw_pck_footer), SEEK_SET);
-	fread(&pck->ftr, sizeof(pck->ftr), 1, fp);
-
-	if (pck->ftr.ver != 0x20002 && pck->ftr.ver != 0x20001) {
-		PWLOG(LOG_ERROR, "invalid pck version: 0x%x\n", pck->ftr.ver);
-		goto err_close;
-	}
-
-	if (pck->ftr.magic0 != PCK_FOOTER_MAGIC0 || pck->ftr.magic1 != PCK_FOOTER_MAGIC1) {
-		PWLOG(LOG_ERROR, "invalid footer magic\n");
-		goto err_close;
-	}
-
-	if(strstr(pck->ftr.description, "lica File Package") == NULL) {
-		PWLOG(LOG_ERROR, "invalid pck description: \"%s\"\n", pck->ftr.description);
-		goto err_close;
-	}
-
-	rc = sscanf(pck->ftr.description, " pwmirage : %u : %[^:]", &pck->mg_version, tmp);
-	if (rc != 2) {
-		pck->mg_version = 0;
-	}
-
-	pck->ftr.entry_list_off ^= PW_PCK_XOR1;
-
-	if (pck->mg_version == 0) {
-		/* make space for hardcoded entries */
-		pck->ftr.entry_cnt += PW_PCK_ENTRY_MAX;
-	}
-
-	pck->entries = calloc(1, sizeof(*pck->entries) * pck->ftr.entry_cnt);
-	if (!pck->entries) {
-		PWLOG(LOG_ERROR, "calloc() failed\n");
-		goto err_close;
-	}
-
-	fseek(pck->fp, pck->ftr.entry_list_off, SEEK_SET);
-
-	/* For ACTION_EXTRACT also extract the aliases -> we'll need them early */
-	if (pck->mg_version > 0 && action == PW_PCK_ACTION_EXTRACT) {
-		struct pw_pck_entry *ent = &pck->entries[PW_PCK_ENTRY_ALIASES];
-
-		/* skip the first entry */
-		rc = read_entry_hdr(pck, ent);
-		rc = rc || read_entry_hdr(pck, ent);
-		if (rc != 0) {
-			PWLOG(LOG_ERROR, "read_entry_hdr() failed: %d\n", rc);
-			goto err_cleanup;
-		}
-
-		snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
-		if (strcmp(ent->hdr.path, tmp) != 0) {
-			PWLOG(LOG_ERROR, "Alias filename mismatch, got=\"%s\", expected=\"%s\"\n",
-					ent->hdr.path, tmp);
-			rc = -EIO;
-			goto err_cleanup;
-		}
-
-		snprintf(ent->path_aliased_utf8, sizeof(ent->path_aliased_utf8),
-				"%s_aliases.cfg", pck->name);
-
-		rc = extract_entry(pck, ent);
-		if (rc != 0) {
-			PWLOG(LOG_ERROR, "extract_entry(%d) failed: %d\n", 0, rc);
-			goto err_cleanup;
-		}
-
-		rc = read_aliases(pck);
-		if (rc != 0) {
-			PWLOG(LOG_ERROR, "read_aliases(%d) failed: %d\n", 0, rc);
-			goto err_cleanup;
-		}
-	}
-
-	/* for anything but extract we'll need a file db to compare to */
 	pck->path_node_tree = pw_avl_init(sizeof(struct pw_pck_entry));
 	if (!pck->path_node_tree) {
 		PWLOG(LOG_ERROR, "pw_avl_init() failed\n");
@@ -812,7 +716,7 @@ read_pck(struct pw_pck *pck, enum pw_pck_action action)
 			goto err_cleanup;
 		}
 
-		set_path_nodes(pck, ent, action == PW_PCK_ACTION_EXTRACT);
+		set_path_nodes(pck, ent, create_dirs);
 	}
 
 	pck->file_append_offset = pck->ftr.entry_list_off;
@@ -820,8 +724,6 @@ read_pck(struct pw_pck *pck, enum pw_pck_action action)
 
 	return 0;
 err_cleanup:
-err_close:
-	fclose(fp);
 	return -1;
 }
 
@@ -887,79 +789,6 @@ get_cur_time(char *buf, size_t buflen)
 	GetTimeFormat(LOCALE_USER_DEFAULT, 0, &st, NULL, buf, buflen);
 
 	return (((uint64_t)ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
-}
-
-static int
-extract_pck(struct pw_pck *pck)
-{
-	char tmp[296];
-	int rc;
-	unsigned entry_idx = 0;
-
-	fseek(pck->fp, pck->ftr.entry_list_off, SEEK_SET);
-
-	/* begin extracting */
-	snprintf(tmp, sizeof(tmp), "%s_mgpck.log", pck->name);
-	pck->fp_log = fopen(tmp, "w");
-
-	fprintf(pck->fp_log, "#PW Mirage PCK Log: 1.0\n");
-	fprintf(pck->fp_log, "#Keeps track of when each file was modified.\n");
-	fprintf(pck->fp_log, "#This file is both written and read by mgpck.\n");
-	fprintf(pck->fp_log, "\n");
-
-	/* write the header just to allocate bytes in the file, this will be overritten soon */
-	uint64_t cur_time;
-	size_t log_hdr_pos;
-	cur_time = get_cur_time(tmp, sizeof(tmp));
-
-	log_hdr_pos = ftell(pck->fp_log);
-	fprintf(pck->fp_log, ":EXTRACT:%020"PRIu64":%28s\n", cur_time, tmp);
-
-	if (pck->mg_version == 0) {
-		/* generate files which should've been inside the pck */
-		snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
-
-		FILE *fp_tmp = fopen(tmp, "w");
-		fprintf(fp_tmp, "#PW Mirage Filename Aliases: 1.0\n");
-		fprintf(fp_tmp, "#Enables renaming chinese filenames to english. The filenames are translated\n");
-		fprintf(fp_tmp, "#once when the pck is unpacked, then they are translated back when pck is updated.\n");
-		fprintf(fp_tmp, "#\n");
-		fprintf(fp_tmp, "#somedir = 布香\n");
-		fprintf(fp_tmp, "#\tsomefile.sdr = 葬心林晶体.sdr\n");
-		fprintf(fp_tmp, "#\tsomefile2.sdr = 焚香谷瀑布.sdr\n");
-		fclose(fp_tmp);
-	}
-
-	/* the first entry is always the list of free blocks, don't extract
-	 * it -> it should live inside the pck only */
-	entry_idx++;
-
-	/* the second entry is the log and it must have been extracted earlier, skip it now */
-	entry_idx++;
-	fprintf(pck->fp_log, "%s\n", pck->entries[1].path_aliased_utf8);
-
-	for (; entry_idx < pck->ftr.entry_cnt; entry_idx++) {
-		struct pw_pck_entry *ent = &pck->entries[entry_idx];
-
-		rc = extract_entry(pck, ent);
-		if (rc != 0) {
-			PWLOG(LOG_ERROR, "extract_entry(%d) failed: %d\n", entry_idx, rc);
-			goto out;
-		}
-
-		fprintf(pck->fp_log, "%s\n", ent->path_aliased_utf8);
-	}
-
-	/* newline for prettiness */
-	fprintf(pck->fp_log, "\n");
-	/* override the header to be greater than modification date of any extracted file */
-	fseek(pck->fp_log, log_hdr_pos, SEEK_SET);
-	cur_time = get_cur_time(tmp, sizeof(tmp));
-	fprintf(pck->fp_log, ":EXTRACT:%020"PRIu64":%28s\n", cur_time, tmp);
-	rc = 0;
-out:
-	fclose(pck->fp_log);
-	return rc;
 }
 
 static int
@@ -1276,7 +1105,7 @@ get_free_block(struct pw_pck *pck, uint32_t min_size)
 }
 
 static void
-cleanup_removed_pck_files(struct pw_pck *pck)
+find_removed_pck_files(struct pw_pck *pck)
 {
 	/* add existing files to the new_entries list ; also free the space after
 	 * any removed files */
@@ -1488,12 +1317,6 @@ update_pck(struct pw_pck *pck, enum pw_pck_action action)
 	size_t log_hdr_pos;
 	char tmp[64];
 
-	rc = read_pck(pck, PW_PCK_ACTION_UPDATE);
-	rc = rc || read_log(pck, false);
-	if (rc) {
-		return rc;
-	}
-
 	log_hdr_pos = ftell(pck->fp_log);
 	cur_time = get_cur_time(tmp, sizeof(tmp));
 	fprintf(pck->fp_log, ":UPDATE:%020"PRIu64":%28s\n", cur_time, tmp);
@@ -1503,7 +1326,7 @@ update_pck(struct pw_pck *pck, enum pw_pck_action action)
 		return rc;
 	}
 
-	cleanup_removed_pck_files(pck);
+	find_removed_pck_files(pck);
 
 	if (!pck->needs_update) {
 		if (action == PW_PCK_ACTION_UPDATE) {
@@ -1546,10 +1369,13 @@ update_pck(struct pw_pck *pck, enum pw_pck_action action)
 	return 0;
 }
 
-static int
-init_pck_struct(struct pw_pck *pck, const char *path) {
+int
+pw_pck_open(struct pw_pck *pck, const char *path) {
 
+	char tmp[296];
 	const char *c;
+	uint32_t fsize;
+	int rc;
 
 	c = path + strlen(path) - 1;
 	while (c != path && *c != '\\' && *c != '/') {
@@ -1572,86 +1398,256 @@ init_pck_struct(struct pw_pck *pck, const char *path) {
 		return -errno;
 	}
 
-	return 0;
-}
-
-int
-pw_pck_open(struct pw_pck *pck, const char *path, enum pw_pck_action action, bool do_force)
-{
-	int rc;
-	char tmp[296];
-
-	rc = init_pck_struct(pck, path);
-	if (rc) {
-		return rc;
+	/* read the file and check magic numbers at the very beginning */
+	fread(&pck->hdr, sizeof(pck->hdr), 1, pck->fp);
+	if (pck->hdr.magic0 != PCK_HEADER_MAGIC0 || pck->hdr.magic1 != PCK_HEADER_MAGIC1) {
+		PWLOG(LOG_ERROR, "not a pck file\n");
+		rc = -EINVAL;
+		goto err_close;
 	}
 
-	rc = GetCurrentDirectory(sizeof(tmp), tmp);
-	snprintf(tmp + rc, sizeof(tmp) - rc, "\\%s.pck.files%c", pck->name, 0);
-	/* ^ rmrf needs this to be double NULL-terminated */
+	fseek(pck->fp, 0, SEEK_END);
+	fsize = ftell(pck->fp);
 
-	rc = access(tmp, F_OK);
-	if (action == PW_PCK_ACTION_EXTRACT) {
-		fprintf(stderr, "Extracting %s.pck ...\n\n", pck->name);
-
-		if (rc == 0) {
-			if (!do_force) {
-				print_colored_utf8(COLOR_RED, "Error: ");
-				fprintf(stderr, "%s.pck.files already exists. Run mgpck with the `--force` flag to override files inside, or delete that directory manually.\n", pck->name);
-				return 0;
-			}
-		}
-		wmkdir(tmp);
-	} else {
-		if (rc != 0) {
-			PWLOG(LOG_ERROR, "Can't find \"%s\"\n", tmp);
-			return -rc;
-		}
+	if (fsize < sizeof(pck->hdr) + sizeof(pck->ftr)) {
+		PWLOG(LOG_ERROR, "file way too small\n");
+		rc = -EINVAL;
+		goto err_close;
 	}
 
-	SetCurrentDirectory(tmp);
+	/* now check similar magic numbers at the end of file */
+	fseek(pck->fp, fsize - sizeof(struct pw_pck_footer), SEEK_SET);
+	fread(&pck->ftr, sizeof(pck->ftr), 1, pck->fp);
 
-	rc = 0;
-	if (action == PW_PCK_ACTION_EXTRACT) {
-		rc = read_pck(pck, action);
-		rc = rc || extract_pck(pck);
-		if (rc == 0) {
-			fprintf(stderr, "Done!\n");
-		}
-		return rc;
+	if (pck->ftr.ver != 0x20002 && pck->ftr.ver != 0x20001) {
+		PWLOG(LOG_ERROR, "invalid pck version: 0x%x\n", pck->ftr.ver);
+		rc = -EINVAL;
+		goto err_close;
+	}
+
+	if (pck->ftr.magic0 != PCK_FOOTER_MAGIC0 || pck->ftr.magic1 != PCK_FOOTER_MAGIC1) {
+		PWLOG(LOG_ERROR, "invalid footer magic\n");
+		rc = -EINVAL;
+		goto err_close;
+	}
+
+	if(strstr(pck->ftr.description, "lica File Package") == NULL) {
+		PWLOG(LOG_ERROR, "invalid pck description: \"%s\"\n", pck->ftr.description);
+		rc = -EINVAL;
+		goto err_close;
+	}
+
+	rc = sscanf(pck->ftr.description, " pwmirage : %u : %[^:]", &pck->mg_version, tmp);
+	if (rc != 2) {
+		pck->mg_version = 0;
+	}
+
+	pck->ftr.entry_list_off ^= PW_PCK_XOR1;
+
+	if (pck->mg_version == 0) {
+		/* make space for hardcoded entries */
+		pck->ftr.entry_cnt += PW_PCK_ENTRY_MAX;
+	}
+
+	pck->entries = calloc(1, sizeof(*pck->entries) * pck->ftr.entry_cnt);
+	if (!pck->entries) {
+		PWLOG(LOG_ERROR, "calloc() failed\n");
+		goto err_close;
 	}
 
 	pck->free_blocks_tree = pw_avl_init(sizeof(struct pck_free_block));
 	if (!pck->free_blocks_tree) {
 		PWLOG(LOG_ERROR, "pw_avl_init() failed\n");
-		return -1;
+		free(pck->entries);
+		rc = -ENOMEM;
+		goto err_close;
 	}
+
+	return 0;
+err_close:
+	fclose(pck->fp);
+	pck->fp = NULL;
+	return rc;
+}
+
+int
+pw_pck_extract(struct pw_pck *pck, bool do_force)
+{
+	char tmp[296];
+	unsigned entry_idx = 0;
+	int rc;
+
+	fprintf(stderr, "Extracting %s.pck ...\n\n", pck->name);
+
+	snprintf(tmp, sizeof(tmp), "%s.pck.files", pck->name);
+	rc = access(tmp, F_OK);
+	if (rc == 0 && !do_force) {
+		print_colored_utf8(COLOR_RED, "Error: ");
+		fprintf(stderr, "%s.pck.files already exists. Run mgpck with the `--force` flag to override files inside, or please delete that directory manually.\n", pck->name);
+		return 0;
+	}
+
+	wmkdir(tmp);
+
+	SetCurrentDirectory(tmp);
+
+	/* Extract the aliases first -> we'll need them early */
+	if (pck->mg_version > 0) {
+		struct pw_pck_entry *ent = &pck->entries[PW_PCK_ENTRY_ALIASES];
+
+		/* skip the first entry */
+		rc = read_entry_hdr(pck, ent);
+		rc = rc || read_entry_hdr(pck, ent);
+		if (rc != 0) {
+			PWLOG(LOG_ERROR, "read_entry_hdr() failed: %d\n", rc);
+			goto out;
+		}
+
+		snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
+		if (strcmp(ent->hdr.path, tmp) != 0) {
+			PWLOG(LOG_ERROR, "Alias filename mismatch, got=\"%s\", expected=\"%s\"\n",
+					ent->hdr.path, tmp);
+			rc = -EIO;
+			goto out;
+		}
+
+		snprintf(ent->path_aliased_utf8, sizeof(ent->path_aliased_utf8),
+				"%s_aliases.cfg", pck->name);
+
+		rc = extract_entry(pck, ent);
+		if (rc != 0) {
+			PWLOG(LOG_ERROR, "extract_entry(%d) failed: %d\n", 0, rc);
+			goto out;
+		}
+
+		rc = read_aliases(pck);
+		if (rc != 0) {
+			PWLOG(LOG_ERROR, "read_aliases(%d) failed: %d\n", 0, rc);
+			goto out;
+		}
+	}
+
+
+	rc = read_pck_entry_list(pck, true);
+	if (rc != 0) {
+		goto out;
+	}
+
+	fseek(pck->fp, pck->ftr.entry_list_off, SEEK_SET);
+
+	/* begin extracting */
+	snprintf(tmp, sizeof(tmp), "%s_mgpck.log", pck->name);
+	pck->fp_log = fopen(tmp, "w");
+
+	fprintf(pck->fp_log, "#PW Mirage PCK Log: 1.0\n");
+	fprintf(pck->fp_log, "#Keeps track of when each file was modified.\n");
+	fprintf(pck->fp_log, "#This file is both written and read by mgpck.\n");
+	fprintf(pck->fp_log, "\n");
+
+	/* write the header just to allocate bytes in the file, this will be overritten soon */
+	uint64_t cur_time;
+	size_t log_hdr_pos;
+	cur_time = get_cur_time(tmp, sizeof(tmp));
+
+	log_hdr_pos = ftell(pck->fp_log);
+	fprintf(pck->fp_log, ":EXTRACT:%020"PRIu64":%28s\n", cur_time, tmp);
+
+	if (pck->mg_version == 0) {
+		/* generate files which should've been inside the pck */
+		snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
+
+		FILE *fp_tmp = fopen(tmp, "w");
+		fprintf(fp_tmp, "#PW Mirage Filename Aliases: 1.0\n");
+		fprintf(fp_tmp, "#Enables renaming chinese filenames to english. The filenames are translated\n");
+		fprintf(fp_tmp, "#once when the pck is unpacked, then they are translated back when pck is updated.\n");
+		fprintf(fp_tmp, "#\n");
+		fprintf(fp_tmp, "#somedir = 布香\n");
+		fprintf(fp_tmp, "#\tsomefile.sdr = 葬心林晶体.sdr\n");
+		fprintf(fp_tmp, "#\tsomefile2.sdr = 焚香谷瀑布.sdr\n");
+		fclose(fp_tmp);
+	}
+
+	/* the first entry is always the list of free blocks, don't extract
+	 * it -> it should live inside the pck only */
+	entry_idx++;
+
+	/* the second entry is the log and it must have been extracted earlier, skip it now */
+	entry_idx++;
+	fprintf(pck->fp_log, "%s\n", pck->entries[1].path_aliased_utf8);
+
+	for (; entry_idx < pck->ftr.entry_cnt; entry_idx++) {
+		struct pw_pck_entry *ent = &pck->entries[entry_idx];
+
+		rc = extract_entry(pck, ent);
+		if (rc != 0) {
+			PWLOG(LOG_ERROR, "extract_entry(%d) failed: %d\n", entry_idx, rc);
+			goto out;
+		}
+
+		fprintf(pck->fp_log, "%s\n", ent->path_aliased_utf8);
+	}
+
+	/* newline for prettiness */
+	fprintf(pck->fp_log, "\n");
+	/* override the header to be greater than modification date of any extracted file */
+	fseek(pck->fp_log, log_hdr_pos, SEEK_SET);
+	cur_time = get_cur_time(tmp, sizeof(tmp));
+	fprintf(pck->fp_log, ":EXTRACT:%020"PRIu64":%28s\n", cur_time, tmp);
+	fclose(pck->fp_log);
+
+	fprintf(stderr, "Done!\n");
+	rc = 0;
+out:
+	SetCurrentDirectory("..");
+	return rc;
+}
+
+int
+pw_pck_update(struct pw_pck *pck)
+{
+	char tmp[296];
+	int rc;
+
+	snprintf(tmp, sizeof(tmp), "%s.pck.files", pck->name);
+	rc = access(tmp, F_OK);
+	if (rc != 0) {
+		PWLOG(LOG_ERROR, "Can't find \"%s\"\n", tmp);
+		return -rc;
+	}
+	SetCurrentDirectory(tmp);
 
 	rc = read_aliases(pck);
 	if (rc) {
 		PWLOG(LOG_ERROR, "Can't read the alias file (rc=%d). Please extract the .pck file again using mgpck\n", rc);
-		return rc;
+		goto out;
 	}
 
-	if (action == PW_PCK_ACTION_GEN_PATCH) {
+	rc = read_pck_entry_list(pck, false);
+	rc = rc || read_log(pck, false);
+	if (rc) {
+		goto out;
+	}
+
+	if (false) {
 		fprintf(stderr, "Generating a patch for %s.pck ...\n\n", pck->name);
-		rc = update_pck(pck, action);
+		rc = update_pck(pck, 0);
 		if (rc) {
-			return rc;
+			goto out;
 		}
 	}
 
-	if (action == PW_PCK_ACTION_UPDATE) {
-		fprintf(stderr, "Updating %s.pck ...\n\n", pck->name);
-		rc = update_pck(pck, action);
-		if (rc) {
-			return rc;
-		}
+	fprintf(stderr, "Updating %s.pck ...\n\n", pck->name);
+	rc = update_pck(pck, PW_PCK_ACTION_UPDATE);
+	if (rc) {
+		return rc;
 	}
 
 	/* newline in the log for prettiness */
 	fprintf(pck->fp_log, "\n");
 
 	fprintf(stderr, "Done!\n");
+	rc = 0;
+out:
+	SetCurrentDirectory("..");
 	return rc;
 }
