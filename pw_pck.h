@@ -29,6 +29,8 @@ struct pw_pck_footer {
 	uint32_t flags;
 	char description[252]; /* ASCI */
 	uint32_t magic1;
+	uint32_t entry_cnt;
+	uint32_t ver;
 };
 
 struct pw_pck_entry_header {
@@ -58,23 +60,38 @@ enum {
 #define PW_PCK_XOR1 0xa8937462
 #define PW_PCK_XOR2 0xf1a43653
 struct pw_pck {
+	/** pck file basename without the extension */
 	char name[64];
+	/** 0 for non-mirage file */
 	unsigned mg_version;
-	FILE *fp;
-	FILE *fp_log;
-	FILE *fp_hdr;
+	/** headers taken straight from the pck */
 	struct pw_pck_header hdr;
-	uint32_t ver;
-	uint32_t entry_cnt; /**< count of entries in pck->entries */
-	uint32_t needs_update;
 	struct pw_pck_footer ftr;
-	struct pck_alias_tree *alias_tree;
+
+	/** pck file handle */
+	FILE *fp;
+	/** mgpck.log handle */
+	FILE *fp_log;
+	/** entries found in the pck file */
 	struct pw_pck_entry *entries;
-	/** avl indexed by the alias name (or the org name if there's no alias) */
-	struct pw_avl *entries_tree;
+
+	/** avl of pck_alias structs, indexed by both org and alias names */
+	struct pck_alias_tree *alias_tree;
+	char *alias_buf;
+
+	/** top level pck_path_node-s */
+	struct pw_avl *path_node_tree;
+	/** tracked empty space inside the pck file */
 	struct pw_avl *free_blocks_tree;
-	uint32_t new_entry_cnt; /**< count of entries to be written back into the pck */
-	struct pw_pck_entry *new_entries; /**< entries to be written back into the pck */
+
+	/** if any file in .pck.files was changed */
+	uint32_t needs_update;
+
+	/** entries to be written back into the pck */
+	uint32_t new_entry_cnt;
+	struct pw_pck_entry *new_entries;
+
+	/** the new EOF counted from the beginning */
 	uint32_t file_append_offset;
 };
 
