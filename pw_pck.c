@@ -908,7 +908,7 @@ read_log(struct pw_pck *pck, bool ignore_updates)
 #define FindExInfoBasic 1
 
 static int
-find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files)
+_find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files)
 {
 	struct pck_path_node *file;
 	WIN32_FIND_DATAW fdata;
@@ -941,7 +941,7 @@ find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files)
 			}
 
 			file = get_path_node(files, utf8_name);
-			find_modified_files(pck, buf, file ? file->nested : NULL);
+			_find_modified_files(pck, buf, file ? file->nested : NULL);
 		} else {
 			struct pw_pck_entry *entry;
 
@@ -1002,16 +1002,44 @@ find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files)
 
 	return 0;
 }
+#endif
 
-#else
+static int add_free_block(struct pw_pck *pck, uint32_t offset, uint32_t size);
 
 static int
-find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files)
+find_modified_files(struct pw_pck *pck)
 {
-	return -ENOSYS;
-}
+	int rc;
 
+#ifdef __MINGW32__
+	rc = _find_modified_files(pck, L".\\*", pck->path_node_tree);
+	if (rc) {
+		return rc;
+	}
+
+	/* add existing files to the new_entries list
+	 * also free the space after any removed files */
+	for (int i = pck->ftr.entry_cnt - 1; i >= PW_PCK_ENTRY_ALIASES; i--) {
+		struct pw_pck_entry *entry = &pck->entries[i];
+
+		if (entry->is_present) {
+			entry->next = pck->new_entries;
+			pck->new_entries = entry;
+			continue;
+		}
+
+		add_free_block(pck, entry->hdr.offset,
+				MIN(entry->hdr.compressed_length, entry->hdr.length));
+		fprintf(pck->fp_log, "?%s\n", entry->path_aliased_utf8);
+		print_colored_utf8(COLOR_RED, "\t-%s\n", entry->path_aliased_utf8);
+		pck->needs_update = true;
+	}
+
+	return 0;
+#else
+	return -ENOSYS;
 #endif
+}
 
 /** unused space inside the pck */
 struct pck_free_block {
@@ -1102,28 +1130,6 @@ get_free_block(struct pw_pck *pck, uint32_t min_size)
 	pck->file_append_offset += min_size;
 
 	return ret;
-}
-
-static void
-find_removed_pck_files(struct pw_pck *pck)
-{
-	/* add existing files to the new_entries list ; also free the space after
-	 * any removed files */
-	for (int i = pck->ftr.entry_cnt - 1; i >= PW_PCK_ENTRY_ALIASES; i--) {
-		struct pw_pck_entry *entry = &pck->entries[i];
-
-		if (entry->is_present) {
-			entry->next = pck->new_entries;
-			pck->new_entries = entry;
-			continue;
-		}
-
-		add_free_block(pck, entry->hdr.offset,
-				MIN(entry->hdr.compressed_length, entry->hdr.length));
-		fprintf(pck->fp_log, "?%s\n", entry->path_aliased_utf8);
-		print_colored_utf8(COLOR_RED, "\t-%s\n", entry->path_aliased_utf8);
-		pck->needs_update = true;
-	}
 }
 
 static void
@@ -1321,12 +1327,10 @@ update_pck(struct pw_pck *pck, enum pw_pck_action action)
 	cur_time = get_cur_time(tmp, sizeof(tmp));
 	fprintf(pck->fp_log, ":UPDATE:%020"PRIu64":%28s\n", cur_time, tmp);
 
-	rc = find_modified_files(pck, L".\\*", pck->path_node_tree);
+	rc = find_modified_files(pck);
 	if (rc) {
 		return rc;
 	}
-
-	find_removed_pck_files(pck);
 
 	if (!pck->needs_update) {
 		if (action == PW_PCK_ACTION_UPDATE) {
