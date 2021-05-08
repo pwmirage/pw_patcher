@@ -939,7 +939,7 @@ read_log(struct pw_pck *pck, bool ignore_updates)
 #define FindExInfoBasic 1
 
 static int
-_find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files)
+_find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files, bool do_log)
 {
 	struct pck_path_node *file;
 	WIN32_FIND_DATAW fdata;
@@ -972,7 +972,7 @@ _find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files)
 			}
 
 			file = get_path_node(files, utf8_name);
-			_find_modified_files(pck, buf, file ? file->nested : NULL);
+			_find_modified_files(pck, buf, file ? file->nested : NULL, do_log);
 		} else {
 			struct pw_pck_entry *entry;
 
@@ -1017,7 +1017,9 @@ _find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files)
 				pck->needs_update = true;
 				print_colored_utf8(COLOR_GREEN, "\t+%s\n", entry->path_aliased_utf8);
 			}
-			fprintf(pck->fp_log, "%s\n", entry->path_aliased_utf8);
+			if (do_log) {
+				fprintf(pck->fp_log, "%s\n", entry->path_aliased_utf8);
+			}
 
 		}
 	} while (FindNextFileW(handle, &fdata) != 0);
@@ -1036,13 +1038,13 @@ _find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files)
 static int add_free_block(struct pw_pck *pck, uint32_t offset, uint32_t size);
 
 static int
-find_modified_files(struct pw_pck *pck)
+find_modified_files(struct pw_pck *pck, bool do_log)
 {
 #ifdef __MINGW32__
 	struct pw_pck_entry **ep;
 	int rc;
 
-	rc = _find_modified_files(pck, L".\\*", pck->path_node_tree);
+	rc = _find_modified_files(pck, L".\\*", pck->path_node_tree, do_log);
 	if (rc) {
 		return rc;
 	}
@@ -1060,7 +1062,9 @@ find_modified_files(struct pw_pck *pck)
 
 		add_free_block(pck, entry->hdr.offset,
 				MIN(entry->hdr.compressed_length, entry->hdr.length));
-		fprintf(pck->fp_log, "?%s\n", entry->path_aliased_utf8);
+		if (do_log) {
+			fprintf(pck->fp_log, "?%s\n", entry->path_aliased_utf8);
+		}
 		print_colored_utf8(COLOR_RED, "\t-%s\n", entry->path_aliased_utf8);
 		pck->needs_update = true;
 
@@ -1347,7 +1351,7 @@ write_ftr(struct pw_pck *pck)
 }
 
 static int
-update_pck(struct pw_pck *pck, enum pw_pck_action action)
+update_pck(struct pw_pck *pck)
 {
 	int rc;
 	uint64_t cur_time;
@@ -1358,23 +1362,18 @@ update_pck(struct pw_pck *pck, enum pw_pck_action action)
 	cur_time = get_cur_time(tmp, sizeof(tmp));
 	fprintf(pck->fp_log, ":UPDATE:%020"PRIu64":%28s\n", cur_time, tmp);
 
-	rc = find_modified_files(pck);
+	fprintf(stderr, "Patching files:\n");
+
+	rc = find_modified_files(pck, true);
 	if (rc) {
 		return rc;
 	}
 
 	if (!pck->needs_update) {
-		if (action == PW_PCK_ACTION_UPDATE) {
-			fprintf(stderr, "Patching files:\n");
-			fprintf(stderr, "\t<everything up to date>\n");
-		}
+		fprintf(stderr, "\t<everything up to date>\n");
 		fp_truncate(pck->fp_log, log_hdr_pos);
 		return 0;
-	} else if (action == PW_PCK_ACTION_GEN_PATCH) {
-		fprintf(stderr, "%s.pck needs to be patched first\n", pck->name);
 	}
-
-	fprintf(stderr, "Patching files:\n");
 
 	if (pck->mg_version > 0) {
 		read_free_blocks(pck);
@@ -1411,6 +1410,8 @@ pw_pck_open(struct pw_pck *pck, const char *path) {
 	const char *c;
 	uint32_t fsize;
 	int rc;
+
+	fprintf(stderr, "Reading %s.pck ...\n", pck->name);
 
 	pck->entries_tail = &pck->entries;
 
@@ -1513,7 +1514,7 @@ pw_pck_extract(struct pw_pck *pck, bool do_force)
 	unsigned entry_idx = 0;
 	int rc;
 
-	fprintf(stderr, "Extracting %s.pck ...\n\n", pck->name);
+	fprintf(stderr, "Extracting ...\n");
 
 	snprintf(tmp, sizeof(tmp), "%s.pck.files", pck->name);
 	rc = access(tmp, F_OK);
@@ -1643,6 +1644,8 @@ pw_pck_update(struct pw_pck *pck)
 	char tmp[296];
 	int rc;
 
+	fprintf(stderr, "Updating ...\n");
+
 	snprintf(tmp, sizeof(tmp), "%s.pck.files", pck->name);
 	rc = access(tmp, F_OK);
 	if (rc != 0) {
@@ -1663,19 +1666,68 @@ pw_pck_update(struct pw_pck *pck)
 		goto out;
 	}
 
-	if (false) {
-		fprintf(stderr, "Generating a patch for %s.pck ...\n\n", pck->name);
-		rc = update_pck(pck, 0);
-		if (rc) {
-			goto out;
-		}
-	}
-
-	fprintf(stderr, "Updating %s.pck ...\n\n", pck->name);
-	rc = update_pck(pck, PW_PCK_ACTION_UPDATE);
+	rc = update_pck(pck);
 	if (rc) {
 		return rc;
 	}
+
+	/* newline in the log for prettiness */
+	fprintf(pck->fp_log, "\n");
+
+	fprintf(stderr, "Done!\n");
+	rc = 0;
+out:
+	SetCurrentDirectory("..");
+	return rc;
+}
+
+int
+pw_pck_gen_patch(struct pw_pck *pck, bool do_force)
+{
+	char tmp[296];
+	int rc;
+
+	snprintf(tmp, sizeof(tmp), "%s.pck.files", pck->name);
+	rc = access(tmp, F_OK);
+	if (rc != 0) {
+		PWLOG(LOG_ERROR, "Can't find \"%s\"\n", tmp);
+		return -rc;
+	}
+	SetCurrentDirectory(tmp);
+
+	rc = read_aliases(pck);
+	if (rc) {
+		PWLOG(LOG_ERROR, "Can't read the alias file (rc=%d). Please extract the .pck file again using mgpck\n", rc);
+		goto out;
+	}
+
+	rc = read_pck_entry_list(pck, false);
+	rc = rc || read_log(pck, false);
+	if (rc) {
+		goto out;
+	}
+
+	fprintf(stderr, "Searching for updated files in %s.pck.files ...\n\n", pck->name);
+	rc = find_modified_files(pck, false);
+	if (rc) {
+		goto out;
+	}
+
+	if (pck->needs_update) {
+		if (!do_force) {
+			fprintf(stderr, "\nThe above files were updated in the .pck.files directory and won't be included in the patch. Please update the pck first to include them, or run --gen-patch with the --force flag to ignore this check. Aborting...\n\n");
+			rc = -EBUSY;
+			goto out;
+		} else {
+			fprintf(stderr, "\nThe above files were updated in the .pck.files directory and won't be included in the patch. Update the pck to include them. Continuing...\n\n");
+		}
+	} else {
+		fprintf(stderr, "\t<everything up to date>\n\n");
+	}
+
+	fprintf(stderr, "Generating the patch file ...\n");
+
+	/* TODO :) */
 
 	/* newline in the log for prettiness */
 	fprintf(pck->fp_log, "\n");

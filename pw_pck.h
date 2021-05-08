@@ -99,5 +99,6 @@ enum pw_pck_action {
 int pw_pck_open(struct pw_pck *pck, const char *path);
 int pw_pck_extract(struct pw_pck *pck, bool do_force);
 int pw_pck_update(struct pw_pck *pck);
+int pw_pck_gen_patch(struct pw_pck *pck, bool do_force);
 
 #endif /* PW_PCK_H */
