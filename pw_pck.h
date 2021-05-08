@@ -47,7 +47,12 @@ struct pw_pck_entry {
 	uint64_t mod_time;
 	bool is_present;
 	bool is_modified;
-	struct pw_pck_entry *next; /**< for putting in temporary lists */
+	/** for putting in pck->entries */
+	struct pw_pck_entry *next;
+
+	/** for gen-patch */
+	bool in_gen_list;
+	struct pw_pck_entry *gen_next;
 };
 
 #define PW_PCK_XOR1 0xa8937462
@@ -65,6 +70,8 @@ struct pw_pck {
 	FILE *fp;
 	/** mgpck.log handle */
 	FILE *fp_log;
+	unsigned log_last_patch_pos;
+	unsigned log_last_patch_line;
 
 	/** linked list of entries parsed and/or to be written back into the pck */
 	struct pw_pck_entry *entries;
@@ -99,6 +106,6 @@ enum pw_pck_action {
 int pw_pck_open(struct pw_pck *pck, const char *path);
 int pw_pck_extract(struct pw_pck *pck, bool do_force);
 int pw_pck_update(struct pw_pck *pck);
-int pw_pck_gen_patch(struct pw_pck *pck, bool do_force);
+int pw_pck_gen_patch(struct pw_pck *pck, const char *patch_path, bool do_force);
 
 #endif /* PW_PCK_H */

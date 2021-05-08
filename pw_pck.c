@@ -397,10 +397,9 @@ get_name_by_alias(struct pck_alias_tree *aliases, char *filename)
 }
 
 static int
-read_entry_hdr(struct pw_pck *pck, struct pw_pck_entry *ent)
+read_entry_hdr(struct pw_pck *pck, FILE *fp, struct pw_pck_entry *ent)
 {
 	struct pw_pck_entry_header *hdr = &ent->hdr;
-	FILE *fp = pck->fp;
 	uint32_t compressed_size;
 	uint32_t compressed_size2;
 	int rc;
@@ -484,7 +483,7 @@ undo_path_translation(struct pw_pck *pck, char *org_buf, size_t orgsize, char *a
 }
 
 static int
-write_entry_hdr(struct pw_pck *pck, struct pw_pck_entry *ent)
+write_entry_hdr(struct pw_pck *pck, FILE *fp, struct pw_pck_entry *ent)
 {
 	struct pw_pck_entry_header *hdr = &ent->hdr;
 	uint32_t compressed_size;
@@ -511,19 +510,16 @@ write_entry_hdr(struct pw_pck *pck, struct pw_pck_entry *ent)
 		return rc;
 	}
 
-	/* don't fseek every time -> expect it to set correctly */
-	pck->file_append_offset += bufsize;
-
 	compressed_size = ((uint32_t)bufsize) ^ PW_PCK_XOR1;
-	fwrite(&compressed_size, 4, 1, pck->fp);
+	fwrite(&compressed_size, 4, 1, fp);
 
 	compressed_size = ((uint32_t)bufsize) ^ PW_PCK_XOR2;
-	fwrite(&compressed_size, 4, 1, pck->fp);
+	fwrite(&compressed_size, 4, 1, fp);
 
 	if (bufsize >= sizeof(*hdr)) {
-		fwrite(hdr, sizeof(*hdr), 1, pck->fp);
+		fwrite(hdr, sizeof(*hdr), 1, fp);
 	} else {
-		fwrite(buf, bufsize, 1, pck->fp);
+		fwrite(buf, bufsize, 1, fp);
 	}
 
 	free(buf);
@@ -739,7 +735,7 @@ read_pck_entry_list(struct pw_pck *pck, bool create_dirs)
 			}
 		}
 
-		rc = read_entry_hdr(pck, ent);
+		rc = read_entry_hdr(pck, pck->fp, ent);
 		if (rc != 0) {
 			PWLOG(LOG_ERROR, "read_entry_hdr() failed: %d\n", rc);
 			goto err_cleanup;
@@ -827,7 +823,7 @@ get_cur_time(char *buf, size_t buflen)
 }
 
 static int
-read_log(struct pw_pck *pck, bool ignore_updates)
+read_log(struct pw_pck *pck)
 {
 	char tmp[128];
 	FILE *fp;
@@ -836,10 +832,10 @@ read_log(struct pw_pck *pck, bool ignore_updates)
 	ssize_t read;
 	int rc;
 	uint64_t cur_modtime = 0;
-	bool skip_cur_section = false;
 	unsigned lineno = 0;
 	struct pw_avl *files;
 	struct pck_path_node *file;
+	bool save_patch_pos = false;
 
 	snprintf(tmp, sizeof(tmp), "%s_mgpck.log", pck->name);
 	fp = pck->fp_log = fopen(tmp, "r+");
@@ -851,6 +847,7 @@ read_log(struct pw_pck *pck, bool ignore_updates)
 	while ((read = getline(&line, &len, fp)) != -1) {
 		bool is_empty = true;
 		char *c, *word;
+		uint64_t tmp_modtime = cur_modtime;
 
 		assert(line[0] != 0);
 		/* comment */
@@ -881,16 +878,24 @@ read_log(struct pw_pck *pck, bool ignore_updates)
 				return -EIO;
 			}
 
+			/* save some metadata for possible gen_patch */
+			if (save_patch_pos) {
+				pck->log_last_patch_pos = ftell(pck->fp_log) - strlen(line) - 1;
+				pck->log_last_patch_line = lineno;
+				save_patch_pos = false;
+			}
+			if (strcmp(tmp, "EXTRACT") == 0 || strcmp(tmp, "GEN_PATCH") == 0) {
+				save_patch_pos = true;
+			}
 			lineno++;
 			continue;
 		}
 
 		/* filename */
-		if (skip_cur_section) {
-			lineno++;
-			continue;
+		if (line[0] == '?') {
+			tmp_modtime = 0;
+			line++;
 		}
-
 		files = pck->path_node_tree;
 		c = word = line;
 		while (1) {
@@ -920,11 +925,151 @@ read_log(struct pw_pck *pck, bool ignore_updates)
 					break;
 				}
 
-				file->entry->mod_time = cur_modtime;
+				file->entry->mod_time = tmp_modtime;
 				break;
 			}
 
 			c++;
+		}
+
+		lineno++;
+	}
+
+	fseek(pck->fp_log, 0, SEEK_END);
+
+	if (save_patch_pos) {
+		pck->log_last_patch_pos = 0;
+	}
+
+	return 0;
+}
+
+static int
+get_updated_files_by_log(struct pw_pck *pck, struct pw_pck_entry **list)
+{
+	char tmp[128];
+	char *line = NULL;
+	size_t len = 0;
+	ssize_t read;
+	int rc;
+	uint64_t cur_modtime = 0;
+	unsigned lineno = pck->log_last_patch_line;
+	struct pw_avl *files;
+	struct pck_path_node *file;
+	int cur_section = -1;
+
+	if (!pck->log_last_patch_pos) {
+		/* nothing new in the log file, return nothing */
+		return 0;
+	}
+
+	/* clear EOF for getline */
+	rewind(pck->fp_log);
+	fseek(pck->fp_log, pck->log_last_patch_pos, SEEK_SET);
+
+	while ((read = getline(&line, &len, pck->fp_log)) != -1) {
+		bool is_empty = true;
+		char *c, *word;
+		uint64_t tmp_modtime = cur_modtime;
+
+		assert(line[0] != 0);
+		/* comment */
+		if (line[0] == '#' || line[0] == '\r' || line[0] == '\n') {
+			lineno++;
+			continue;
+		}
+
+		c = line;
+		while (*c) {
+			if(*c != '\n' && *c != '\t' && *c != '\r' && *c != ' ') {
+				is_empty = false;
+				break;
+			}
+
+			c++;
+		}
+
+		if (is_empty) {
+			continue;
+		}
+
+		/* header */
+		if (line[0] == ':') {
+			rc = sscanf(line, " : %[^:] : %"SCNu64" : %*s", tmp, &cur_modtime);
+			if (rc != 2) {
+				PWLOG(LOG_ERROR, "Incomplete header at line %u\n\t\"%s\"\n", lineno, line);
+				return -EIO;
+			}
+
+			if (strcmp(tmp, "APPLY_PATCH") == 0) {
+				cur_section = PW_PCK_ACTION_APPLY_PATCH;
+			} else if (strcmp(tmp, "GEN_PATCH") == 0) {
+				cur_section = PW_PCK_ACTION_GEN_PATCH;
+			} else if (strcmp(tmp, "EXTRACT") == 0) {
+				cur_section = PW_PCK_ACTION_EXTRACT;
+			} else {
+				cur_section = PW_PCK_ACTION_UPDATE;
+			}
+
+			lineno++;
+			continue;
+		}
+
+		if (cur_section == -1) {
+			PWLOG(LOG_ERROR, "Entry with no preceeding header at line %u\n\t\"%s\"\n", lineno, line);
+			return -EIO;
+		}
+
+		/* filename */
+		if (line[0] == '?') {
+			tmp_modtime = 0;
+			line++;
+		}
+		files = pck->path_node_tree;
+		c = word = line;
+		while (1) {
+			if (*c == '\\' || *c == '/') {
+				*c = 0;
+				file = get_path_node(files, word);
+				if (!file) {
+					/* we got a log entry for a file that doesn't exist in the pck.
+					 * it could have been removed or aliased - no problem.
+					 */
+					break;
+				}
+
+				files = file->nested;
+				word = c + 1;
+			} else if (*c == '\n' || *c == 0) {
+				*c = 0;
+
+				file = get_path_node(files, word);
+				if (!file) {
+					/* same as above */
+					break;
+				}
+
+				if (!file->entry) {
+					/* we got a log entry for a directory? weird, ignore it */
+					break;
+				}
+
+				file->entry->mod_time = tmp_modtime;
+				break;
+			}
+
+			c++;
+		}
+
+		if (file && file->entry) {
+			if (cur_section == PW_PCK_ACTION_APPLY_PATCH) {
+				/* if it was queued before unqueue it now */
+				file->entry->in_gen_list = false;
+			} else if (!file->entry->in_gen_list) {
+				file->entry->in_gen_list = true;
+				file->entry->gen_next = *list;
+				*list = file->entry;
+			}
 		}
 
 		lineno++;
@@ -1322,7 +1467,7 @@ rewrite_entry_hdr_list(struct pw_pck *pck)
 
 	e = pck->entries;
 	while (e) {
-		rc = write_entry_hdr(pck, e);
+		rc = write_entry_hdr(pck, pck->fp, e);
 		if (rc != 0) {
 			PWLOG(LOG_ERROR, "write_entry_hdr(\"%s\") failed: %d\n",
 					e->path_aliased_utf8, rc);
@@ -1421,12 +1566,6 @@ pw_pck_open(struct pw_pck *pck, const char *path) {
 		goto err_close;
 	}
 
-	if(strstr(pck->ftr.description, "lica File Package") == NULL) {
-		PWLOG(LOG_ERROR, "invalid pck description: \"%s\"\n", pck->ftr.description);
-		rc = -EINVAL;
-		goto err_close;
-	}
-
 	rc = sscanf(pck->ftr.description, " pwmirage : %u : %[^:]", &pck->mg_version, tmp);
 	if (rc != 2) {
 		pck->mg_version = 0;
@@ -1487,8 +1626,8 @@ pw_pck_extract(struct pw_pck *pck, bool do_force)
 		fseek(pck->fp, pck->ftr.entry_list_off, SEEK_SET);
 
 		/* skip the first entry (free blocks) */
-		rc = read_entry_hdr(pck, ent);
-		rc = rc || read_entry_hdr(pck, ent);
+		rc = read_entry_hdr(pck, pck->fp, ent);
+		rc = rc || read_entry_hdr(pck, pck->fp, ent);
 		if (rc != 0) {
 			PWLOG(LOG_ERROR, "read_entry_hdr() failed: %d\n", rc);
 			goto out;
@@ -1587,7 +1726,7 @@ pw_pck_extract(struct pw_pck *pck, bool do_force)
 	fprintf(pck->fp_log, ":EXTRACT:%020"PRIu64":%28s\n", cur_time, tmp);
 	fclose(pck->fp_log);
 
-	fprintf(stderr, "Done!\n");
+	fprintf(stderr, "\nDone!\n");
 	rc = 0;
 out:
 	SetCurrentDirectory("..");
@@ -1619,7 +1758,7 @@ pw_pck_update(struct pw_pck *pck)
 	}
 
 	rc = read_pck_entry_list(pck, false);
-	rc = rc || read_log(pck, false);
+	rc = rc || read_log(pck);
 	if (rc) {
 		goto out;
 	}
@@ -1656,7 +1795,7 @@ pw_pck_update(struct pw_pck *pck)
 	/* newline in the log for prettiness */
 	fprintf(pck->fp_log, "\n");
 
-	fprintf(stderr, "Done!\n");
+	fprintf(stderr, "\nDone!\n");
 	rc = 0;
 out:
 	SetCurrentDirectory("..");
@@ -1664,8 +1803,9 @@ out:
 }
 
 int
-pw_pck_gen_patch(struct pw_pck *pck, bool do_force)
+pw_pck_gen_patch(struct pw_pck *pck, const char *patch_path, bool do_force)
 {
+	FILE *fp_patch;
 	char tmp[296];
 	int rc;
 
@@ -1675,6 +1815,18 @@ pw_pck_gen_patch(struct pw_pck *pck, bool do_force)
 		PWLOG(LOG_ERROR, "Can't find \"%s\"\n", tmp);
 		return -rc;
 	}
+
+	if (access(patch_path, F_OK) == 0) {
+		print_colored_utf8(COLOR_RED, "Error: ");
+		fprintf(stderr, "%s already exists\n", patch_path);
+		return -EEXIST;
+	}
+	fp_patch = fopen(patch_path, "w");
+	if (!fp_patch) {
+		PWLOG(LOG_ERROR, "fopen() failed: %d\n", errno);
+		return -errno;
+	}
+
 	SetCurrentDirectory(tmp);
 
 	rc = read_aliases(pck);
@@ -1684,7 +1836,7 @@ pw_pck_gen_patch(struct pw_pck *pck, bool do_force)
 	}
 
 	rc = read_pck_entry_list(pck, false);
-	rc = rc || read_log(pck, false);
+	rc = rc || read_log(pck);
 	if (rc) {
 		goto out;
 	}
@@ -1697,24 +1849,85 @@ pw_pck_gen_patch(struct pw_pck *pck, bool do_force)
 
 	if (pck->needs_update) {
 		if (!do_force) {
-			fprintf(stderr, "\nThe above files were updated in the .pck.files directory and won't be included in the patch. Please update the pck first to include them, or run --gen-patch with the --force flag to ignore this check. Aborting...\n\n");
+			fprintf(stderr, "\nThe above files were updated in the .pck.files directory and won't be included in the patch. Please update the pck first to include them, or run --gen-patch with the --force flag to ignore this check. Aborting...\n");
 			rc = -EBUSY;
 			goto out;
 		} else {
-			fprintf(stderr, "\nThe above files were updated in the .pck.files directory and won't be included in the patch. Update the pck to include them. Continuing...\n\n");
+			fprintf(stderr, "\nThe above files were updated in the .pck.files directory and won't be included in the patch. Update the pck to include them. Continuing...\n");
 		}
 	} else {
-		fprintf(stderr, "\t<everything up to date>\n\n");
+		fprintf(stderr, "\t<everything up to date>\n");
 	}
 
-	fprintf(stderr, "Generating the patch file ...\n");
+	fprintf(stderr, "\nGenerating the patch file ...\n\n");
 
-	/* TODO :) */
+	struct pw_pck_entry *patch_files = NULL;
+	rc = get_updated_files_by_log(pck, &patch_files);
+	if (rc) {
+		return rc;
+	}
+
+	if (!patch_files) {
+		fprintf(stderr, "\t<no files changed>\n");
+		fprintf(stderr, "\nDone!\n");
+		rc = 0;
+		goto out;
+	}
+
+	uint64_t cur_time = get_cur_time(tmp, sizeof(tmp));
+	fprintf(pck->fp_log, ":GEN_PATCH:%020"PRIu64":%28s\n", cur_time, tmp);
+
+	struct pw_pck_header hdr = {};
+	struct pw_pck_footer ftr = {};
+	/* dummy header -> we'll get back here */
+	fwrite(&hdr, sizeof(hdr), 1, fp_patch);
+
+	struct pw_pck_entry **ep = &patch_files;
+	while (*ep) {
+		/* remove from the list if it shouldn't be here */
+		if (!(*ep)->in_gen_list) {
+			*ep = (*ep)->gen_next;
+			continue;
+		}
+
+		print_colored_utf8(COLOR_YELLOW, "\t+%s\n", (*ep)->path_aliased_utf8);
+
+		fseek(pck->fp, (*ep)->hdr.offset, SEEK_SET);
+		/* modify the org entry ... */
+		(*ep)->hdr.offset = ftell(fp_patch);
+
+		pipe(fp_patch, pck->fp, (*ep)->hdr.compressed_length);
+		fprintf(pck->fp_log, "%s\n", (*ep)->path_aliased_utf8);
+		ftr.entry_cnt++;
+
+		ep = &(*ep)->gen_next;
+	}
+
+	ftr.magic0 = PCK_FOOTER_MAGIC0;
+	ftr.entry_list_off = ftell(fp_patch) ^ PW_PCK_XOR1;
+	snprintf(ftr.description, sizeof(ftr.description), "pwmirage :1 :Angelica Patch File");
+	ftr.ver = 0x30000;
+	ftr.magic1 = PCK_FOOTER_MAGIC1;
+
+	struct pw_pck_entry *p = patch_files;
+	while (p) {
+		write_entry_hdr(pck, fp_patch, p);
+		p = p->gen_next;
+	}
+
+	fwrite(&ftr, sizeof(ftr), 1, fp_patch);
+
+	hdr.magic0 = PCK_HEADER_MAGIC0;
+	hdr.file_size = ftell(fp_patch);
+	hdr.magic1 = PCK_HEADER_MAGIC1;
+
+	fseek(fp_patch, 0, SEEK_SET);
+	fwrite(&hdr, sizeof(hdr), 1, fp_patch);
 
 	/* newline in the log for prettiness */
 	fprintf(pck->fp_log, "\n");
 
-	fprintf(stderr, "Done!\n");
+	fprintf(stderr, "\nDone!\n");
 	rc = 0;
 out:
 	SetCurrentDirectory("..");

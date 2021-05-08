@@ -141,7 +141,7 @@ main(int argc, char *argv[])
 			rc = pw_pck_update(&pck);
 			break;
 		case PW_PCK_ACTION_GEN_PATCH:
-			rc = pw_pck_gen_patch(&pck, do_force);
+			rc = pw_pck_gen_patch(&pck, patch_path, do_force);
 			break;
 		case PW_PCK_ACTION_APPLY_PATCH:
 			break;
