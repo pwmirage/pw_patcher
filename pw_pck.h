@@ -88,6 +88,7 @@ struct pw_pck {
 	struct pw_avl *path_node_tree;
 	/** tracked empty space inside the pck file */
 	struct pw_avl *free_blocks_tree;
+	bool is_free_blocks_read;
 
 	/** if any file in .pck.files was changed */
 	uint32_t needs_update;
@@ -107,5 +108,6 @@ int pw_pck_open(struct pw_pck *pck, const char *path);
 int pw_pck_extract(struct pw_pck *pck, bool do_force);
 int pw_pck_update(struct pw_pck *pck);
 int pw_pck_gen_patch(struct pw_pck *pck, const char *patch_path, bool do_force);
+int pw_pck_apply_patch(struct pw_pck *pck, const char *patch_path);
 
 #endif /* PW_PCK_H */

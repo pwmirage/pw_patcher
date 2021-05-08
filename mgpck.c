@@ -144,6 +144,7 @@ main(int argc, char *argv[])
 			rc = pw_pck_gen_patch(&pck, patch_path, do_force);
 			break;
 		case PW_PCK_ACTION_APPLY_PATCH:
+			rc = pw_pck_apply_patch(&pck, patch_path);
 			break;
 	}
 
