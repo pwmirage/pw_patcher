@@ -1185,7 +1185,7 @@ _write_free_block(FILE *fp, struct pw_avl_node *node)
 	_write_free_block(fp, node->right);
 }
 
-static void
+static int
 write_free_blocks(struct pw_pck *pck)
 {
 	struct pw_pck_entry *ent = pck->entry_free_blocks;
@@ -1209,6 +1209,7 @@ write_free_blocks(struct pw_pck *pck)
 	fwrite(&meta, sizeof(meta), 1, pck->fp);
 
 	_write_free_block(pck->fp, pck->free_blocks_tree->root);
+	return 0;
 }
 
 static int
@@ -1347,59 +1348,11 @@ write_ftr(struct pw_pck *pck)
 	fwrite(&pck->ftr, sizeof(pck->ftr), 1, pck->fp);
 	pck->file_append_offset += sizeof(pck->ftr);
 
-	return 0;
-}
-
-static int
-update_pck(struct pw_pck *pck)
-{
-	int rc;
-	uint64_t cur_time;
-	size_t log_hdr_pos;
-	char tmp[64];
-
-	log_hdr_pos = ftell(pck->fp_log);
-	cur_time = get_cur_time(tmp, sizeof(tmp));
-	fprintf(pck->fp_log, ":UPDATE:%020"PRIu64":%28s\n", cur_time, tmp);
-
-	fprintf(stderr, "Patching files:\n");
-
-	rc = find_modified_files(pck, true);
-	if (rc) {
-		return rc;
-	}
-
-	if (!pck->needs_update) {
-		fprintf(stderr, "\t<everything up to date>\n");
-		fp_truncate(pck->fp_log, log_hdr_pos);
-		return 0;
-	}
-
-	if (pck->mg_version > 0) {
-		read_free_blocks(pck);
-	}
-
-	rc = write_modified_pck_files(pck);
-	if (rc) {
-		return rc;
-	}
-
-	write_free_blocks(pck);
-	rc = rewrite_entry_hdr_list(pck);
-	if (rc) {
-		return rc;
-	}
-
-	write_ftr(pck);
-
 	pck->hdr.file_size = ftell(pck->fp);
 	fseek(pck->fp, 0, SEEK_SET);
 	fwrite(&pck->hdr, sizeof(pck->hdr), 1, pck->fp);
 
-	if (pck->file_append_offset) {
-		fp_truncate(pck->fp, pck->file_append_offset);
-	}
-
+	fp_truncate(pck->fp, pck->file_append_offset);
 	return 0;
 }
 
@@ -1642,9 +1595,11 @@ int
 pw_pck_update(struct pw_pck *pck)
 {
 	char tmp[296];
+	uint64_t cur_time;
+	size_t log_hdr_pos;
 	int rc;
 
-	fprintf(stderr, "Updating ...\n");
+	fprintf(stderr, "Updating:\n");
 
 	snprintf(tmp, sizeof(tmp), "%s.pck.files", pck->name);
 	rc = access(tmp, F_OK);
@@ -1666,9 +1621,33 @@ pw_pck_update(struct pw_pck *pck)
 		goto out;
 	}
 
-	rc = update_pck(pck);
+	log_hdr_pos = ftell(pck->fp_log);
+	cur_time = get_cur_time(tmp, sizeof(tmp));
+	fprintf(pck->fp_log, ":UPDATE:%020"PRIu64":%28s\n", cur_time, tmp);
+
+	rc = find_modified_files(pck, true);
 	if (rc) {
 		return rc;
+	}
+
+	if (!pck->needs_update) {
+		fprintf(stderr, "\t<everything up to date>\n");
+		/* cut the UPDATE hdr */
+		fp_truncate(pck->fp_log, log_hdr_pos);
+		rc = 0;
+		goto out;
+	}
+
+	if (pck->mg_version > 0) {
+		read_free_blocks(pck);
+	}
+
+	rc = write_modified_pck_files(pck);
+	rc = rc || write_free_blocks(pck);
+	rc = rc || rewrite_entry_hdr_list(pck);
+	rc = rc || write_ftr(pck);
+	if (rc) {
+		goto out;
 	}
 
 	/* newline in the log for prettiness */
