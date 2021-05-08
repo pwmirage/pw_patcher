@@ -686,7 +686,7 @@ append_entry(struct pw_pck *pck, struct pw_pck_entry *ent)
 static int
 read_pck_entry_list(struct pw_pck *pck, bool create_dirs)
 {
-	uint32_t pck_entry_cnt;
+	uint32_t pck_entry_cnt, saved_entry_cnt;
 	int rc;
 
 	pck->path_node_tree = pw_avl_init(sizeof(struct pw_pck_entry));
@@ -695,6 +695,7 @@ read_pck_entry_list(struct pw_pck *pck, bool create_dirs)
 		return -1;
 	}
 
+	pck_entry_cnt = pck->ftr.entry_cnt;
 	fseek(pck->fp, pck->ftr.entry_list_off, SEEK_SET);
 
 	if (pck->mg_version == 0) {
@@ -715,10 +716,10 @@ read_pck_entry_list(struct pw_pck *pck, bool create_dirs)
 		append_entry(pck, pck->entry_aliases);
 	}
 
-	pck_entry_cnt = pck->ftr.entry_cnt;
+	saved_entry_cnt = pck->ftr.entry_cnt;
 	struct pw_pck_entry *entry_arr = calloc(1, sizeof(*entry_arr) * pck_entry_cnt);
-	if (!pck->entries) {
-		PWLOG(LOG_ERROR, "calloc() failed\n");
+	if (!entry_arr) {
+		PWLOG(LOG_ERROR, "calloc(%d) failed\n", sizeof(*entry_arr) * pck_entry_cnt);
 		goto err_cleanup;
 	}
 
@@ -748,10 +749,13 @@ read_pck_entry_list(struct pw_pck *pck, bool create_dirs)
 		append_entry(pck, ent);
 	}
 
+	/* it won't be in the extracted files but don't remove it */
+	pck->entry_free_blocks->is_present = true;
+
 	pck->file_append_offset = pck->ftr.entry_list_off;
 	pck->ftr.entry_list_off = 0;
 	/* append_entry() incorrectly increased the cnt, so fix it */
-	pck->ftr.entry_cnt = pck_entry_cnt;
+	pck->ftr.entry_cnt = saved_entry_cnt;
 
 	return 0;
 err_cleanup:
@@ -989,11 +993,12 @@ _find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files, bo
 					continue;
 				}
 
+
 				entry->is_modified = true;
 				entry->hdr.length = fsize;
-				print_colored_utf8(COLOR_YELLOW, "\t+%s\n", entry->path_aliased_utf8);
 
 				pck->needs_update = true;
+				print_colored_utf8(COLOR_YELLOW, "\t+%s\n", entry->path_aliased_utf8);
 			} else {
 				/* a brand new file */
 				entry = calloc(1, sizeof(*entry));
@@ -1315,12 +1320,6 @@ rewrite_entry_hdr_list(struct pw_pck *pck)
 	fseek(pck->fp, pck->file_append_offset, SEEK_SET);
 	pck->ftr.entry_list_off = pck->file_append_offset;
 
-	rc = write_entry_hdr(pck, pck->entry_free_blocks);
-	if (rc != 0) {
-		PWLOG(LOG_ERROR, "write_entry_hdr() failed: %d\n", rc);
-		return rc;
-	}
-
 	e = pck->entries;
 	while (e) {
 		rc = write_entry_hdr(pck, e);
@@ -1464,7 +1463,7 @@ int
 pw_pck_extract(struct pw_pck *pck, bool do_force)
 {
 	char tmp[296];
-	unsigned entry_idx = 0;
+	struct pw_pck_entry *ent;
 	int rc;
 
 	fprintf(stderr, "Extracting ...\n");
@@ -1484,6 +1483,8 @@ pw_pck_extract(struct pw_pck *pck, bool do_force)
 	/* Extract the aliases first -> we'll need them early */
 	if (pck->mg_version > 0) {
 		struct pw_pck_entry *ent = pck->entry_aliases;
+
+		fseek(pck->fp, pck->ftr.entry_list_off, SEEK_SET);
 
 		/* skip the first entry (free blocks) */
 		rc = read_entry_hdr(pck, ent);
@@ -1522,8 +1523,6 @@ pw_pck_extract(struct pw_pck *pck, bool do_force)
 		goto out;
 	}
 
-	fseek(pck->fp, pck->ftr.entry_list_off, SEEK_SET);
-
 	/* begin extracting */
 	snprintf(tmp, sizeof(tmp), "%s_mgpck.log", pck->name);
 	pck->fp_log = fopen(tmp, "w");
@@ -1540,6 +1539,8 @@ pw_pck_extract(struct pw_pck *pck, bool do_force)
 
 	log_hdr_pos = ftell(pck->fp_log);
 	fprintf(pck->fp_log, ":EXTRACT:%020"PRIu64":%28s\n", cur_time, tmp);
+
+	ent = pck->entries;
 
 	if (pck->mg_version == 0) {
 		/* generate files which should've been inside the pck */
@@ -1558,22 +1559,21 @@ pw_pck_extract(struct pw_pck *pck, bool do_force)
 
 	/* the first entry is always the list of free blocks, don't extract
 	 * it -> it should live inside the pck only */
-	entry_idx++;
+	ent = ent->next;
 
 	/* the second entry is the log and it must have been extracted earlier, skip it now */
-	entry_idx++;
-	fprintf(pck->fp_log, "%s\n", pck->entries[1].path_aliased_utf8);
+	ent = ent->next;
+	fprintf(pck->fp_log, "%s\n", pck->entry_aliases->path_aliased_utf8);
 
-	for (; entry_idx < pck->ftr.entry_cnt; entry_idx++) {
-		struct pw_pck_entry *ent = &pck->entries[entry_idx];
-
+	while (ent) {
 		rc = extract_entry(pck, ent);
 		if (rc != 0) {
-			PWLOG(LOG_ERROR, "extract_entry(%d) failed: %d\n", entry_idx, rc);
+			PWLOG(LOG_ERROR, "extract_entry() failed: %d\n", rc);
 			goto out;
 		}
 
 		fprintf(pck->fp_log, "%s\n", ent->path_aliased_utf8);
+		ent = ent->next;
 	}
 
 	/* newline for prettiness */
@@ -1581,6 +1581,9 @@ pw_pck_extract(struct pw_pck *pck, bool do_force)
 	/* override the header to be greater than modification date of any extracted file */
 	fseek(pck->fp_log, log_hdr_pos, SEEK_SET);
 	cur_time = get_cur_time(tmp, sizeof(tmp));
+	/* for some reason the modification date of some files can be still greater, so add
+	 * an arbitrary second here */
+	cur_time += 10 * 1000 * 1000;
 	fprintf(pck->fp_log, ":EXTRACT:%020"PRIu64":%28s\n", cur_time, tmp);
 	fclose(pck->fp_log);
 
@@ -1599,7 +1602,7 @@ pw_pck_update(struct pw_pck *pck)
 	size_t log_hdr_pos;
 	int rc;
 
-	fprintf(stderr, "Updating:\n");
+	fprintf(stderr, "Updating:\n\n");
 
 	snprintf(tmp, sizeof(tmp), "%s.pck.files", pck->name);
 	rc = access(tmp, F_OK);

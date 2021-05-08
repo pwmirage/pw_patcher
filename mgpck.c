@@ -127,10 +127,24 @@ main(int argc, char *argv[])
 		goto out;
 	}
 
-	rc = pw_pck_open(&pck, pck_path, action, do_force);
+	rc = pw_pck_open(&pck, pck_path);
 	if (rc) {
 		PWLOG(LOG_ERROR, "pw_pck_open(%s) failed: %d\n", pck_path, rc);
 		goto out;
+	}
+
+	switch (action) {
+		case PW_PCK_ACTION_EXTRACT:
+			rc = pw_pck_extract(&pck, do_force);
+			break;
+		case PW_PCK_ACTION_UPDATE:
+			rc = pw_pck_update(&pck);
+			break;
+		case PW_PCK_ACTION_GEN_PATCH:
+			rc = pw_pck_gen_patch(&pck, do_force);
+			break;
+		case PW_PCK_ACTION_APPLY_PATCH:
+			break;
 	}
 
 	rc = 0;
