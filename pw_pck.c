@@ -527,7 +527,6 @@ write_entry_hdr(struct pw_pck *pck, struct pw_pck_entry *ent)
 	}
 
 	free(buf);
-	pck->new_entry_cnt++;
 	return 0;
 }
 
@@ -676,9 +675,18 @@ set_path_nodes(struct pw_pck *pck, struct pw_pck_entry *ent, bool create_dirs)
 	return 0;
 }
 
+static void
+append_entry(struct pw_pck *pck, struct pw_pck_entry *ent)
+{
+	*pck->entries_tail = ent;
+	pck->entries_tail = &ent->next;
+	pck->ftr.entry_cnt++;
+}
+
 static int
 read_pck_entry_list(struct pw_pck *pck, bool create_dirs)
 {
+	uint32_t pck_entry_cnt;
 	int rc;
 
 	pck->path_node_tree = pw_avl_init(sizeof(struct pw_pck_entry));
@@ -688,27 +696,47 @@ read_pck_entry_list(struct pw_pck *pck, bool create_dirs)
 	}
 
 	fseek(pck->fp, pck->ftr.entry_list_off, SEEK_SET);
-	uint32_t entry_idx = 0;
 
 	if (pck->mg_version == 0) {
 		/* if it's not a mirage package we need a few extra entry slots at the beginning */
 		struct pw_pck_entry *ent;
-		
-		ent = &pck->entries[PW_PCK_ENTRY_FREE_BLOCKS];
+
+		ent = pck->entry_free_blocks;
 		snprintf(ent->hdr.path, sizeof(ent->hdr.path),
 				"%s_fragm.dat", pck->name);
 		set_path_nodes(pck, ent, false);
-		entry_idx++;
+		append_entry(pck, pck->entry_free_blocks);
 
-		ent = &pck->entries[PW_PCK_ENTRY_ALIASES];
+
+		ent = pck->entry_aliases;
 		snprintf(ent->hdr.path, sizeof(ent->hdr.path),
 				"%s_aliases.cfg", pck->name);
 		set_path_nodes(pck, ent, false);
-		entry_idx++;
+		append_entry(pck, pck->entry_aliases);
 	}
 
-	for (; entry_idx < pck->ftr.entry_cnt; entry_idx++) {
-		struct pw_pck_entry *ent = &pck->entries[entry_idx];
+	pck_entry_cnt = pck->ftr.entry_cnt;
+	struct pw_pck_entry *entry_arr = calloc(1, sizeof(*entry_arr) * pck_entry_cnt);
+	if (!pck->entries) {
+		PWLOG(LOG_ERROR, "calloc() failed\n");
+		goto err_cleanup;
+	}
+
+	for (int i = 0; i < pck_entry_cnt; i++) {
+		struct pw_pck_entry *ent = &entry_arr[i];
+
+		if (pck->mg_version > 0) {
+			switch (i) {
+				case 0:
+					ent = pck->entry_free_blocks;
+					break;
+				case 1:
+					ent = pck->entry_aliases;
+					break;
+				default:
+					break;
+			}
+		}
 
 		rc = read_entry_hdr(pck, ent);
 		if (rc != 0) {
@@ -717,10 +745,13 @@ read_pck_entry_list(struct pw_pck *pck, bool create_dirs)
 		}
 
 		set_path_nodes(pck, ent, create_dirs);
+		append_entry(pck, ent);
 	}
 
 	pck->file_append_offset = pck->ftr.entry_list_off;
 	pck->ftr.entry_list_off = 0;
+	/* append_entry() incorrectly increased the cnt, so fix it */
+	pck->ftr.entry_cnt = pck_entry_cnt;
 
 	return 0;
 err_cleanup:
@@ -962,7 +993,6 @@ _find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files)
 				entry->hdr.length = fsize;
 				print_colored_utf8(COLOR_YELLOW, "\t+%s\n", entry->path_aliased_utf8);
 
-				/* do not add into the new_entries just yet. it will be added later */
 				pck->needs_update = true;
 			} else {
 				/* a brand new file */
@@ -983,8 +1013,7 @@ _find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files)
 							"%.*S\\%s", wcslen(path) - 2, path, utf8_name);
 				}
 
-				entry->next = pck->new_entries;
-				pck->new_entries = entry;
+				append_entry(pck, entry);
 				pck->needs_update = true;
 				print_colored_utf8(COLOR_GREEN, "\t+%s\n", entry->path_aliased_utf8);
 			}
@@ -1009,22 +1038,23 @@ static int add_free_block(struct pw_pck *pck, uint32_t offset, uint32_t size);
 static int
 find_modified_files(struct pw_pck *pck)
 {
+#ifdef __MINGW32__
+	struct pw_pck_entry **ep;
 	int rc;
 
-#ifdef __MINGW32__
 	rc = _find_modified_files(pck, L".\\*", pck->path_node_tree);
 	if (rc) {
 		return rc;
 	}
 
-	/* add existing files to the new_entries list
-	 * also free the space after any removed files */
-	for (int i = pck->ftr.entry_cnt - 1; i >= PW_PCK_ENTRY_ALIASES; i--) {
-		struct pw_pck_entry *entry = &pck->entries[i];
+	/* remove deleted files from pck->entries and free up the space
+	 * after them */
+	ep = &pck->entries;
+	while (*ep) {
+		struct pw_pck_entry *entry = *ep;
 
 		if (entry->is_present) {
-			entry->next = pck->new_entries;
-			pck->new_entries = entry;
+			ep = &(*ep)->next;
 			continue;
 		}
 
@@ -1033,6 +1063,11 @@ find_modified_files(struct pw_pck *pck)
 		fprintf(pck->fp_log, "?%s\n", entry->path_aliased_utf8);
 		print_colored_utf8(COLOR_RED, "\t-%s\n", entry->path_aliased_utf8);
 		pck->needs_update = true;
+
+		/* remove from the list */
+		*ep = (*ep)->next;
+		assert(pck->ftr.entry_cnt > 0);
+		pck->ftr.entry_cnt--;
 	}
 
 	return 0;
@@ -1054,14 +1089,11 @@ struct pck_free_blocks_meta {
 static void
 read_free_blocks(struct pw_pck *pck)
 {
-	struct pw_pck_entry *entry;
 	struct pck_free_blocks_meta meta;
 
 	assert(pck->mg_version > 0);
 
-	entry = &pck->entries[PW_PCK_ENTRY_FREE_BLOCKS];
-
-	fseek(pck->fp, entry->hdr.offset, SEEK_SET);
+	fseek(pck->fp, pck->entry_free_blocks->hdr.offset, SEEK_SET);
 	fread(&meta, sizeof(meta), 1, pck->fp);
 
 	for (int i = 0; i < meta.block_cnt; i++) {
@@ -1152,7 +1184,7 @@ _write_free_block(FILE *fp, struct pw_avl_node *node)
 static void
 write_free_blocks(struct pw_pck *pck)
 {
-	struct pw_pck_entry *ent = &pck->entries[PW_PCK_ENTRY_FREE_BLOCKS];
+	struct pw_pck_entry *ent = pck->entry_free_blocks;
 	struct pck_free_blocks_meta meta;
 	size_t fsize;
 
@@ -1249,7 +1281,7 @@ write_modified_pck_files(struct pw_pck *pck)
 {
 	int rc;
 
-	struct pw_pck_entry *e = pck->new_entries;
+	struct pw_pck_entry *e = pck->entries;
 	while (e) {
 		if (!e->is_modified) {
 			e = e->next;
@@ -1278,13 +1310,13 @@ rewrite_entry_hdr_list(struct pw_pck *pck)
 	fseek(pck->fp, pck->file_append_offset, SEEK_SET);
 	pck->ftr.entry_list_off = pck->file_append_offset;
 
-	rc = write_entry_hdr(pck, &pck->entries[PW_PCK_ENTRY_FREE_BLOCKS]);
+	rc = write_entry_hdr(pck, pck->entry_free_blocks);
 	if (rc != 0) {
 		PWLOG(LOG_ERROR, "write_entry_hdr() failed: %d\n", rc);
 		return rc;
 	}
 
-	e = pck->new_entries;
+	e = pck->entries;
 	while (e) {
 		rc = write_entry_hdr(pck, e);
 		if (rc != 0) {
@@ -1306,7 +1338,6 @@ write_ftr(struct pw_pck *pck)
 	fseek(pck->fp, pck->file_append_offset, SEEK_SET);
 
 	pck->ftr.entry_list_off ^= PW_PCK_XOR1;
-	pck->ftr.entry_cnt = pck->new_entry_cnt;
 	snprintf(pck->ftr.description, sizeof(pck->ftr.description), "pwmirage :1 :Angelica File Package");
 
 	fwrite(&pck->ftr, sizeof(pck->ftr), 1, pck->fp);
@@ -1381,6 +1412,8 @@ pw_pck_open(struct pw_pck *pck, const char *path) {
 	uint32_t fsize;
 	int rc;
 
+	pck->entries_tail = &pck->entries;
+
 	c = path + strlen(path) - 1;
 	while (c != path && *c != '\\' && *c != '/') {
 		c--;
@@ -1448,21 +1481,20 @@ pw_pck_open(struct pw_pck *pck, const char *path) {
 
 	pck->ftr.entry_list_off ^= PW_PCK_XOR1;
 
-	if (pck->mg_version == 0) {
-		/* make space for hardcoded entries */
-		pck->ftr.entry_cnt += PW_PCK_ENTRY_MAX;
-	}
-
-	pck->entries = calloc(1, sizeof(*pck->entries) * pck->ftr.entry_cnt);
-	if (!pck->entries) {
+	pck->entry_free_blocks = calloc(1, sizeof(*pck->entry_free_blocks));
+	pck->entry_aliases = calloc(1, sizeof(*pck->entry_aliases));
+	if (!pck->entry_free_blocks || !pck->entry_aliases) {
 		PWLOG(LOG_ERROR, "calloc() failed\n");
+		free(pck->entry_free_blocks);
+		free(pck->entry_aliases);
 		goto err_close;
 	}
 
 	pck->free_blocks_tree = pw_avl_init(sizeof(struct pck_free_block));
 	if (!pck->free_blocks_tree) {
 		PWLOG(LOG_ERROR, "pw_avl_init() failed\n");
-		free(pck->entries);
+		free(pck->entry_free_blocks);
+		free(pck->entry_aliases);
 		rc = -ENOMEM;
 		goto err_close;
 	}
@@ -1497,9 +1529,9 @@ pw_pck_extract(struct pw_pck *pck, bool do_force)
 
 	/* Extract the aliases first -> we'll need them early */
 	if (pck->mg_version > 0) {
-		struct pw_pck_entry *ent = &pck->entries[PW_PCK_ENTRY_ALIASES];
+		struct pw_pck_entry *ent = pck->entry_aliases;
 
-		/* skip the first entry */
+		/* skip the first entry (free blocks) */
 		rc = read_entry_hdr(pck, ent);
 		rc = rc || read_entry_hdr(pck, ent);
 		if (rc != 0) {
@@ -1530,7 +1562,6 @@ pw_pck_extract(struct pw_pck *pck, bool do_force)
 			goto out;
 		}
 	}
-
 
 	rc = read_pck_entry_list(pck, true);
 	if (rc != 0) {

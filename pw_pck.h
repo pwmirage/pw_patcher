@@ -50,13 +50,6 @@ struct pw_pck_entry {
 	struct pw_pck_entry *next; /**< for putting in temporary lists */
 };
 
-/* special entries */
-enum {
-	PW_PCK_ENTRY_FREE_BLOCKS = 0,
-	PW_PCK_ENTRY_ALIASES = 1,
-	PW_PCK_ENTRY_MAX,
-};
-
 #define PW_PCK_XOR1 0xa8937462
 #define PW_PCK_XOR2 0xf1a43653
 struct pw_pck {
@@ -72,8 +65,13 @@ struct pw_pck {
 	FILE *fp;
 	/** mgpck.log handle */
 	FILE *fp_log;
-	/** entries found in the pck file */
+
+	/** linked list of entries parsed and/or to be written back into the pck */
 	struct pw_pck_entry *entries;
+	struct pw_pck_entry **entries_tail;
+	/** special entries pointers for easy access */
+	struct pw_pck_entry *entry_free_blocks;
+	struct pw_pck_entry *entry_aliases;
 
 	/** avl of pck_alias structs, indexed by both org and alias names */
 	struct pck_alias_tree *alias_tree;
@@ -86,10 +84,6 @@ struct pw_pck {
 
 	/** if any file in .pck.files was changed */
 	uint32_t needs_update;
-
-	/** entries to be written back into the pck */
-	uint32_t new_entry_cnt;
-	struct pw_pck_entry *new_entries;
 
 	/** the new EOF counted from the beginning */
 	uint32_t file_append_offset;
