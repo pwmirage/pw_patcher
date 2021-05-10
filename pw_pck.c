@@ -1941,8 +1941,9 @@ pw_pck_gen_patch(struct pw_pck *pck, const char *patch_path, bool do_force)
 	rc = 0;
 out:
 	SetCurrentDirectory("..");
+	fclose(fp_patch);
 	if (rc || !patch_files) {
-		unlink(patch_path);
+		remove(patch_path);
 	}
 	return rc;
 }
