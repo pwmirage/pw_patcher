@@ -787,6 +787,7 @@ extract_entry(struct pw_pck *pck, struct pw_pck_entry *ent)
 		}
 	}
 
+	fflush(fp_out);
 	fclose(fp_out);
 
 	return 0;
@@ -1751,8 +1752,8 @@ pw_pck_extract(struct pw_pck *pck, bool do_force)
 	fseek(pck->fp_log, log_hdr_pos, SEEK_SET);
 	cur_time = get_cur_time(tmp, sizeof(tmp));
 	/* for some reason the modification date of some files can be still greater, so add
-	 * an arbitrary second here */
-	cur_time += 10 * 1000 * 1000;
+	 * an arbitrary 2 seconds here */
+	cur_time += 20 * 1000 * 1000;
 	fprintf(pck->fp_log, ":EXTRACT:%020"PRIu64":%28s\n", cur_time, tmp);
 	fclose(pck->fp_log);
 
