@@ -62,6 +62,12 @@ print_help(char *argv[0])
 }
 
 static void
+print_version(char *argv[0])
+{
+	printf("mgpck version 0.5.1\n");
+}
+
+static void
 enable_console(void)
 {
 	AttachConsole(ATTACH_PARENT_PROCESS);
@@ -91,6 +97,9 @@ main(int argc, char *argv[])
 	while (argc > 0) {
 		if (strcmp(*a, "-h") == 0 || strcmp(*a, "--help") == 0) {
 			print_help(argv);
+			goto out;
+		} else if (strcmp(*a, "-v") == 0 || strcmp(*a, "--version") == 0) {
+			print_version(argv);
 			goto out;
 		} else if (strcmp(*a, "-f") == 0 || strcmp(*a, "--force") == 0) {
 			do_force = true;
