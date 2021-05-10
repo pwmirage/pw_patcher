@@ -742,6 +742,8 @@ read_pck_entry_list(struct pw_pck *pck, bool create_dirs)
 
 		set_path_nodes(pck, ent, create_dirs);
 		append_entry(pck, ent);
+
+		PWLOG(LOG_DEBUG_5, "Read entry %u: \"%s\"\n", i, ent->path_aliased_utf8);
 	}
 
 	/* it won't be in the extracted files but don't remove it */
@@ -1485,6 +1487,7 @@ rewrite_entry_hdr_list(struct pw_pck *pck)
 	while (*ep) {
 		if ((*ep)->hdr.to_be_removed) {
 			*ep = (*ep)->next;
+			PWLOG(LOG_DEBUG_5, "Skipping entry %u: \"%s\"\n", pck->ftr.entry_cnt, (*ep)->path_aliased_utf8);
 			continue;
 		}
 
@@ -1495,6 +1498,7 @@ rewrite_entry_hdr_list(struct pw_pck *pck)
 			return rc;
 		}
 
+		PWLOG(LOG_DEBUG_5, "Saving entry %u: \"%s\"\n", pck->ftr.entry_cnt, (*ep)->path_aliased_utf8);
 		pck->ftr.entry_cnt++;
 		ep = &(*ep)->next;
 	}
@@ -1507,6 +1511,8 @@ static int
 write_ftr(struct pw_pck *pck)
 {
 	fseek(pck->fp, pck->file_append_offset, SEEK_SET);
+
+	PWLOG(LOG_DEBUG_1, "Wrote %u pck entries\n", pck->ftr.entry_cnt);
 
 	pck->ftr.entry_list_off ^= PW_PCK_XOR1;
 	snprintf(pck->ftr.description, sizeof(pck->ftr.description), "pwmirage :1 :Angelica File Package");
@@ -1612,6 +1618,8 @@ pw_pck_open(struct pw_pck *pck, const char *path) {
 		rc = -ENOMEM;
 		goto err_close;
 	}
+
+	PWLOG(LOG_DEBUG_1, "Read %u pck entries\n", pck->ftr.entry_cnt);
 
 	return 0;
 err_close:

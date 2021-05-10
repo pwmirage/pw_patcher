@@ -393,6 +393,15 @@ pwlog(int type, const char *filename, unsigned lineno, const char *fnname, const
 		case LOG_INFO:
 			type_str = "INFO";
 			break;
+		case LOG_DEBUG:
+			type_str = "DEBUG";
+			break;
+		case LOG_DEBUG_1:
+			type_str = "DEBUG1";
+			break;
+		case LOG_DEBUG_5:
+			type_str = "DEBUG5";
+			break;
 		default:
 			return;
 	}

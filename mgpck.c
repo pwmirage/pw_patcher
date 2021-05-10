@@ -103,6 +103,10 @@ main(int argc, char *argv[])
 			goto out;
 		} else if (strcmp(*a, "-f") == 0 || strcmp(*a, "--force") == 0) {
 			do_force = true;
+		} else if (argc >= 2 && (strcmp(*a, "-l") == 0 || strcmp(*a, "--loglevel") == 0)) {
+			g_pwlog_level = atoi(*(a + 1));
+			a++;
+			argc--;
 		} else if (argc >= 2 && (strcmp(*a, "-x") == 0 || strcmp(*a, "--extract") == 0)) {
 			action = PW_PCK_ACTION_EXTRACT;
 			pck_path = *(a + 1);
