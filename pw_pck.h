@@ -38,7 +38,7 @@ struct pw_pck_entry_header {
 	uint32_t offset;
 	uint32_t length;
 	uint32_t compressed_length;
-	uint32_t unknown;
+	uint32_t to_be_removed;
 };
 
 struct pw_pck_entry {

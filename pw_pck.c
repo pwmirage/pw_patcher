@@ -738,6 +738,8 @@ read_pck_entry_list(struct pw_pck *pck, bool create_dirs)
 			goto err_cleanup;
 		}
 
+		ent->hdr.to_be_removed = 0;
+
 		set_path_nodes(pck, ent, create_dirs);
 		append_entry(pck, ent);
 	}
@@ -1152,6 +1154,7 @@ _find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files, bo
 				entry->is_present = true;
 				entry->is_modified = true;
 				entry->hdr.length = fsize;
+
 				if (path[0] == '.' && path[1] == '\\') {
 					snprintf(entry->path_aliased_utf8, sizeof(entry->path_aliased_utf8),
 							"%s", utf8_name);
@@ -1468,7 +1471,7 @@ rewrite_entry_hdr_list(struct pw_pck *pck)
 
 	ep = &pck->entries;
 	while (*ep) {
-		if ((*ep)->hdr.length == 0 && (*ep)->hdr.compressed_length == 0) {
+		if ((*ep)->hdr.to_be_removed) {
 			*ep = (*ep)->next;
 			continue;
 		}
@@ -1904,8 +1907,7 @@ pw_pck_gen_patch(struct pw_pck *pck, const char *patch_path, bool do_force)
 			pipe(fp_patch, pck->fp, (*ep)->hdr.compressed_length);
 			fprintf(pck->fp_log, "%s\n", (*ep)->path_aliased_utf8);
 		} else {
-			(*ep)->hdr.length = 0;
-			(*ep)->hdr.compressed_length = 0;
+			(*ep)->hdr.to_be_removed = 1;
 			fprintf(pck->fp_log, "?%s\n", (*ep)->path_aliased_utf8);
 		}
 
@@ -2066,7 +2068,7 @@ pw_pck_apply_patch(struct pw_pck *pck, const char *patch_path)
 			if (pck->fp_log) {
 				fprintf(pck->fp_log, "%s\n", pck_ent->path_aliased_utf8);
 			}
-		} else if (pck_ent->hdr.length) {
+		} else if (!pck_ent->hdr.to_be_removed) {
 			/* the entry is new, so just add it to pck->entries */
 			append_entry(pck, pck_ent);
 			print_colored_utf8(COLOR_GREEN, "\t+%s\n", pck_ent->path_aliased_utf8);
@@ -2082,7 +2084,8 @@ pw_pck_apply_patch(struct pw_pck *pck, const char *patch_path)
 
 		pck_ent->hdr.length = ent->hdr.length;
 		pck_ent->hdr.compressed_length = ent->hdr.compressed_length;
-		if (pck_ent->hdr.length) {
+		pck_ent->hdr.to_be_removed = ent->hdr.to_be_removed;
+		if (!pck_ent->hdr.to_be_removed) {
 			pck_ent->hdr.offset = get_free_block(pck, ent_size);
 			fseek(fp_patch, ent_off, SEEK_SET);
 			fseek(pck->fp, pck_ent->hdr.offset, SEEK_SET);
