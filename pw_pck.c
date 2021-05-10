@@ -1159,8 +1159,20 @@ _find_modified_files(struct pw_pck *pck, wchar_t *path, struct pw_avl *files, bo
 					snprintf(entry->path_aliased_utf8, sizeof(entry->path_aliased_utf8),
 							"%s", utf8_name);
 				} else {
-					snprintf(entry->path_aliased_utf8, sizeof(entry->path_aliased_utf8),
-							"%.*S\\%s", wcslen(path) - 2, path, utf8_name);
+					char *c = entry->path_aliased_utf8;
+
+					rc = WideCharToMultiByte(CP_UTF8, 0, path, wcslen(path) - 2, entry->path_aliased_utf8, sizeof(entry->path_aliased_utf8), NULL, NULL);
+
+					snprintf(entry->path_aliased_utf8 + rc,
+							sizeof(entry->path_aliased_utf8) - rc,
+							"\\%s", utf8_name);
+
+					while (*c) {
+						if (*c == '\\') {
+							*c = '/';
+						}
+						c++;
+					}
 				}
 
 				append_entry(pck, entry);
