@@ -192,7 +192,7 @@ alloc_alias_tree(void)
 }
 
 static int
-read_aliases(struct pw_pck *pck)
+read_aliases(struct pw_pck *pck, const char *custom_name)
 {
 	struct pck_alias_tree *root_avl;
 	struct pck_alias_tree *cur_avl;
@@ -204,7 +204,12 @@ read_aliases(struct pw_pck *pck)
 	char tmp[64];
 	size_t alias_buflen;
 
-	snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
+	if (custom_name) {
+		snprintf(tmp, sizeof(tmp), "%s", custom_name);
+	} else {
+		snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
+	}
+
 	rc = readfile(tmp, &pck->alias_buf, &alias_buflen);
 	if (rc != 0) {
 		PWLOG(LOG_ERROR, "readfile() failed: %d\n", rc);
@@ -1259,7 +1264,8 @@ try_read_free_blocks(struct pw_pck *pck)
 {
 	struct pck_free_blocks_meta meta;
 
-	if (pck->is_free_blocks_read || pck->mg_version == 0) {
+	if (pck->is_free_blocks_read || pck->mg_version == 0 ||
+			pck->entry_free_blocks->hdr.length == 0) {
 		return;
 	}
 
@@ -1534,7 +1540,7 @@ int
 pw_pck_open(struct pw_pck *pck, const char *path) {
 
 	char tmp[296];
-	const char *c, *last_dot == NULL;
+	const char *c, *last_dot = NULL;
 	uint32_t fsize;
 	int rc;
 
@@ -1592,7 +1598,7 @@ pw_pck_open(struct pw_pck *pck, const char *path) {
 	PWLOG(LOG_DEBUG_1, "ver: 0x%x\n", pck->ftr.ver);
 	PWLOG(LOG_DEBUG_1, "flags: 0x%x\n", pck->ftr.flags);
 
-	if (pck->ftr.ver != 0x20002 && pck->ftr.ver != 0x20001) {
+	if (pck->ftr.ver != 0x20002 && pck->ftr.ver != 0x20001 && pck->ftr.ver != 0x30000) {
 		PWLOG(LOG_ERROR, "invalid pck version: 0x%x\n", pck->ftr.ver);
 		rc = -EINVAL;
 		goto err_close;
@@ -1673,16 +1679,15 @@ pw_pck_extract(struct pw_pck *pck, bool do_force)
 			goto out;
 		}
 
-		snprintf(tmp, sizeof(tmp), "%s_aliases.cfg", pck->name);
-		if (strcmp(ent->hdr.path, tmp) != 0) {
-			PWLOG(LOG_ERROR, "Alias filename mismatch, got=\"%s\", expected=\"%s\"\n",
-					ent->hdr.path, tmp);
+		if (strstr(ent->hdr.path, "_aliases.cfg") == NULL) {
+			PWLOG(LOG_ERROR, "Alias filename mismatch, got=\"%s\"\n",
+					ent->hdr.path);
 			rc = -EIO;
 			goto out;
 		}
 
 		snprintf(ent->path_aliased_utf8, sizeof(ent->path_aliased_utf8),
-				"%s_aliases.cfg", pck->name);
+				"%s", ent->hdr.path);
 
 		rc = extract_entry(pck, ent);
 		if (rc != 0) {
@@ -1690,7 +1695,7 @@ pw_pck_extract(struct pw_pck *pck, bool do_force)
 			goto out;
 		}
 
-		rc = read_aliases(pck);
+		rc = read_aliases(pck, ent->hdr.path);
 		if (rc != 0) {
 			PWLOG(LOG_ERROR, "read_aliases(%d) failed: %d\n", 0, rc);
 			goto out;
@@ -1791,7 +1796,7 @@ pw_pck_update(struct pw_pck *pck)
 	}
 	SetCurrentDirectory(tmp);
 
-	rc = read_aliases(pck);
+	rc = read_aliases(pck, NULL);
 	if (rc) {
 		PWLOG(LOG_ERROR, "Can't read the alias file (rc=%d). Please extract the .pck file again using mgpck\n", rc);
 		goto out;
@@ -1868,7 +1873,7 @@ pw_pck_gen_patch(struct pw_pck *pck, const char *patch_path, bool do_force)
 
 	SetCurrentDirectory(tmp);
 
-	rc = read_aliases(pck);
+	rc = read_aliases(pck, NULL);
 	if (rc) {
 		PWLOG(LOG_ERROR, "Can't read the alias file (rc=%d). Please extract the .pck file again using mgpck\n", rc);
 		goto out;
@@ -1917,6 +1922,7 @@ pw_pck_gen_patch(struct pw_pck *pck, const char *patch_path, bool do_force)
 
 	struct pw_pck_header hdr = {};
 	struct pw_pck_footer ftr = {};
+	bool aliases_found = false;
 	/* dummy header -> we'll get back here */
 	fwrite(&hdr, sizeof(hdr), 1, fp_patch);
 
@@ -1942,21 +1948,52 @@ pw_pck_gen_patch(struct pw_pck *pck, const char *patch_path, bool do_force)
 		}
 
 		ftr.entry_cnt++;
+
+		if (strstr((*ep)->hdr.path, "_aliases.cfg") != NULL) {
+			aliases_found = true;
+
+			if (ep != &patch_files) {
+				struct pw_pck_entry *aliases = *ep;
+
+				/* remove aliases from the list, then put them at the very beginning */
+				*ep = aliases->gen_next;
+				aliases->gen_next = patch_files;
+				patch_files = aliases;
+				continue;
+			}
+		}
+
 		ep = &(*ep)->gen_next;
 	}
 
-	ftr.magic0 = PCK_FOOTER_MAGIC0;
-	ftr.entry_list_off = ftell(fp_patch);
-	ftr.entry_list_off ^= PW_PCK_XOR1;
-	snprintf(ftr.description, sizeof(ftr.description), "pwmirage :1 :Angelica Patch File");
-	ftr.ver = 0x30000;
-	ftr.magic1 = PCK_FOOTER_MAGIC1;
+	ftr.entry_list_off = ftell(fp_patch) ^ PW_PCK_XOR1;
+
+	/* prepend an empty free blocks entry */
+	struct pw_pck_entry free_block_ent = {};
+	snprintf(free_block_ent.hdr.path, sizeof(free_block_ent.hdr.path),
+			"%s_fragm.dat", pck->name);
+	write_entry_hdr(pck, fp_patch, &free_block_ent);
+	ftr.entry_cnt++;
+
+	if (!aliases_found) {
+		/* prepend an empty aliases entry */
+		struct pw_pck_entry aliases_ent = {};
+		snprintf(aliases_ent.hdr.path, sizeof(aliases_ent.hdr.path),
+				"%s_aliases.cfg", pck->name);
+		write_entry_hdr(pck, fp_patch, &aliases_ent);
+		ftr.entry_cnt++;
+	}
 
 	struct pw_pck_entry *p = patch_files;
 	while (p) {
 		write_entry_hdr(pck, fp_patch, p);
 		p = p->gen_next;
 	}
+
+	ftr.magic0 = PCK_FOOTER_MAGIC0;
+	snprintf(ftr.description, sizeof(ftr.description), "pwmirage :1 :Angelica Patch File");
+	ftr.ver = 0x30000;
+	ftr.magic1 = PCK_FOOTER_MAGIC1;
 
 	fwrite(&ftr, sizeof(ftr), 1, fp_patch);
 
