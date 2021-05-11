@@ -433,6 +433,7 @@ read_entry_hdr(struct pw_pck *pck, FILE *fp, struct pw_pck_entry *ent)
 		free(buf);
 		if (rc != Z_OK || (uncompressed_size != sizeof(*hdr) &&
 					uncompressed_size != sizeof(*hdr) - 4)) {
+			PWLOG(LOG_ERROR, "uncompress() failed, rc=%d, errno=%d, uncompressed_size=%u, expected=%u\n", rc, errno, uncompressed_size, sizeof(*hdr));
 			return rc || -ENOSPC;
 		}
 	}
@@ -1583,6 +1584,10 @@ pw_pck_open(struct pw_pck *pck, const char *path) {
 	fseek(pck->fp, fsize - sizeof(struct pw_pck_footer), SEEK_SET);
 	fread(&pck->ftr, sizeof(pck->ftr), 1, pck->fp);
 
+	PWLOG(LOG_DEBUG_1, "fsize: 0x%x\n", fsize);
+	PWLOG(LOG_DEBUG_1, "ver: 0x%x\n", pck->ftr.ver);
+	PWLOG(LOG_DEBUG_1, "flags: 0x%x\n", pck->ftr.flags);
+
 	if (pck->ftr.ver != 0x20002 && pck->ftr.ver != 0x20001) {
 		PWLOG(LOG_ERROR, "invalid pck version: 0x%x\n", pck->ftr.ver);
 		rc = -EINVAL;
@@ -1937,7 +1942,8 @@ pw_pck_gen_patch(struct pw_pck *pck, const char *patch_path, bool do_force)
 	}
 
 	ftr.magic0 = PCK_FOOTER_MAGIC0;
-	ftr.entry_list_off = ftell(fp_patch) ^ PW_PCK_XOR1;
+	ftr.entry_list_off = ftell(fp_patch);
+	ftr.entry_list_off ^= PW_PCK_XOR1;
 	snprintf(ftr.description, sizeof(ftr.description), "pwmirage :1 :Angelica Patch File");
 	ftr.ver = 0x30000;
 	ftr.magic1 = PCK_FOOTER_MAGIC1;
@@ -2029,17 +2035,23 @@ pw_pck_apply_patch(struct pw_pck *pck, const char *patch_path)
 	}
 
 	/* now check similar magic numbers at the end of file */
-	fseek(fp_patch, fsize - sizeof(struct pw_pck_footer), SEEK_SET);
+	fseek(fp_patch, fsize - sizeof(ftr), SEEK_SET);
 	fread(&ftr, sizeof(ftr), 1, fp_patch);
 
-	if (ftr.ver != 0x30000) {
-		PWLOG(LOG_ERROR, "invalid patch file version: 0x%x\n", ftr.ver);
+	PWLOG(LOG_DEBUG_1, "fsize: 0x%x\n", fsize);
+	PWLOG(LOG_DEBUG_1, "ver: 0x%x\n", ftr.ver);
+	PWLOG(LOG_DEBUG_1, "entries: 0x%x\n", ftr.entry_cnt);
+	PWLOG(LOG_DEBUG_1, "flags: 0x%x\n", ftr.flags);
+	PWLOG(LOG_DEBUG_1, "desc: \"%s\"\n", ftr.description);
+
+	if (ftr.magic0 != PCK_FOOTER_MAGIC0 || ftr.magic1 != PCK_FOOTER_MAGIC1) {
+		PWLOG(LOG_ERROR, "invalid footer magic: m0=0x%x, m1=0x%x\n", ftr.magic0, ftr.magic1);
 		rc = -EINVAL;
 		goto out;
 	}
 
-	if (ftr.magic0 != PCK_FOOTER_MAGIC0 || ftr.magic1 != PCK_FOOTER_MAGIC1) {
-		PWLOG(LOG_ERROR, "invalid footer magic\n");
+	if (ftr.ver != 0x30000) {
+		PWLOG(LOG_ERROR, "invalid patch file version: 0x%x\n", ftr.ver);
 		rc = -EINVAL;
 		goto out;
 	}
