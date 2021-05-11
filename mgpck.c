@@ -64,7 +64,7 @@ print_help(char *argv[0])
 static void
 print_version(char *argv[0])
 {
-	printf("mgpck version 0.5.2\n");
+	printf("mgpck version 0.5.3\n");
 }
 
 static void
