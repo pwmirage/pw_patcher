@@ -1856,7 +1856,7 @@ pw_pck_gen_patch(struct pw_pck *pck, const char *patch_path, bool do_force)
 		fprintf(stderr, "%s already exists\n", patch_path);
 		return -EEXIST;
 	}
-	fp_patch = fopen(patch_path, "w");
+	fp_patch = fopen(patch_path, "wb");
 	if (!fp_patch) {
 		PWLOG(LOG_ERROR, "fopen() failed: %d\n", errno);
 		return -errno;
@@ -1987,7 +1987,7 @@ pw_pck_apply_patch(struct pw_pck *pck, const char *patch_path)
 	uint32_t patch_version;
 	int rc;
 
-	fp_patch = fopen(patch_path, "r");
+	fp_patch = fopen(patch_path, "rb");
 	if (!fp_patch) {
 		print_colored_utf8(COLOR_RED, "Error: ");
 		fprintf(stderr, "Can't open the patch file \"%s\"\n", patch_path);
