@@ -11,6 +11,10 @@
 #include <stdarg.h>
 #include <stdbool.h>
 
+#ifndef NO_ICONV
+#include <iconv.h>
+#endif
+
 #ifdef __MINGW32__
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -58,7 +62,30 @@ void fwsprint(FILE *fp, const uint16_t *buf, int maxlen);
 void fwsprintf(FILE *fp, const char *fmt, const uint16_t *buf, int maxlen);
 void wsnprintf(uint16_t *dst, size_t dstsize, const char *src);
 
-int change_charset(char *src_charset, char *dst_charset, char *src, long srclen, char *dst, long dstlen);
+static int __attribute__ ((unused))
+change_charset(char *src_charset, char *dst_charset, char *src, long srclen, char *dst, long dstlen)
+{
+#ifdef NO_ICONV
+	return 0;
+#else
+	iconv_t cd;
+	int rc;
+
+	if (!src || !dst) {
+		return -1;
+	}
+
+	cd = iconv_open(dst_charset, src_charset);
+	if (cd == 0) {
+		return -1;
+	}
+
+	rc = iconv(cd, &src, (size_t *) &srclen, &dst, (size_t *) &dstlen);
+	iconv_close(cd);
+	return rc;
+#endif
+}
+
 void normalize_json_string(char *str, bool use_crlf);
 
 #define LOG_ERROR 0

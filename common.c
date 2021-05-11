@@ -21,15 +21,11 @@
 #include "common.h"
 #include "cjson.h"
 
-#ifndef NO_ICONV
-#include <iconv.h>
-#endif
-
 int g_pwlog_level = 99;
 FILE *g_nullfile;
 const char g_zeroes[4096];
 
-
+#ifndef NO_NETWORKING
 #ifdef __MINGW32__
 #include <wininet.h>
 
@@ -99,15 +95,22 @@ download_wget(const char *url, const char *filename)
 	return 0;
 }
 #endif
+#endif
 
 int
 download(const char *url, const char *filename)
 {
+#ifdef NO_NETWORKING
+	return -ENOSYS;
+#else
 	PWLOG(LOG_DEBUG_1, "Fetching \"%s\" ...\n", url);
+
 #ifdef __MINGW32__
 	return download_wininet(url, filename);
 #else
 	return download_wget(url, filename);
+#endif
+
 #endif
 }
 
@@ -206,30 +209,6 @@ normalize_json_string(char *str, bool use_crlf)
 	}
 
 	*write_b = 0;
-}
-
-int
-change_charset(char *src_charset, char *dst_charset, char *src, long srclen, char *dst, long dstlen)
-{
-#ifdef NO_ICONV
-	return 0;
-#else
-	iconv_t cd;
-	int rc;
-
-	if (!src || !dst) {
-		return -1;
-	}
-
-	cd = iconv_open(dst_charset, src_charset);
-	if (cd == 0) {
-		return -1;
-	}
-
-	rc = iconv(cd, &src, (size_t *) &srclen, &dst, (size_t *) &dstlen);
-	iconv_close(cd);
-	return rc;
-#endif
 }
 
 void
