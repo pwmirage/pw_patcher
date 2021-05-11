@@ -60,6 +60,8 @@ struct pw_pck_entry {
 struct pw_pck {
 	/** pck file basename without the extension */
 	char name[64];
+	/** full basename */
+	char fullname[96];
 	/** 0 for non-mirage file */
 	unsigned mg_version;
 	/** headers taken straight from the pck */

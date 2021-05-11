@@ -1534,16 +1534,19 @@ int
 pw_pck_open(struct pw_pck *pck, const char *path) {
 
 	char tmp[296];
-	const char *c;
+	const char *c, *last_dot == NULL;
 	uint32_t fsize;
 	int rc;
 
-	fprintf(stderr, "Reading %s.pck ...\n", pck->name);
+	fprintf(stderr, "Reading pck ...\n");
 
 	pck->entries_tail = &pck->entries;
 
 	c = path + strlen(path) - 1;
 	while (c != path && *c != '\\' && *c != '/') {
+		if (*c == '.' && !last_dot) {
+			last_dot = c;
+		}
 		c--;
 	}
 
@@ -1555,7 +1558,8 @@ pw_pck_open(struct pw_pck *pck, const char *path) {
 	if (c != path) {
 		c++;
 	}
-	snprintf(pck->name, sizeof(pck->name), "%.*s", strlen(c) - strlen(".pck"), c);
+	snprintf(pck->fullname, sizeof(pck->fullname), "%s", c);
+	snprintf(pck->name, sizeof(pck->name), "%.*s", last_dot - c, c);
 
 	pck->fp = fopen(path, "r+b");
 	if (pck->fp == NULL) {
@@ -1643,11 +1647,11 @@ pw_pck_extract(struct pw_pck *pck, bool do_force)
 
 	fprintf(stderr, "Extracting ...\n");
 
-	snprintf(tmp, sizeof(tmp), "%s.pck.files", pck->name);
+	snprintf(tmp, sizeof(tmp), "%s.files", pck->fullname);
 	rc = access(tmp, F_OK);
 	if (rc == 0 && !do_force) {
 		print_colored_utf8(COLOR_RED, "Error: ");
-		fprintf(stderr, "%s.pck.files already exists. Run mgpck with the `--force` flag to override files inside, or please delete that directory manually.\n", pck->name);
+		fprintf(stderr, "%s.files already exists. Run mgpck with the `--force` flag to override files inside, or please delete that directory manually.\n", pck->fullname);
 		return 0;
 	}
 
@@ -1779,7 +1783,7 @@ pw_pck_update(struct pw_pck *pck)
 
 	fprintf(stderr, "Updating:\n\n");
 
-	snprintf(tmp, sizeof(tmp), "%s.pck.files", pck->name);
+	snprintf(tmp, sizeof(tmp), "%s.files", pck->fullname);
 	rc = access(tmp, F_OK);
 	if (rc != 0) {
 		PWLOG(LOG_ERROR, "Can't find \"%s\"\n", tmp);
@@ -1844,7 +1848,7 @@ pw_pck_gen_patch(struct pw_pck *pck, const char *patch_path, bool do_force)
 	char tmp[296];
 	int rc;
 
-	snprintf(tmp, sizeof(tmp), "%s.pck.files", pck->name);
+	snprintf(tmp, sizeof(tmp), "%s.files", pck->fullname);
 	rc = access(tmp, F_OK);
 	if (rc != 0) {
 		PWLOG(LOG_ERROR, "Can't find \"%s\"\n", tmp);
@@ -1876,7 +1880,7 @@ pw_pck_gen_patch(struct pw_pck *pck, const char *patch_path, bool do_force)
 		goto out;
 	}
 
-	fprintf(stderr, "Searching for updated files in %s.pck.files ...\n\n", pck->name);
+	fprintf(stderr, "Searching for updated files in %s.files ...\n\n", pck->fullname);
 	rc = find_modified_files(pck, false);
 	if (rc) {
 		goto out;
@@ -1884,11 +1888,11 @@ pw_pck_gen_patch(struct pw_pck *pck, const char *patch_path, bool do_force)
 
 	if (pck->needs_update) {
 		if (!do_force) {
-			fprintf(stderr, "\nThe above files were updated in the .pck.files directory and won't be included in the patch. Please update the pck first to include them, or run --gen-patch with the --force flag to ignore this check. Aborting...\n");
+			fprintf(stderr, "\nThe above files were updated in the .files directory and won't be included in the patch. Please update the pck first to include them, or run --gen-patch with the --force flag to ignore this check. Aborting...\n");
 			rc = -EBUSY;
 			goto out;
 		} else {
-			fprintf(stderr, "\nThe above files were updated in the .pck.files directory and won't be included in the patch. Update the pck to include them. Continuing...\n");
+			fprintf(stderr, "\nThe above files were updated in the .files directory and won't be included in the patch. Update the pck to include them. Continuing...\n");
 		}
 	} else {
 		fprintf(stderr, "\t<everything up to date>\n");
@@ -2003,7 +2007,7 @@ pw_pck_apply_patch(struct pw_pck *pck, const char *patch_path)
 
 	try_read_free_blocks(pck);
 
-	snprintf(tmp, sizeof(tmp), "%s.pck.files", pck->name);
+	snprintf(tmp, sizeof(tmp), "%s.files", pck->fullname);
 	SetCurrentDirectory(tmp);
 	/* it might fail because .pck.files is not present -> don't care */
 	read_log(pck);
