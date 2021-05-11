@@ -1,5 +1,5 @@
 OBJECTS = common.o serializer.o chain_arr.o pw_elements.o cjson.o idmap.o pw_npc.o pw_tasks.o pw_tasks_npc.o pw_pck.o avl.o zpipe.o
-ALL_OBJECTS := $(OBJECTS) export.o srv_patcher.o idmap_gen.o
+ALL_OBJECTS := $(OBJECTS) export.o srv_patcher.o idmap_gen.o mgpck.o
 _CFLAGS := -O3 -MD -MP -fno-strict-aliasing -Wall -Wno-format-truncation $(CFLAGS)
 
 ifeq ($(OS),Windows_NT)
