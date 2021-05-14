@@ -425,8 +425,8 @@ patch(void)
 		const char *url = JSs(pck_update, "url");
 
 		PWLOG(LOG_INFO, "Fetching patch \"%s\" ...\n", JSs(pck_update, "name"));
-		set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_DOWNLOADING_N_OF_N, updates->count + i + 1, pck_updates->count, 0);
-		snprintf(tmpbuf, sizeof(tmpbuf), "Downloading patch %d of %d", i + 1, pck_updates->count);
+		set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_DOWNLOADING_N_OF_N, updates->count + i + 1, updates->count + pck_updates->count, 0);
+		snprintf(tmpbuf, sizeof(tmpbuf), "Downloading pck patch %d of %d", i + 1, pck_updates->count);
 
 		rc = apply_pck_patch(pck_name, url);
 		if (rc) {
