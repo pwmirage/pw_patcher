@@ -140,6 +140,8 @@ on_init(int argc, char *argv[])
 	g_latest_version = cjson_parse(g_latest_version_str);
 	if (!g_latest_version) {
 		set_text(g_status_right_lbl, "Can't parse patch list");
+		PWLOG(LOG_ERROR, "Can't parse patch list: %s\n", tmpbuf);
+		fprintf(stderr, g_latest_version_str);
 		set_progress_state(PBST_ERROR);
 		set_progress(100);
 		return;
