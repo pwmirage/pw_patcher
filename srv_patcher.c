@@ -279,7 +279,6 @@ main(int argc, char *argv[])
 		force_fresh_update = true;
 		version.generation = 0;
 		snprintf(version.branch, sizeof(version.branch), "%s", branch_name);
-		snprintf(version.cur_hash, sizeof(version.cur_hash), "0");
 	}
 
 	g_elements = calloc(1, sizeof(*g_elements));
@@ -294,8 +293,8 @@ main(int argc, char *argv[])
 		return 1;
 	}
 
-	snprintf(tmpbuf, sizeof(tmpbuf), "https://pwmirage.com/editor/project/fetch/%s/since/%s/%u",
-			branch_name, version.cur_hash, version.generation);
+	snprintf(tmpbuf, sizeof(tmpbuf), "https://pwmirage.com/editor/project/fetch/%s/since/%u/%u",
+			branch_name, version.version, version.generation);
 
 	rc = download_mem(tmpbuf, &buf, &num_bytes);
 	if (rc) {
@@ -315,7 +314,6 @@ main(int argc, char *argv[])
 	bool is_cumulative = JSi(ver_cjson, "cumulative") && !force_fresh_update;
 	const char *elements_path;
 	const char *tasks_path;
-	const char *last_hash = NULL;
 
 	if (updates->count) {
 		for (i = 0; i < files->count; i++) {
@@ -406,14 +404,14 @@ main(int argc, char *argv[])
 		for (i = 0; i < updates->count; i++) {
 			struct cjson *update = JS(updates, i);
 			bool is_cached = JSi(update, "cached");
-			last_hash = JSs(update, "hash");
+			const char *hash = JSs(update, "hash");
 
 			PWLOG(LOG_INFO, "Fetching patch \"%s\" ...\n", JSs(update, "name"));
 
 			if (is_cached) {
-				snprintf(tmpbuf, sizeof(tmpbuf), "%s/cache/%s/%s.json", origin, branch_name, last_hash);
+				snprintf(tmpbuf, sizeof(tmpbuf), "%s/cache/%s/%s.json", origin, branch_name, hash);
 			} else {
-				snprintf(tmpbuf, sizeof(tmpbuf), "%s/uploads/%s.json", origin, last_hash);
+				snprintf(tmpbuf, sizeof(tmpbuf), "%s/uploads/%s.json", origin, hash);
 			}
 
 			rc = patch(tmpbuf);
@@ -439,12 +437,10 @@ main(int argc, char *argv[])
 		}
 	}
 
-	PWLOG(LOG_INFO, "last_hash: %s\n", last_hash);
+	version.version = JSi(ver_cjson, "version");
 	version.generation = JSi(ver_cjson, "generation");
 	snprintf(version.branch, sizeof(version.branch), "%s", branch_name);
-	if (last_hash) {
-		snprintf(version.cur_hash, sizeof(version.cur_hash), "%s", last_hash);
-	}
+	PWLOG(LOG_INFO, "version: %u\n", version.version);
 	pw_version_save(&version);
 
 	cjson_free(ver_cjson);

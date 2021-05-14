@@ -114,7 +114,6 @@ on_init(int argc, char *argv[])
 		g_force_update = true;
 		g_version.generation = 0;
 		snprintf(g_version.branch, sizeof(g_version.branch), "%s", g_branch_name);
-		snprintf(g_version.cur_hash, sizeof(g_version.cur_hash), "0");
 	}
 
 	if (access("patcher", F_OK) != 0) {
@@ -127,8 +126,8 @@ on_init(int argc, char *argv[])
 
 	set_text(g_status_left_lbl, "Fetching latest version ...");
 
-	snprintf(tmpbuf, sizeof(tmpbuf), "https://pwmirage.com/editor/project/fetch/%s/since/%s/%u",
-			g_branch_name, g_version.cur_hash, g_version.generation);
+	snprintf(tmpbuf, sizeof(tmpbuf), "https://pwmirage.com/editor/project/fetch/%s/since/%u/%u",
+			g_branch_name, g_version.version, g_version.generation);
 
 	rc = download_mem(tmpbuf, &g_latest_version_str, &len);
 	if (rc) {

@@ -49,7 +49,6 @@ struct pw_version {
 	uint32_t version;
 	uint32_t generation;
 	char branch[64];
-	char cur_hash[64];
 };
 
 int download(const char *url, const char *filename);

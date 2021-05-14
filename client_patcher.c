@@ -234,7 +234,7 @@ patch(void)
 		set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_FAILED_LOADING, 0, 0, 0);
 		return rc;
 	}
-	PWLOG(LOG_INFO, "Version: %u, Generation: %u, Hash: %s\n", g_version.version ,g_version.generation, g_version.cur_hash);
+	PWLOG(LOG_INFO, "Version: %u, Generation: %u\n", g_version.version ,g_version.generation);
 
 	load_icons();
 
@@ -246,11 +246,10 @@ patch(void)
 	if (g_force_update) {
 		g_version.generation = 0;
 		snprintf(g_version.branch, sizeof(g_version.branch), "%s", g_branch_name);
-		snprintf(g_version.cur_hash, sizeof(g_version.cur_hash), "0");
 	}
 
-	snprintf(tmpbuf, sizeof(tmpbuf), "https://pwmirage.com/editor/project/fetch/%s/since/%s/%u",
-			g_branch_name, g_version.cur_hash, g_version.generation);
+	snprintf(tmpbuf, sizeof(tmpbuf), "https://pwmirage.com/editor/project/fetch/%s/since/%u/%u",
+			g_branch_name, g_version.version, g_version.generation);
 	rc = download_mem(tmpbuf, &g_latest_version_str, &len);
 	if (rc) {
 		PWLOG(LOG_ERROR, "version fetch failed: %s\n", tmpbuf);
@@ -322,7 +321,6 @@ patch(void)
 	set_progress(25);
 	const char *origin = JSs(g_latest_version, "origin");
 	struct cjson *updates = JS(g_latest_version, "updates");
-	const char *last_hash = NULL;
 
 	if (updates->count == 0) {
 		PWLOG(LOG_INFO, "Already up to date!\n");
@@ -358,16 +356,16 @@ patch(void)
 	for (i = 0; i < updates->count; i++) {
 		struct cjson *update = JS(updates, i);
 		bool is_cached = JSi(update, "cached");
-		last_hash = JSs(update, "hash");
+		const char *hash = JSs(update, "hash");
 
 		PWLOG(LOG_INFO, "Fetching patch \"%s\" ...\n", JSs(update, "name"));
 		set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_DOWNLOADING_N_OF_N, i + 1, updates->count, 0);
 		snprintf(tmpbuf, sizeof(tmpbuf), "Downloading patch %d of %d", i + 1, updates->count);
 
 		if (is_cached) {
-			snprintf(tmpbuf, sizeof(tmpbuf), "%s/cache/%s/%s.json", origin, g_branch_name, last_hash);
+			snprintf(tmpbuf, sizeof(tmpbuf), "%s/cache/%s/%s.json", origin, g_branch_name, hash);
 		} else {
-			snprintf(tmpbuf, sizeof(tmpbuf), "%s/uploads/%s.json", origin, last_hash);
+			snprintf(tmpbuf, sizeof(tmpbuf), "%s/uploads/%s.json", origin, hash);
 		}
 
 		rc = apply_patch(tmpbuf);
@@ -425,9 +423,6 @@ patch(void)
 	g_version.version = JSi(g_latest_version, "version");
 	g_version.generation = JSi(g_latest_version, "generation");
 	snprintf(g_version.branch, sizeof(g_version.branch), "%s", g_branch_name);
-	if (last_hash) {
-		snprintf(g_version.cur_hash, sizeof(g_version.cur_hash), "%s", last_hash);
-	}
 	pw_version_save(&g_version);
 
 	return 0;

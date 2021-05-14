@@ -326,7 +326,6 @@ pw_version_load(struct pw_version *ver)
 
 	fread(ver, 1, sizeof(*ver), fp);
 	ver->branch[sizeof(ver->branch) - 1] = 0;
-	ver->cur_hash[sizeof(ver->cur_hash) - 1] = 0;
 	fclose(fp);
 
 	if (ver->magic != PW_VERSION_MAGIC) {
@@ -349,7 +348,6 @@ pw_version_save(struct pw_version *ver)
 
 	fwrite(ver, 1, sizeof(*ver), fp);
 	ver->branch[sizeof(ver->branch) - 1] = 0;
-	ver->cur_hash[sizeof(ver->cur_hash) - 1] = 0;
 	fclose(fp);
 
 	return 0;
