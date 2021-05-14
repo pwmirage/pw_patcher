@@ -21,6 +21,7 @@
 #include "pw_tasks.h"
 #include "pw_elements.h"
 #include "pw_tasks_npc.h"
+#include "pw_pck.h"
 #include "client_ipc.h"
 
 static char *g_branch_name = "public";
@@ -216,6 +217,62 @@ apply_patch(const char *url)
 	return 0;
 }
 
+struct open_pw_pck {
+	struct pw_pck data;
+	struct open_pw_pck *next;
+};
+
+struct open_pw_pck *g_open_pcks;
+
+static int
+apply_pck_patch(const char *pck_name, const char *url)
+{
+	struct open_pw_pck *pck;
+	int rc;
+
+	rc = download(url, "patcher/tmp.patch");
+	if (rc) {
+		PWLOG(LOG_ERROR, "download(%s) failed: %d\n", url, rc);
+		return rc;
+	}
+
+	pck = g_open_pcks;
+	while (pck) {
+		if (strcmp(pck->data.fullname, pck_name) == 0) {
+			/* already open */
+			break;
+		}
+		pck = pck->next;
+	}
+
+	if (!pck) {
+		char tmpbuf[128];
+
+		pck = calloc(1, sizeof(*pck));
+		if (!pck) {
+			PWLOG(LOG_ERROR, "calloc() failed\n");
+			return -ENOMEM;
+		}
+
+		snprintf(tmpbuf, sizeof(tmpbuf), "element/%s", pck_name);
+		rc = pw_pck_open(&pck->data, tmpbuf);
+		if (rc) {
+			PWLOG(LOG_ERROR, "pw_pck_open() failed: %d\n", rc);
+			return rc;
+		}
+
+		pck->next = g_open_pcks;
+		g_open_pcks = pck;
+	}
+
+	SetCurrentDirectory("element");
+	rc = pw_pck_apply_patch(&pck->data, "../patcher/tmp.patch");
+	SetCurrentDirectory("..");
+	remove("patcher/tmp.patch");
+
+	return rc;
+}
+
 static int
 patch(void)
 {
@@ -264,65 +321,11 @@ patch(void)
 		return -ENOMEM;
 	}
 
-	set_text(MGP_MSG_SET_STATUS_LEFT, MGP_LMSG_LOADING_FILES, 0, 0, 0);
-	set_progress(5);
 
-	g_elements = calloc(1, sizeof(*g_elements));
-	if (!g_elements) {
-		PWLOG(LOG_ERROR, "calloc() failed\n");
-		set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_ALLOC_FAILED, 0, 0, 0);
-		return -ENOMEM;
-	}
-
-	g_tasks = calloc(1, sizeof(*g_tasks));
-	if (!g_tasks) {
-		PWLOG(LOG_ERROR, "calloc() failed\n");
-		set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_ALLOC_FAILED, 0, 0, 0);
-		return -ENOMEM;
-	}
-
-	if (!JSi(g_latest_version, "cumulative")) {
-		g_force_update = true;
-	}
-
-	const char *elements_path;
-	const char *tasks_path;
-	const char *tasks_npc_path;
-
-	if (g_force_update) {
-		elements_path = "patcher/elements.data.src";
-		tasks_path = "patcher/tasks.data.src";
-		tasks_npc_path = "patcher/task_npc.data.src";
-	} else {
-		elements_path = "element/data/elements.data";
-		tasks_path = "element/data/tasks.data";
-		tasks_npc_path = "element/data/task_npc.data";
-	}
-
-	rc = pw_elements_load(g_elements, elements_path, "patcher/elements.imap");
-	if (rc != 0) {
-		set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_ELEMENTS_PARSING_FAILED, -rc, 0, 0);
-		return rc;
-	}
-	set_progress(15);
-
-	rc = pw_tasks_load(g_tasks, tasks_path, "patcher/tasks.imap");
-	if (rc != 0) {
-		set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_TASKS_PARSING_FAILED, -rc, 0, 0);
-		return rc;
-	}
-
-	g_tasks_npc = pw_tasks_npc_load(tasks_npc_path);
-	if (!g_tasks_npc) {
-		set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_TASK_NPC_PARSING_FAILED, -rc, 0, 0);
-		return rc;
-	}
-
-	set_progress(25);
-	const char *origin = JSs(g_latest_version, "origin");
 	struct cjson *updates = JS(g_latest_version, "updates");
+	struct cjson *pck_updates = JS(g_latest_version, "pck_updates");
 
-	if (updates->count == 0) {
+	if (updates->count == 0 && pck_updates->count == 0) {
 		PWLOG(LOG_INFO, "Already up to date!\n");
 		set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_ALREADY_UPTODATE, 0, 0, 0);
 		set_progress(100);
@@ -330,36 +333,74 @@ patch(void)
 		return 0;
 	}
 
-	if (g_force_update) {
-		char *buf;
-		size_t num_bytes = 0;
+	if (!JSi(g_latest_version, "cumulative")) {
+		g_force_update = true;
+	}
 
-		snprintf(tmpbuf, sizeof(tmpbuf), "https://pwmirage.com/editor/project/cache/%s/rates.json",
-				g_branch_name);
+	set_text(MGP_MSG_SET_STATUS_LEFT, MGP_LMSG_LOADING_FILES, 0, 0, 0);
+	set_progress(5);
 
-		rc = download_mem(tmpbuf, &buf, &num_bytes);
-		if (rc) {
-			set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_FETCH_FAILED, 0, 0, 0);
-			PWLOG(LOG_ERROR, "rates download failed!\n");
+	if (g_force_update || updates->count) {
+		g_elements = calloc(1, sizeof(*g_elements));
+		if (!g_elements) {
+			PWLOG(LOG_ERROR, "calloc() failed\n");
+			set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_ALLOC_FAILED, 0, 0, 0);
+			return -ENOMEM;
+		}
+
+		g_tasks = calloc(1, sizeof(*g_tasks));
+		if (!g_tasks) {
+			PWLOG(LOG_ERROR, "calloc() failed\n");
+			set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_ALLOC_FAILED, 0, 0, 0);
+			return -ENOMEM;
+		}
+
+		const char *elements_path;
+		const char *tasks_path;
+		const char *tasks_npc_path;
+
+		if (g_force_update) {
+			elements_path = "patcher/elements.data.src";
+			tasks_path = "patcher/tasks.data.src";
+			tasks_npc_path = "patcher/task_npc.data.src";
+		} else {
+			elements_path = "element/data/elements.data";
+			tasks_path = "element/data/tasks.data";
+			tasks_npc_path = "element/data/task_npc.data";
+		}
+
+		rc = pw_elements_load(g_elements, elements_path, "patcher/elements.imap");
+		if (rc != 0) {
+			set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_ELEMENTS_PARSING_FAILED, -rc, 0, 0);
+			return rc;
+		}
+		set_progress(15);
+
+		rc = pw_tasks_load(g_tasks, tasks_path, "patcher/tasks.imap");
+		if (rc != 0) {
+			set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_TASKS_PARSING_FAILED, -rc, 0, 0);
 			return rc;
 		}
 
-		struct cjson *rates = cjson_parse(buf);
-		pw_elements_adjust_rates(g_elements, rates);
-		pw_tasks_adjust_rates(g_tasks, rates);
-		cjson_free(rates);
-		free(buf);
+		g_tasks_npc = pw_tasks_npc_load(tasks_npc_path);
+		if (!g_tasks_npc) {
+			set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_TASK_NPC_PARSING_FAILED, -rc, 0, 0);
+			return rc;
+		}
+
 	}
 
+	set_progress(25);
 	set_text(MGP_MSG_SET_STATUS_LEFT, MGP_LMSG_DOWNLOADING_CHANGES, 0, 0, 0);
 
+	const char *origin = JSs(g_latest_version, "origin");
 	for (i = 0; i < updates->count; i++) {
 		struct cjson *update = JS(updates, i);
 		bool is_cached = JSi(update, "cached");
 		const char *hash = JSs(update, "hash");
 
 		PWLOG(LOG_INFO, "Fetching patch \"%s\" ...\n", JSs(update, "name"));
-		set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_DOWNLOADING_N_OF_N, i + 1, updates->count, 0);
+		set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_DOWNLOADING_N_OF_N, i + 1, updates->count + pck_updates->count, 0);
 		snprintf(tmpbuf, sizeof(tmpbuf), "Downloading patch %d of %d", i + 1, updates->count);
 
 		if (is_cached) {
@@ -375,8 +416,28 @@ patch(void)
 			return rc;
 		}
 
-		set_progress(25 + 50 * i / updates->count);
+		set_progress(25 + 50 * (i + 1) / (updates->count + pck_updates->count));
 	}
+
+	for (i = 0; i < pck_updates->count; i++) {
+		struct cjson *pck_update = JS(pck_updates, i);
+		const char *pck_name = JSs(pck_update, "pck");
+		const char *url = JSs(pck_update, "url");
+
+		PWLOG(LOG_INFO, "Fetching patch \"%s\" ...\n", JSs(pck_update, "name"));
+		set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_DOWNLOADING_N_OF_N, updates->count + i + 1, pck_updates->count, 0);
+		snprintf(tmpbuf, sizeof(tmpbuf), "Downloading patch %d of %d", i + 1, pck_updates->count);
+
+		rc = apply_pck_patch(pck_name, url);
+		if (rc) {
+			set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_PATCHING_FAILED, -rc, 0, 0);
+			PWLOG(LOG_ERROR, "Failed to patch: %d\n", rc);
+			return rc;
+		}
+
+		set_progress(25 + 50 * (updates->count + i + 1) / (updates->count + pck_updates->count));
+	}
+
 
 	PWLOG(LOG_INFO, "Saving.\n");
 	set_text(MGP_MSG_SET_STATUS_LEFT, MGP_LMSG_SAVING_FILES, 0, 0, 0);
@@ -390,28 +451,30 @@ patch(void)
 		return rc;
 	}
 
-	rc = pw_elements_save(g_elements, "element/data/elements.data", false);
-	if (rc) {
-		PWLOG(LOG_ERROR, "Failed to save the elements\n");
-		set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_SAVING_FAILED, 2, -rc, 0);
-		return rc;
-	}
-	set_progress(85);
+	if (g_force_update || updates->count) {
+		rc = pw_elements_save(g_elements, "element/data/elements.data", false);
+		if (rc) {
+			PWLOG(LOG_ERROR, "Failed to save the elements\n");
+			set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_SAVING_FAILED, 2, -rc, 0);
+			return rc;
+		}
+		set_progress(85);
 
-	rc = pw_tasks_save(g_tasks, "element/data/tasks.data", false);
-	if (rc) {
-		PWLOG(LOG_ERROR, "Failed to save the tasks\n");
-		set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_SAVING_FAILED, 3, -rc, 0);
-		return rc;
-	}
+		rc = pw_tasks_save(g_tasks, "element/data/tasks.data", false);
+		if (rc) {
+			PWLOG(LOG_ERROR, "Failed to save the tasks\n");
+			set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_SAVING_FAILED, 3, -rc, 0);
+			return rc;
+		}
 
-	set_progress(95);
+		set_progress(95);
 
-	rc = pw_tasks_npc_save(g_tasks_npc, "element/data/task_npc.data");
-	if (rc) {
-		PWLOG(LOG_ERROR, "Failed to save task_npc\n");
-		set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_SAVING_FAILED, 4, -rc, 0);
-		return rc;
+		rc = pw_tasks_npc_save(g_tasks_npc, "element/data/task_npc.data");
+		if (rc) {
+			PWLOG(LOG_ERROR, "Failed to save task_npc\n");
+			set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_SAVING_FAILED, 4, -rc, 0);
+			return rc;
+		}
 	}
 
 	PWLOG(LOG_INFO, "All done\n");

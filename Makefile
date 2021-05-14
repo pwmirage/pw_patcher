@@ -31,7 +31,7 @@ build/idmap_gen: build/gcc_ver.h $(OBJECTS:%.o=build/%.o) build/idmap_gen.o
 
 build/client_patcher: build/gcc_ver.h $(OBJECTS:%.o=build/%.o) build/client_patcher.o
 	windres -i patcher.rc -o patcher_rc.o
-	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ patcher_rc.o -Wl,--no-whole-archive -s -lwininet -mwindows -lcrypt32 -Wl,-Bstatic -liconv -Wl,-Bdynamic
+	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ patcher_rc.o -Wl,--no-whole-archive -s -lwininet -mwindows -lcrypt32 -Wl,-Bstatic -lz -liconv -Wl,-Bdynamic
 
 build/client_launcher: build/gcc_ver.h build/cjson.o build/common.o build/sha1.o build/gui.o build/client_launcher.o
 	windres -i launcher.rc -o launcher_rc.o
