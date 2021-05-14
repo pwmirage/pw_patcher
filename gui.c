@@ -193,7 +193,7 @@ init_gui(HWND hwnd, HINSTANCE hInst)
 			WS_VISIBLE | WS_CHILD | WS_GROUP | SS_LEFT,
 			413, 11, 287, 270, hwnd, (HMENU)0, hInst, 0);
 
-	g_version_lbl = CreateWindowW(L"Static", L"Patcher v1.14.0",
+	g_version_lbl = CreateWindowW(L"Static", L"Patcher v1.15.0",
 			WS_VISIBLE | WS_CHILD | WS_GROUP | SS_LEFT,
 			102, 367, 162, 18, hwnd, (HMENU)0, hInst, 0);
 
