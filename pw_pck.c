@@ -2037,18 +2037,20 @@ pw_pck_apply_patch(struct pw_pck *pck, const char *patch_path)
 
 	fprintf(stderr, "Applying patch ...\n\n");
 
-	rc = read_pck_entry_list(pck, false);
-	if (rc) {
-		goto out;
+	if (!pck->path_node_tree) {
+		rc = read_pck_entry_list(pck, false);
+		if (rc) {
+			goto out;
+		}
+
+		try_read_free_blocks(pck);
+
+		snprintf(tmp, sizeof(tmp), "%s.files", pck->fullname);
+		SetCurrentDirectory(tmp);
+		/* it might fail because .pck.files is not present -> don't care */
+		read_log(pck);
+		SetCurrentDirectory("..");
 	}
-
-	try_read_free_blocks(pck);
-
-	snprintf(tmp, sizeof(tmp), "%s.files", pck->fullname);
-	SetCurrentDirectory(tmp);
-	/* it might fail because .pck.files is not present -> don't care */
-	read_log(pck);
-	SetCurrentDirectory("..");
 
 	if (pck->fp_log) {
 		cur_time = get_cur_time(tmp, sizeof(tmp));
