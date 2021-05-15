@@ -28,6 +28,34 @@ int g_elements_taskmatter_idmap_id;
 int g_elements_npc_idmap_id;
 extern struct pw_idmap *g_tasks_map;
 
+static int
+memcmp_ic(const char *s1, const char *s2, size_t nbytes)
+{
+	char c1, c2;
+
+	while (nbytes > 0) {
+		c1 = *s1;
+		c2 = *s2;
+
+		if (c1 >= 'A' && c1 <= 'Z') {
+			c1 += 'a' - 'A';
+		}
+		if (c2 >= 'A' && c2 <= 'Z') {
+			c2 += 'a' - 'A';
+		}
+
+		int ret = c1 - c2;
+		if (ret != 0) {
+			return ret;
+		}
+
+		s1++;
+		s2++;
+		nbytes--;
+	}
+	return 0;
+}
+
 static size_t
 icon_serialize_fn(FILE *fp, struct serializer *f, void *data)
 {
@@ -49,9 +77,13 @@ icon_serialize_fn(FILE *fp, struct serializer *f, void *data)
 	}
 
 	for (i = 0; i < PW_ELEMENTS_ICON_COUNT; i++) {
-		if (memcmp(basename, g_icon_names[i], strlen(basename) - 3) == 0) {
+		if (memcmp_ic(basename, g_icon_names[i], strlen(basename) - 3) == 0) {
 			break;
 		}
+	}
+
+	if (i == PW_ELEMENTS_ICON_COUNT) {
+		return 128;
 	}
 
 	fprintf(fp, "\"icon\":%d,", i);
