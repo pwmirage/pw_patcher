@@ -22,7 +22,40 @@
 #include "pw_elements.h"
 #include "pw_npc.h"
 #include "pw_tasks.h"
-#include "pw_pck.h"
+
+static void
+load_icons(void) {
+	FILE *fp = fopen("patcher/iconlist_ivtrm.txt", "r");
+	char *line = NULL;
+	size_t len = 0;
+	ssize_t read;
+
+	if (fp == NULL) {
+		PWLOG(LOG_ERROR, "failed to open iconlist_ivtrm.txt\n");
+		return;
+	}
+
+	/* skip header */
+	for (int i = 0; i < 4; i++) {
+		getline(&line, &len, fp);
+		line = NULL;
+		len = 0;
+	}
+
+	unsigned i = 0;
+	while (i < PW_ELEMENTS_ICON_COUNT &&
+			(read = getline(&line, &len, fp)) != -1) {
+		int printed_cnt = snprintf(g_icon_names[i], sizeof(g_icon_names[0]), "%s", line);
+		if (g_icon_names[i][printed_cnt - 1] == '\n') {
+			g_icon_names[i][printed_cnt - 1] = 0;
+		}
+
+		i++;
+		len = 0;
+	}
+
+	free(line);
+}
 
 static int
 print_elements(const char *path)
@@ -35,6 +68,7 @@ print_elements(const char *path)
 		return 1;
 	}
 
+	load_icons();
 	pw_elements_prepare(&elements);
 	pw_elements_serialize(&elements);
 
@@ -90,22 +124,6 @@ print_tasks(const char *path)
 	return 0;
 }
 
-static int
-print_pck(const char *path)
-{
-	struct pw_pck pck;
-	int rc;
-
-	rc = pw_pck_open(&pck, path, PW_PCK_ACTION_EXTRACT);
-	if (rc) {
-		PWLOG(LOG_ERROR, "pw_pck_read(%s) failed: %d\n", path, rc);
-		return rc;
-	}
-
-	return 0;
-}
-
-
 static void
 print_help(char *argv[0])
 {
@@ -132,8 +150,6 @@ main(int argc, char *argv[])
 		rc = print_tasks(argv[2]);
 	} else if (strcmp(type, "npcs") == 0) {
 		print_npcgen();
-	} else if (strcmp(type, "pck") == 0) {
-		print_pck(argv[2]);
 	} else {
 		print_help(argv);
 		return 1;
