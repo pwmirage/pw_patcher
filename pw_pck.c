@@ -2184,5 +2184,6 @@ pw_pck_apply_patch(struct pw_pck *pck, const char *patch_path)
 	fprintf(stderr, "\nDone!\n");
 	rc = 0;
 out:
+	fclose(fp_patch);
 	return rc;
 }
