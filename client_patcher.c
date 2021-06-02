@@ -387,7 +387,26 @@ patch(void)
 			set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_TASK_NPC_PARSING_FAILED, -rc, 0, 0);
 			return rc;
 		}
+	}
 
+	if (g_force_update) {
+		char *buf;
+		size_t num_bytes = 0;
+
+		snprintf(tmpbuf, sizeof(tmpbuf), "https://pwmirage.com/editor/project/cache/%s/rates.json",
+				g_branch_name);
+
+		rc = download_mem(tmpbuf, &buf, &num_bytes);
+		if (rc) {
+			PWLOG(LOG_ERROR, "download_mem failed for %s\n", tmpbuf);
+			return 1;
+		}
+
+		struct cjson *rates = cjson_parse(buf);
+		pw_elements_adjust_rates(g_elements, rates);
+		pw_tasks_adjust_rates(g_tasks, rates);
+		cjson_free(rates);
+		free(buf);
 	}
 
 	set_progress(25);
