@@ -148,7 +148,7 @@ on_init(int argc, char *argv[])
 	}
 
 	char *motd = JSs(g_latest_version, "message");
-	normalize_json_string(motd, false);
+	normalize_json_string(motd, true);
 	set_text(g_changelog_lbl, motd);
 
 	set_text(g_status_left_lbl, "Checking prerequisites ...");
@@ -182,6 +182,11 @@ on_init(int argc, char *argv[])
 		rc = calc_sha1_hash(namebuf, tmpbuf, sizeof(tmpbuf));
 		if (rc == 0 && strcmp(tmpbuf, sha) == 0) {
 			/* nothing to update */
+			continue;
+		}
+
+		if (strcmp(namebuf, "patcher\\banner") == 0) {
+			/* XXX */
 			continue;
 		}
 

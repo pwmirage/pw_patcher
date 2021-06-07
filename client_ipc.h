@@ -15,6 +15,7 @@
 #define MG_GUI_ID_REPAIR 4
 
 enum mg_patcher_msg_command {
+	MGP_MSG_INIT = 0,
 	MGP_MSG_SET_STATUS_LEFT = 1,
 	MGP_MSG_SET_STATUS_RIGHT,
 	MGP_MSG_ENABLE_BUTTON,

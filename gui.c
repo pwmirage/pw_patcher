@@ -20,7 +20,6 @@ HWND g_status_left_lbl;
 HWND g_status_right_lbl;
 HWND g_version_lbl;
 HWND g_progress_bar;
-HWND g_image;
 
 HWND g_quit_button;
 HWND g_patch_button;
@@ -32,6 +31,7 @@ HDC g_hdc;
 unsigned g_win_tid;
 
 static LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
+static LRESULT CALLBACK WndProcChangelogBox(HWND, UINT, WPARAM, LPARAM);
 
 static void
 set_text_cb(void *_label, void *_txt)
@@ -166,10 +166,14 @@ init_win(HINSTANCE hInst)
 
 	RegisterClassW(&wc);
 
+	RECT rect = { 0, 0, 900, 420 };
+	AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW & ~WS_THICKFRAME, FALSE);
 	g_win = CreateWindowW(wc.lpszClassName, L"PW Mirage Launcher",
-			(WS_OVERLAPPEDWINDOW & ~(WS_THICKFRAME | WS_MAXIMIZEBOX) | WS_VISIBLE),
-			CW_USEDEFAULT, CW_USEDEFAULT, 720, 420, 0, 0, hInst, 0);
+			(WS_OVERLAPPEDWINDOW & ~(WS_THICKFRAME | WS_MAXIMIZEBOX)) | WS_VISIBLE,
+			CW_USEDEFAULT, CW_USEDEFAULT, rect.right - rect.left, rect.bottom - rect.top, 0, 0, hInst, 0);
 }
+
+static WNDPROC g_orig_changelog_event_handler;
 
 static void
 init_gui(HWND hwnd, HINSTANCE hInst)
@@ -185,20 +189,16 @@ init_gui(HWND hwnd, HINSTANCE hInst)
 			WS_VISIBLE | WS_CHILD | WS_GROUP | SS_RIGHT,
 			300, 327, 400, 21, hwnd, (HMENU)0, hInst, 0);
 
-	g_image = CreateWindowW(L"Static", NULL,
-			WS_VISIBLE | WS_CHILD | SS_BLACKFRAME,
-			11, 11, 392, 268, hwnd, (HMENU)0, hInst, 0);
-
-	g_changelog_lbl = CreateWindowW(L"Static", L"[...]",
-			WS_VISIBLE | WS_CHILD | WS_GROUP | SS_LEFT,
-			413, 11, 287, 270, hwnd, (HMENU)0, hInst, 0);
+	g_changelog_lbl = CreateWindowW(L"Edit", L"[...]",
+			WS_VISIBLE | WS_CHILD | WS_GROUP | WS_VSCROLL | ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL,
+			580, 50, 320, 360, hwnd, (HMENU)0, hInst, 0);
 
 	g_version_lbl = CreateWindowW(L"Static", L"Patcher v1.15.0",
 			WS_VISIBLE | WS_CHILD | WS_GROUP | SS_LEFT,
 			102, 367, 162, 18, hwnd, (HMENU)0, hInst, 0);
 
 	g_progress_bar = CreateWindowEx(0, PROGRESS_CLASS, (LPTSTR) NULL,
-		WS_CHILD | WS_VISIBLE, 12, 296, 689, 23,
+		WS_CHILD | WS_VISIBLE, 12, 296, 589, 23,
 		hwnd, (HMENU) 0, hInst, NULL);
 
 	g_quit_button = CreateWindowW(L"Button", L"Quit",
@@ -225,6 +225,10 @@ init_gui(HWND hwnd, HINSTANCE hInst)
 
 	EnumChildWindows(hwnd, (WNDENUMPROC)hwnd_set_font,
 			(LPARAM)GetStockObject(DEFAULT_GUI_FONT));
+
+	g_orig_changelog_event_handler =
+			(WNDPROC)SetWindowLongPtr(g_changelog_lbl,
+			GWLP_WNDPROC, (LONG_PTR)WndProcChangelogBox);
 }
 
 static char *g_cmdline;
@@ -280,12 +284,19 @@ WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 			ctx.cb(ctx.arg1, ctx.arg2);
 			break;
 		}
+		case WM_CTLCOLORSTATIC:
+			if ((HWND)arg2 == g_changelog_lbl) {
+				SetBkColor((HDC)arg1, RGB(250, 250, 250));
+				SetTextColor((HDC)arg1, RGB(80,44,44));
+				return (LRESULT)GetStockObject(HOLLOW_BRUSH);
+			}
+			break;
 		case WM_PAINT: {
 			PAINTSTRUCT ps;
 			HDC hdcDestination;
 
 			hdcDestination = BeginPaint(hwnd, &ps);
-			BitBlt(hdcDestination, 12, 12, 390, 266, g_hdc, 0, 0, SRCCOPY);
+			BitBlt(hdcDestination, 0, 0, 900, 420, g_hdc, 0, 0, SRCCOPY);
 			EndPaint(hwnd, &ps);
 			break;
 		}
@@ -295,6 +306,28 @@ WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 	}
 
 	return DefWindowProcW(hwnd, msg, arg1, arg2);
+}
+
+static LRESULT CALLBACK
+WndProcChangelogBox(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
+{
+	LRESULT ret;
+
+	switch(msg) {
+		case EM_REPLACESEL:
+		case EM_SETSEL:
+		case EM_GETSEL:
+			return 0;
+	}
+
+	ret = CallWindowProc(g_orig_changelog_event_handler, hwnd, msg, arg1, arg2);
+	switch(msg) {
+		case WM_SETFOCUS:
+			HideCaret(hwnd);
+			break;
+	}
+
+	return ret;
 }
 
 static void
@@ -313,7 +346,7 @@ parse_patcher_msg(enum mg_patcher_msg_command type, unsigned param)
 	fflush(stderr);
 
 	switch (type) {
-		case 0:
+		case MGP_MSG_INIT:
 			fprintf(stderr, "Patcher Initialized\n");
 			break;
 		case MGP_MSG_SET_STATUS_LEFT:
