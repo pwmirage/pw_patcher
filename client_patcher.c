@@ -229,6 +229,7 @@ apply_pck_patch(const char *pck_name, const char *url)
 {
 	struct open_pw_pck *pck;
 	int rc;
+	char cur_path[512];
 
 	rc = download(url, "patcher/tmp.patch");
 	if (rc) {
@@ -265,10 +266,11 @@ apply_pck_patch(const char *pck_name, const char *url)
 		g_open_pcks = pck;
 	}
 
+	GetCurrentDirectory(sizeof(cur_path), cur_path);
 	SetCurrentDirectory("element");
 	rc = pw_pck_apply_patch(&pck->data, "../patcher/tmp.patch");
-	SetCurrentDirectory("..");
-	remove("patcher/tmp.patch");
+	SetCurrentDirectory(cur_path);
+	unlink("patcher/tmp.patch");
 
 	return rc;
 }
