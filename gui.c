@@ -33,6 +33,15 @@ unsigned g_win_tid;
 static LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 static LRESULT CALLBACK WndProcChangelogBox(HWND, UINT, WPARAM, LPARAM);
 
+struct button_brush {
+	HBRUSH regular;
+	HBRUSH hover;
+	HBRUSH pressed;
+};
+
+static struct button_brush g_brush_btn;
+static struct button_brush g_brush_btn_play;
+
 static void
 set_text_cb(void *_label, void *_txt)
 {
@@ -261,6 +270,34 @@ on_init_cb(void *arg1, void *arg2)
 	on_init(argc, argv);
 }
 
+static HBRUSH
+create_pattern_brush(COLORREF color, HDC hdc, LPNMCUSTOMDRAW item)
+{
+	HDC hdcmem = CreateCompatibleDC(item->hdc);
+	HBITMAP hbitmap = CreateCompatibleBitmap(item->hdc, item->rc.right-item->rc.left, item->rc.bottom-item->rc.top);
+	HBRUSH pattern;
+
+	SelectObject(hdcmem, hbitmap);
+
+	if (hdc) {
+		BitBlt(hdcmem, 0, 0,
+			item->rc.right-item->rc.right - item->rc.right-item->rc.left,
+			item->rc.right-item->rc.bottom - item->rc.right-item->rc.top,
+			hdc, 0, 0, SRCCOPY);
+	} else {
+		HBRUSH brush = CreateSolidBrush(color);
+		FillRect(hdcmem, &item->rc, brush);
+		DeleteObject(brush);
+	}
+
+	pattern = CreatePatternBrush(hbitmap);
+
+	DeleteDC(hdcmem);
+	DeleteObject(hbitmap);
+
+	return pattern;
+}
+
 static LRESULT CALLBACK
 WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 {
@@ -284,9 +321,27 @@ WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 			ctx.cb(ctx.arg1, ctx.arg2);
 			break;
 		}
+		case WM_CTLCOLOREDIT:
+			if ((HWND)arg2 == g_changelog_lbl) {
+				SetBkColor((HDC)arg1, RGB(250, 250, 250));
+				SetTextColor((HDC)arg1, RGB(80,44,44));
+				return (LRESULT)GetStockObject(HOLLOW_BRUSH);
+			}
+			if ((HWND)arg2 == g_changelog_lbl) {
+				SetBkColor((HDC)arg1, RGB(250, 250, 250));
+				SetTextColor((HDC)arg1, RGB(80,44,44));
+				return (LRESULT)GetStockObject(HOLLOW_BRUSH);
+			}
+			break;
 		case WM_CTLCOLORSTATIC:
 			if ((HWND)arg2 == g_changelog_lbl) {
 				SetBkColor((HDC)arg1, RGB(250, 250, 250));
+				SetTextColor((HDC)arg1, RGB(80,44,44));
+				return (LRESULT)GetStockObject(HOLLOW_BRUSH);
+			} else if ((HWND)arg2 == g_status_left_lbl ||
+					(HWND)arg2 == g_status_right_lbl ||
+					(HWND)arg2 == g_version_lbl) {
+				SetBkMode((HDC)arg1, TRANSPARENT);
 				SetTextColor((HDC)arg1, RGB(80,44,44));
 				return (LRESULT)GetStockObject(HOLLOW_BRUSH);
 			}
@@ -300,6 +355,66 @@ WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 			EndPaint(hwnd, &ps);
 			break;
 		}
+		case WM_NOTIFY: {
+			LPNMHDR lpnmhdr = (LPNMHDR)arg2;
+			struct button_brush *btn_brush = NULL;
+
+			if (lpnmhdr->code != NM_CUSTOMDRAW) {
+				return CDRF_DODEFAULT;
+			}
+
+			LPNMCUSTOMDRAW item = (LPNMCUSTOMDRAW)lpnmhdr;
+			HGDIOBJ old_brush;
+			HGDIOBJ new_brush;
+
+			if (!g_brush_btn.regular) {
+				g_brush_btn.regular = create_pattern_brush(RGB(220, 207, 207), NULL, item);
+				g_brush_btn.hover = create_pattern_brush(RGB(156, 120, 120), NULL, item);
+				g_brush_btn.pressed = create_pattern_brush(RGB(125, 98, 98), NULL, item);
+
+				g_brush_btn_play.regular = create_pattern_brush(RGB(207, 69, 69), NULL, item);
+				g_brush_btn_play.hover = create_pattern_brush(RGB(172, 56, 56), NULL, item);
+				g_brush_btn_play.pressed = create_pattern_brush(RGB(142, 48, 48), NULL, item);
+			}
+
+			switch (lpnmhdr->idFrom) {
+				case MG_GUI_ID_PLAY:
+					btn_brush = &g_brush_btn_play;
+					break;
+				case MG_GUI_ID_QUIT:
+				case MG_GUI_ID_PATCH:
+				case MG_GUI_ID_REPAIR:
+					btn_brush = &g_brush_btn;
+					if (item->uItemState & (CDIS_SELECTED | CDIS_HOT)) {
+						SetTextColor(item->hdc, RGB(255, 255, 255));
+					} else {
+						SetTextColor(item->hdc, RGB(33, 33, 33));
+					}
+					break;
+			}
+
+			if (!btn_brush) {
+				return CDRF_DODEFAULT;
+			}
+
+			if (item->uItemState & CDIS_SELECTED) {
+				/* button is pressed */
+				new_brush = btn_brush->pressed;
+			} else if (item->uItemState & CDIS_HOT) {
+				/* mouse hover */
+				new_brush = btn_brush->hover;
+			} else {
+				/* default state */
+				new_brush = btn_brush->regular;
+			}
+
+			old_brush = SelectObject(item->hdc, new_brush);
+			FillRect(item->hdc, &item->rc, new_brush);
+			SelectObject(item->hdc, old_brush);
+
+			/* custom or not, draw default text */
+			return CDRF_DODEFAULT;
+	       }
 		case WM_DESTROY:
 			PostQuitMessage(0);
 			break;
