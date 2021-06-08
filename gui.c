@@ -17,7 +17,9 @@
 HWND g_win;
 HWND g_changelog_lbl;
 HWND g_status_left_lbl;
+static HWND g_status_left_lbl_shadow[4];
 HWND g_status_right_lbl;
+static HWND g_status_right_lbl_shadow[4];
 HWND g_version_lbl;
 HWND g_progress_bar;
 
@@ -32,15 +34,27 @@ unsigned g_win_tid;
 
 static LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 static LRESULT CALLBACK WndProcChangelogBox(HWND, UINT, WPARAM, LPARAM);
+static LRESULT CALLBACK WndProcButton(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2);
+
+struct button_state_brush {
+	HBRUSH bg_brush;
+	COLORREF text_color;
+};
 
 struct button_brush {
-	HBRUSH regular;
-	HBRUSH hover;
-	HBRUSH pressed;
+	struct button_state_brush regular;
+	struct button_state_brush hover;
+	struct button_state_brush pressed;
+	struct button_state_brush disabled;
 };
+
+static bool g_button_state[16];
 
 static struct button_brush g_brush_btn;
 static struct button_brush g_brush_btn_play;
+
+static HCURSOR g_cursor_hand;
+static HCURSOR g_cursor_arrow;
 
 static void
 set_text_cb(void *_label, void *_txt)
@@ -48,6 +62,16 @@ set_text_cb(void *_label, void *_txt)
 	SetWindowText(_label, _txt);
 	ShowWindow(_label, SW_HIDE);
 	ShowWindow(_label, SW_SHOW);
+
+	if (_label == g_status_right_lbl) {
+		for (int i = 0; i < 4; i++) {
+			set_text_cb(g_status_right_lbl_shadow[i], _txt);
+		}
+	} else if (_label == g_status_left_lbl) {
+		for (int i = 0; i < 4; i++) {
+			set_text_cb(g_status_left_lbl_shadow[i], _txt);
+		}
+	}
 }
 
 void
@@ -76,7 +100,6 @@ set_progress_state_cb(void *_state, void *arg2)
 	unsigned state = (int)(uintptr_t)_state;
 
 	SendMessage(g_progress_bar, (WM_USER + 16), state, 0);
-
 }
 
 void
@@ -88,7 +111,22 @@ set_progress_state(unsigned state)
 static void
 enable_button_cb(void *_button, void *_enable)
 {
-	EnableWindow(_button, (bool)(uintptr_t)_enable);
+	int id = 0;
+
+	if (_button == g_quit_button) {
+		id = MG_GUI_ID_QUIT;
+	} else if (_button == g_patch_button) {
+		id = MG_GUI_ID_PATCH;
+	} else if (_button == g_play_button) {
+		id = MG_GUI_ID_PLAY;
+	} else if (_button == g_repair_button) {
+		id = MG_GUI_ID_REPAIR;
+	} else {
+		return;
+	}
+
+	g_button_state[id] = (bool)(uintptr_t)_enable;
+	RedrawWindow(g_win, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
 }
 
 void
@@ -168,10 +206,10 @@ init_win(HINSTANCE hInst)
 	WNDCLASSW wc = {0};
 
 	wc.lpszClassName = L"MGLauncher";
-	wc.hInstance		 = hInst;
+	wc.hInstance = hInst;
 	wc.hbrBackground = GetSysColorBrush(COLOR_3DFACE);
-	wc.lpfnWndProc	 = WndProc;
-	wc.hCursor			 = LoadCursor(0, IDC_ARROW);
+	wc.lpfnWndProc = WndProc;
+	wc.hCursor = LoadCursor(0, IDC_ARROW);
 
 	RegisterClassW(&wc);
 
@@ -183,6 +221,7 @@ init_win(HINSTANCE hInst)
 }
 
 static WNDPROC g_orig_changelog_event_handler;
+static WNDPROC g_orig_button_handler;
 
 static void
 init_gui(HWND hwnd, HINSTANCE hInst)
@@ -190,13 +229,36 @@ init_gui(HWND hwnd, HINSTANCE hInst)
 	HICON hIcon = LoadIcon(hInst, MAKEINTRESOURCE(18253));
 	SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
 
+	struct shadow_off {
+		int x, y;
+	} shadow_offs[] = {
+		{ -1, 0 },
+		{ 1, 0 },
+		{ 0, -1 },
+		{ 0, 1 },
+	};
+
+	for (int i = 0; i < 4; i++) {
+		g_status_left_lbl_shadow[i] = CreateWindowW(L"Static", L"",
+				WS_VISIBLE | WS_CHILD | WS_GROUP | SS_LEFT,
+				20 + shadow_offs[i].x, 351 + shadow_offs[i].y,
+				379, 21, hwnd, (HMENU)0, hInst, 0);
+	}
+
 	g_status_left_lbl = CreateWindowW(L"Static", L"",
 			WS_VISIBLE | WS_CHILD | WS_GROUP | SS_LEFT,
-			14, 327, 275, 23, hwnd, (HMENU)0, hInst, 0);
+			20, 351, 379, 21, hwnd, (HMENU)0, hInst, 0);
+
+	for (int i = 0; i < 4; i++) {
+		g_status_right_lbl_shadow[i] = CreateWindowW(L"Static", L"",
+				WS_VISIBLE | WS_CHILD | WS_GROUP | SS_RIGHT,
+				20 + shadow_offs[i].x, 351 + shadow_offs[i].y,
+				379, 21, hwnd, (HMENU)0, hInst, 0);
+	}
 
 	g_status_right_lbl = CreateWindowW(L"Static", L"",
 			WS_VISIBLE | WS_CHILD | WS_GROUP | SS_RIGHT,
-			300, 327, 400, 21, hwnd, (HMENU)0, hInst, 0);
+			20, 351, 379, 21, hwnd, (HMENU)0, hInst, 0);
 
 	g_changelog_lbl = CreateWindowW(L"Edit", L"[...]",
 			WS_VISIBLE | WS_CHILD | WS_GROUP | WS_VSCROLL | ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL,
@@ -204,40 +266,54 @@ init_gui(HWND hwnd, HINSTANCE hInst)
 
 	g_version_lbl = CreateWindowW(L"Static", L"Patcher v1.15.0",
 			WS_VISIBLE | WS_CHILD | WS_GROUP | SS_LEFT,
-			102, 367, 162, 18, hwnd, (HMENU)0, hInst, 0);
+			102, 500, 162, 18, hwnd, (HMENU)0, hInst, 0);
 
-	g_progress_bar = CreateWindowEx(0, PROGRESS_CLASS, (LPTSTR) NULL,
-		WS_CHILD | WS_VISIBLE, 12, 296, 589, 23,
+	g_progress_bar = CreateWindow(PROGRESS_CLASS, (LPTSTR) NULL,
+		WS_CHILD | WS_VISIBLE, 16, 372, 385, 32,
 		hwnd, (HMENU) 0, hInst, NULL);
 
 	g_quit_button = CreateWindowW(L"Button", L"Quit",
-			WS_VISIBLE | WS_CHILD | WS_TABSTOP, 618, 358, 83, 23,
+			WS_VISIBLE | WS_CHILD | WS_TABSTOP, 471, 260, 83, 23,
 			hwnd, (HMENU)MG_GUI_ID_QUIT, hInst, 0);
 
 	g_patch_button = CreateWindowW(L"Button", L"Patch",
 			WS_VISIBLE | WS_CHILD | WS_TABSTOP | 0x00000001,
-			515, 359, 83, 23, hwnd, (HMENU)MG_GUI_ID_PATCH, hInst, 0);
+			418, 330, 136, 34, hwnd, (HMENU)MG_GUI_ID_PATCH, hInst, 0);
 
 	g_play_button = CreateWindowW(L"Button", L"Play!",
 			WS_VISIBLE | WS_CHILD | WS_TABSTOP | 0x00000001,
-			412, 359, 83, 23, hwnd, (HMENU)MG_GUI_ID_PLAY, hInst, 0);
+			418, 371, 136, 34, hwnd, (HMENU)MG_GUI_ID_PLAY, hInst, 0);
 
 	g_repair_button = CreateWindowW(L"Button", L"Repair files",
 			WS_VISIBLE | WS_CHILD | WS_TABSTOP | 0x00000001,
-			12, 363, 83, 23, hwnd, (HMENU)MG_GUI_ID_REPAIR, hInst, 0);
+			471, 289, 83, 23, hwnd, (HMENU)MG_GUI_ID_REPAIR, hInst, 0);
 
 	reload_banner("patcher/banner");
 
-	EnableWindow(g_patch_button, FALSE);
-	EnableWindow(g_play_button, FALSE);
-	EnableWindow(g_repair_button, FALSE);
+	g_button_state[MG_GUI_ID_QUIT] = true;
 
-	EnumChildWindows(hwnd, (WNDENUMPROC)hwnd_set_font,
-			(LPARAM)GetStockObject(DEFAULT_GUI_FONT));
+	/* create bold font for labels */
+	HFONT default_font = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+	LOGFONT lf;
+	GetObject(default_font, sizeof(lf), &lf);
+	strcpy(lf.lfFaceName, "Microsoft Sans Serif");
+	lf.lfWeight = FW_BOLD;
+	HFONT bold_font = CreateFontIndirect(&lf);
+
+	EnumChildWindows(hwnd, (WNDENUMPROC)hwnd_set_font, (LPARAM)bold_font);
+	SendMessage(g_changelog_lbl, WM_SETFONT, (WPARAM)default_font, TRUE);
 
 	g_orig_changelog_event_handler =
 			(WNDPROC)SetWindowLongPtr(g_changelog_lbl,
 			GWLP_WNDPROC, (LONG_PTR)WndProcChangelogBox);
+
+	g_orig_button_handler =
+			(WNDPROC)SetWindowLongPtr(g_play_button,
+			GWLP_WNDPROC, (LONG_PTR)WndProcButton);
+
+	SetWindowLongPtr(g_repair_button, GWLP_WNDPROC, (LONG_PTR)WndProcButton);
+	SetWindowLongPtr(g_patch_button, GWLP_WNDPROC, (LONG_PTR)WndProcButton);
+	SetWindowLongPtr(g_quit_button, GWLP_WNDPROC, (LONG_PTR)WndProcButton);
 }
 
 static char *g_cmdline;
@@ -311,7 +387,9 @@ WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 			break;
 		}
 		case WM_COMMAND:
-			on_button_click((int)LOWORD(arg1));
+			if (g_button_state[(int)LOWORD(arg1)]) {
+				on_button_click((int)LOWORD(arg1));
+			}
 			break;
 		case MG_CB_MSG: {
 			struct ui_thread_ctx ctx, *org_ctx = (void *)arg2;
@@ -322,17 +400,6 @@ WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 			break;
 		}
 		case WM_CTLCOLOREDIT:
-			if ((HWND)arg2 == g_changelog_lbl) {
-				SetBkColor((HDC)arg1, RGB(250, 250, 250));
-				SetTextColor((HDC)arg1, RGB(80,44,44));
-				return (LRESULT)GetStockObject(HOLLOW_BRUSH);
-			}
-			if ((HWND)arg2 == g_changelog_lbl) {
-				SetBkColor((HDC)arg1, RGB(250, 250, 250));
-				SetTextColor((HDC)arg1, RGB(80,44,44));
-				return (LRESULT)GetStockObject(HOLLOW_BRUSH);
-			}
-			break;
 		case WM_CTLCOLORSTATIC:
 			if ((HWND)arg2 == g_changelog_lbl) {
 				SetBkColor((HDC)arg1, RGB(250, 250, 250));
@@ -342,8 +409,16 @@ WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 					(HWND)arg2 == g_status_right_lbl ||
 					(HWND)arg2 == g_version_lbl) {
 				SetBkMode((HDC)arg1, TRANSPARENT);
-				SetTextColor((HDC)arg1, RGB(80,44,44));
+				SetTextColor((HDC)arg1, RGB(250, 250, 250));
 				return (LRESULT)GetStockObject(HOLLOW_BRUSH);
+			}
+
+			for (int i = 0; i < 4; i++) {
+				if ((HWND)arg2 == g_status_left_lbl_shadow[i] ||
+						(HWND)arg2 == g_status_right_lbl_shadow[i]) {
+					SetBkMode((HDC)arg1, TRANSPARENT);
+					return (LRESULT)GetStockObject(HOLLOW_BRUSH);
+				}
 			}
 			break;
 		case WM_PAINT: {
@@ -358,6 +433,8 @@ WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 		case WM_NOTIFY: {
 			LPNMHDR lpnmhdr = (LPNMHDR)arg2;
 			struct button_brush *btn_brush = NULL;
+			struct button_state_brush *btn_brush_state = NULL;
+			HWND btn;
 
 			if (lpnmhdr->code != NM_CUSTOMDRAW) {
 				return CDRF_DODEFAULT;
@@ -365,55 +442,75 @@ WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 
 			LPNMCUSTOMDRAW item = (LPNMCUSTOMDRAW)lpnmhdr;
 			HGDIOBJ old_brush;
-			HGDIOBJ new_brush;
 
-			if (!g_brush_btn.regular) {
-				g_brush_btn.regular = create_pattern_brush(RGB(220, 207, 207), NULL, item);
-				g_brush_btn.hover = create_pattern_brush(RGB(156, 120, 120), NULL, item);
-				g_brush_btn.pressed = create_pattern_brush(RGB(125, 98, 98), NULL, item);
+			if (!g_brush_btn.regular.bg_brush) {
+				g_brush_btn.regular.bg_brush = create_pattern_brush(RGB(220, 207, 207), NULL, item);
+				g_brush_btn.regular.text_color = RGB(33, 33, 33);
+				g_brush_btn.hover.bg_brush = create_pattern_brush(RGB(191, 181, 181), NULL, item);
+				g_brush_btn.hover.text_color = RGB(0, 0, 0);
+				g_brush_btn.pressed.bg_brush = create_pattern_brush(RGB(162, 154, 154), NULL, item);
+				g_brush_btn.pressed.text_color = RGB(0, 0, 0);
+				g_brush_btn.disabled.bg_brush = create_pattern_brush(RGB(223, 223, 223), NULL, item);
+				g_brush_btn.disabled.text_color = RGB(165, 165, 165);
 
-				g_brush_btn_play.regular = create_pattern_brush(RGB(207, 69, 69), NULL, item);
-				g_brush_btn_play.hover = create_pattern_brush(RGB(172, 56, 56), NULL, item);
-				g_brush_btn_play.pressed = create_pattern_brush(RGB(142, 48, 48), NULL, item);
+				g_brush_btn_play.regular.bg_brush = create_pattern_brush(RGB(207, 69, 69), NULL, item);
+				g_brush_btn_play.regular.text_color = RGB(255, 255, 255);
+				g_brush_btn_play.hover.bg_brush = create_pattern_brush(RGB(172, 56, 56), NULL, item);
+				g_brush_btn_play.hover.text_color = RGB(255, 255, 255);
+				g_brush_btn_play.pressed.bg_brush = create_pattern_brush(RGB(142, 48, 48), NULL, item);
+				g_brush_btn_play.pressed.text_color = RGB(255, 255, 255);
+				g_brush_btn_play.disabled.bg_brush = create_pattern_brush(RGB(223, 223, 223), NULL, item);
+				g_brush_btn_play.disabled.text_color = RGB(165, 165, 165);
 			}
 
 			switch (lpnmhdr->idFrom) {
 				case MG_GUI_ID_PLAY:
 					btn_brush = &g_brush_btn_play;
+					btn = g_play_button;
 					break;
 				case MG_GUI_ID_QUIT:
-				case MG_GUI_ID_PATCH:
-				case MG_GUI_ID_REPAIR:
+					btn = g_quit_button;
 					btn_brush = &g_brush_btn;
-					if (item->uItemState & (CDIS_SELECTED | CDIS_HOT)) {
-						SetTextColor(item->hdc, RGB(255, 255, 255));
-					} else {
-						SetTextColor(item->hdc, RGB(33, 33, 33));
-					}
+					break;
+				case MG_GUI_ID_PATCH:
+					btn = g_patch_button;
+					btn_brush = &g_brush_btn;
+					break;
+				case MG_GUI_ID_REPAIR:
+					btn = g_repair_button;
+					btn_brush = &g_brush_btn;
 					break;
 			}
 
-			if (!btn_brush) {
+			if (!btn_brush || lpnmhdr->idFrom >= sizeof(g_button_state) / sizeof(g_button_state[0])) {
 				return CDRF_DODEFAULT;
 			}
 
-			if (item->uItemState & CDIS_SELECTED) {
-				/* button is pressed */
-				new_brush = btn_brush->pressed;
+			if (!g_button_state[lpnmhdr->idFrom]) {
+				/* disabled */
+				btn_brush_state = &btn_brush->disabled;
+			} else if (item->uItemState & CDIS_SELECTED) {
+				/* pressed */
+				btn_brush_state = &btn_brush->pressed;
 			} else if (item->uItemState & CDIS_HOT) {
 				/* mouse hover */
-				new_brush = btn_brush->hover;
+				btn_brush_state = &btn_brush->hover;
 			} else {
 				/* default state */
-				new_brush = btn_brush->regular;
+				btn_brush_state = &btn_brush->regular;
 			}
 
-			old_brush = SelectObject(item->hdc, new_brush);
-			FillRect(item->hdc, &item->rc, new_brush);
+			old_brush = SelectObject(item->hdc, btn_brush_state->bg_brush);
+			FillRect(item->hdc, &item->rc, btn_brush_state->bg_brush);
 			SelectObject(item->hdc, old_brush);
 
-			/* custom or not, draw default text */
-			return CDRF_DODEFAULT;
+			SetBkMode(item->hdc, TRANSPARENT);
+			SetTextColor(item->hdc, btn_brush_state->text_color);
+
+			char buf[64];
+			GetWindowText(btn, buf, sizeof(buf));
+			DrawTextA(item->hdc, buf, -1, &item->rc, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+			return CDRF_SKIPDEFAULT;
 	       }
 		case WM_DESTROY:
 			PostQuitMessage(0);
@@ -444,6 +541,26 @@ WndProcChangelogBox(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 
 	return ret;
 }
+
+static LRESULT CALLBACK
+WndProcButton(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
+{
+	switch(msg) {
+		case WM_SETCURSOR: {
+			int id = GetDlgCtrlID(hwnd);
+			if (id >= sizeof(g_button_state) / sizeof(g_button_state[0]) ||
+					g_button_state[id]) {
+				SetCursor(g_cursor_hand);
+			} else {
+				SetCursor(g_cursor_arrow);
+			}
+			return TRUE;
+		}
+	}
+
+	return CallWindowProc(g_orig_button_handler, hwnd, msg, arg1, arg2);
+}
+
 
 static void
 on_fini_cb(void *arg1, void *arg2) {
@@ -515,6 +632,9 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrevInstance,
 
 	g_win_tid = GetCurrentThreadId();
 	g_cmdline = lpCmdLine;
+
+	g_cursor_arrow = LoadCursor(0, IDC_ARROW);
+	g_cursor_hand = LoadCursor(0, IDC_HAND);
 
 	init_win(hInst);
 	while (GetMessage(&msg, NULL, 0, 0)) {
