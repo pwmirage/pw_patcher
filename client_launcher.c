@@ -185,11 +185,6 @@ on_init(int argc, char *argv[])
 			continue;
 		}
 
-		if (strcmp(namebuf, "patcher\\banner") == 0) {
-			/* XXX */
-			continue;
-		}
-
 		PWLOG(LOG_INFO, "sha mismatch on %s. expected=%s, got=%s\n", name, sha, tmpbuf);
 
 		snprintf(tmpbuf, sizeof(tmpbuf), "Downloading %s", name);
@@ -219,7 +214,7 @@ on_init(int argc, char *argv[])
 		}
 	}
 
-	if (JSi(g_latest_version, "launcher_version") >= 20) {
+	if (JSi(g_latest_version, "launcher_version") >= 21) {
 		set_progress_state(PBST_PAUSED);
 
 		g_patcher_outdated = true;
