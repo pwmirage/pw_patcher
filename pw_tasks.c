@@ -318,6 +318,33 @@ serialize_trigger_id_fn(FILE *fp, struct serializer *f, void *data)
 	return 4;
 }
 
+static size_t
+serialize_id_removed_fn(FILE *fp, struct serializer *f, void *data)
+{
+	/* TODO? */
+	return 0;
+}
+
+static size_t
+deserialize_id_removed_fn(struct cjson *f, struct serializer *slzr, void *data)
+{
+	uint32_t is_removed = !!(*(uint32_t *)(data) & (1 << 31));
+
+	if (f->type == CJSON_TYPE_NONE) {
+		return 0;
+	}
+
+	deserialize_log(f, &is_removed);
+
+	if (JSi(f)) {
+		*(uint32_t *)(data) |= (1 << 31);
+	} else {
+		*(uint32_t *)(data) &= ~(1 << 31);
+	}
+
+	return 0;
+}
+
 static struct serializer pw_task_location_serializer[] = {
 	{ "east", _FLOAT },
 	{ "bottom", _FLOAT },
@@ -685,6 +712,7 @@ static struct serializer pw_task_serializer[] = {
 	{ "start_by", _CUSTOM, serialize_start_by_fn, deserialize_start_by },
 	{ "avail_frequency", _CUSTOM, serialize_avail_frequency_fn, deserialize_avail_frequency_fn },
 	{ "type", _CUSTOM, serialize_type_fn, deserialize_type_fn },
+	{ "_removed", _CUSTOM, serialize_id_removed_fn, deserialize_id_removed_fn },
 	{ "id", _INT32 },
 	{ "name", _WSTRING(30) },
 	{ "_has_signature", _INT8 }, /* we'll be always setting this to 0 */
@@ -1448,12 +1476,15 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 		}
 	}
 
-	SAVE_TBL_CNT("sub_quests", pw_task_serializer, data);
 
+	size_t subq_off = ftell(fp);
+
+	/* write anything to the sub quest count -> we'll get back there */
 	fwrite(buf, 4, 1, fp);
 	buf += 4;
 
 	void *el;
+	uint32_t subq_count = 0;
 
 	PW_CHAIN_TABLE_FOREACH(el, sub_quests_tbl) {
 		uint32_t id = *(uint32_t *)el;
@@ -1462,9 +1493,19 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 			continue;
 		}
 
-		void *sub_q = pw_idmap_get(taskf->idmap, id, 0); /* FIXME go async */
+		void *sub_q = pw_idmap_get(taskf->idmap, id, 0);
+		if ((*(uint32_t *)sub_q) & (1 << 31)) {
+			continue;
+		}
 		write_task(taskf, sub_q, fp, is_client);
+		subq_count++;
 	}
+
+	size_t cur_off = ftell(fp);
+	fseek(fp, subq_off, SEEK_SET);
+	*(uint32_t *)serializer_get_field(slzr, "_sub_quests_cnt", data) = subq_count;
+	fwrite(&subq_count, 4, 1, fp);
+	fseek(fp, cur_off, SEEK_SET);
 }
 
 int
@@ -1589,8 +1630,9 @@ pw_tasks_save(struct pw_task_file *taskf, const char *path, bool is_server)
   
 	count = 0;
 	PW_CHAIN_TABLE_FOREACH(el, taskf->tasks) {
+		uint32_t id = *(uint32_t *)el;
 		uint32_t parent_id = *(uint32_t *)serializer_get_field(pw_task_serializer, "parent_quest", el);
-		if (!parent_id) {
+		if (!parent_id && (id & (1 << 31)) == 0) {
 			count++;
 		}
 	}
@@ -1609,8 +1651,9 @@ pw_tasks_save(struct pw_task_file *taskf, const char *path, bool is_server)
 	uint32_t i = 0;
 	PW_CHAIN_TABLE_FOREACH(el, taskf->tasks) {
 		struct serializer *slzr = pw_task_serializer;
+		uint32_t id = *(uint32_t *)el;
 		uint32_t parent_id = *(uint32_t *)serializer_get_field(slzr, "parent_quest", el);
-		if (parent_id) {
+		if (parent_id || (id & (1 << 31))) {
 			continue;
 		}
 

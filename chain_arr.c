@@ -233,6 +233,7 @@ deserialize_chunked_table_fn(struct cjson *f, struct serializer *_slzr, void *da
 	if (!table) {
 		size_t el_size = serializer_get_size(slzr);
 		table = *(void **)data = pw_chain_table_alloc("", slzr, el_size, 8);
+		fprintf(stderr, "allocated tbl at %p\n", table);
 		/* FIXME set new_el_fn in here */
 		if (!table) {
 			PWLOG(LOG_ERROR, "pw_chain_table_alloc() failed\n");

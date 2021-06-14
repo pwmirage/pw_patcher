@@ -1,5 +1,5 @@
-OBJECTS = common.o serializer.o chain_arr.o pw_elements.o cjson.o idmap.o pw_npc.o pw_tasks.o pw_tasks_npc.o avl.o zpipe.o
-ALL_OBJECTS := $(OBJECTS) export.o srv_patcher.o idmap_gen.o mgpck.o
+OBJECTS = common.o serializer.o chain_arr.o pw_elements.o cjson.o idmap.o pw_npc.o pw_tasks.o pw_tasks_npc.o avl.o
+ALL_OBJECTS := $(OBJECTS) export.o srv_patcher.o idmap_gen.o mgpck.o zpipe.o
 _CFLAGS := -O3 -MD -MP -fno-strict-aliasing -Wall -Wno-format-truncation $(CFLAGS)
 
 ifeq ($(OS),Windows_NT)
@@ -29,7 +29,7 @@ build/srv_patcher: build/gcc_ver.h $(OBJECTS:%.o=build/%.o) build/srv_patcher.o
 build/idmap_gen: build/gcc_ver.h $(OBJECTS:%.o=build/%.o) build/idmap_gen.o
 	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ -Wl,--no-whole-archive
 
-build/client_patcher: build/gcc_ver.h $(OBJECTS:%.o=build/%.o) build/client_patcher.o build/pw_pck.o
+build/client_patcher: build/gcc_ver.h $(OBJECTS:%.o=build/%.o) build/client_patcher.o build/pw_pck.o build/zpipe.o
 	windres -i patcher.rc -o patcher_rc.o
 	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ patcher_rc.o -Wl,--no-whole-archive -s -lwininet -mwindows -lcrypt32 -Wl,-Bstatic -lz -liconv -Wl,-Bdynamic
 
