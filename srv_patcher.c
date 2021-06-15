@@ -325,9 +325,10 @@ main(int argc, char *argv[])
 				continue;
 			}
 
-			rc = download(url, "patcher/elements.imap");
+			snprintf(tmpbuf, sizeof(tmpbuf), "patcher/%s", name);
+			rc = download(url, tmpbuf);
 			if (rc != 0) {
-				PWLOG(LOG_ERROR, "elements.imap download failed: %d", rc);
+				PWLOG(LOG_ERROR, "%s download failed: %d", name, rc);
 				return 1;
 			}
 		}
