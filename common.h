@@ -61,7 +61,7 @@ void fwsprint(FILE *fp, const uint16_t *buf, int maxlen);
 void fwsprintf(FILE *fp, const char *fmt, const uint16_t *buf, int maxlen);
 void wsnprintf(uint16_t *dst, size_t dstsize, const char *src);
 
-static int __attribute__ ((unused))
+static int __attribute__ ((unused)) __attribute__((optimize("O0")))
 change_charset(char *src_charset, char *dst_charset, char *src, long srclen, char *dst, long dstlen)
 {
 #ifdef NO_ICONV
