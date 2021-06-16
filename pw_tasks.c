@@ -447,7 +447,7 @@ static struct serializer pw_task_award_serializer[] = {
 	{ "chi", _INT32 },
 	{ "tp", _OBJECT_START, NULL, NULL, pw_task_point_serializer },
 	{ "ai_trigger", _CUSTOM, serialize_trigger_id_fn, deserialize_trigger_id_fn },
-	{ "_ai_trigger_enable", _INT8 },
+	{ "ai_trigger_enable", _INT8 },
 	{ "level_multiplier", _INT8 },
 	{ "divorce", _INT8 },
 	{ "_item_groups_cnt", _INT32 },
@@ -746,7 +746,7 @@ static struct serializer pw_task_serializer[] = {
 	{ "instant_teleport", _INT8 },
 	{ "instant_teleport_point", _OBJECT_START, NULL, NULL, pw_task_point_serializer },
 	{ "ai_trigger", _CUSTOM, serialize_trigger_id_fn, deserialize_trigger_id_fn },
-	{ "_ai_trigger_enable", _INT8 },
+	{ "ai_trigger_enable", _INT8 },
 	{ "_auto_trigger", _INT8 },
 	{ "_trigger_on_death", _INT8 },
 	{ "remove_premise_items", _INT8 }, /* coins too */
@@ -896,10 +896,6 @@ read_award(void **buf_p, FILE *fp, bool is_server)
 		buf += 8;
 	}
 
-	if (!*(uint8_t *)serializer_get_field(slzr, "_ai_trigger_enable", data)) {
-		*(uint32_t *)serializer_get_field(slzr, "ai_trigger", data) = 0;
-	}
-
 	item_groups_count = *(uint32_t *)serializer_get_field(slzr, "_item_groups_cnt", data);
 	*(void **)buf = ptr = pw_chain_table_fread(fp, "item_groups", 0, pw_task_item_group_serializer);
 	if (!ptr) {
@@ -958,8 +954,6 @@ write_award(void **buf_p, FILE *fp, bool is_client)
 	}
 
 	SAVE_TBL_CNT("item_groups", slzr, data);
-
-	*(uint8_t *)serializer_get_field(slzr, "_ai_trigger_enable", data) = !!*(uint32_t *)serializer_get_field(slzr, "ai_trigger", data);
 
 	if (is_client) {
 		fwrite(buf, 67, 1, fp);
@@ -1067,10 +1061,6 @@ read_task(struct pw_task_file *taskf, FILE *fp, bool is_server)
 	/* raw data */
 	fread(buf, 534, 1, fp);
 	buf += 534;
-
-	if (!*(uint8_t *)serializer_get_field(slzr, "_ai_trigger_enable", data)) {
-		*(uint32_t *)serializer_get_field(slzr, "ai_trigger", data) = 0;
-	}
 
 	invert_bools(data);
 	id = *(uint32_t *)data;
@@ -1325,8 +1315,6 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 	SAVE_TBL_CNT("req_items", slzr, data);
 	finalize_id_field("start_npc", slzr, data);
 	finalize_id_field("finish_npc", slzr, data);
-
-	*(uint8_t *)serializer_get_field(slzr, "_ai_trigger_enable", data) = !!*(uint32_t *)serializer_get_field(slzr, "ai_trigger", data);
 
 	struct serializer *dialogue_slzr = NULL;
 	int dialogue_ready_off = serializer_get_offset_slzr(slzr, "dialogue", &dialogue_slzr);
