@@ -1297,6 +1297,8 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 	struct pw_chain_table *tbl_p;
 	uint32_t id;
 	struct serializer *slzr = pw_task_serializer;
+	void *el;
+	uint32_t subq_count = 0;
 
 	id = *(uint32_t *)data;
 	xor_bytes(serializer_get_field(slzr, "name", data), 30, id);
@@ -1305,6 +1307,21 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 	if (sub_quests_tbl && sub_quests_tbl->chain && sub_quests_tbl->chain->count) {
 		*(uint32_t *)serializer_get_field(pw_task_serializer, "finish_npc", data) |= (1 << 31);
 	}
+
+	PW_CHAIN_TABLE_FOREACH(el, sub_quests_tbl) {
+		uint32_t id = *(uint32_t *)el;
+
+		if (id == 0) {
+			continue;
+		}
+
+		void *sub_q = pw_idmap_get(taskf->idmap, id, 0);
+		if (!sub_q || (*(uint32_t *)sub_q) & (1 << 31)) {
+			continue;
+		}
+		subq_count++;
+	}
+	*(uint32_t *)serializer_get_field(slzr, "_sub_quests_cnt", data) = subq_count;
 
 	invert_bools(data);
 	SAVE_TBL_CNT("date_spans", slzr, data);
@@ -1339,9 +1356,8 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 			}
 		}
 	}
-	/* XXX: PW has it also set for parent tasks which are completed through children */
-	*(uint32_t *)serializer_get_field(slzr, "_need_npc_finish", data) = _need_npc_finish;
 
+	*(uint32_t *)serializer_get_field(slzr, "_need_npc_finish", data) = subq_count == 0 && _need_npc_finish;
 
 	fwrite(buf, 534, 1, fp);
 	buf += 534;
@@ -1464,15 +1480,8 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 		}
 	}
 
-
-	size_t subq_off = ftell(fp);
-
-	/* write anything to the sub quest count -> we'll get back there */
-	fwrite(buf, 4, 1, fp);
+	fwrite(&subq_count, 4, 1, fp);
 	buf += 4;
-
-	void *el;
-	uint32_t subq_count = 0;
 
 	PW_CHAIN_TABLE_FOREACH(el, sub_quests_tbl) {
 		uint32_t id = *(uint32_t *)el;
@@ -1486,14 +1495,7 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 			continue;
 		}
 		write_task(taskf, sub_q, fp, is_client);
-		subq_count++;
 	}
-
-	size_t cur_off = ftell(fp);
-	fseek(fp, subq_off, SEEK_SET);
-	*(uint32_t *)serializer_get_field(slzr, "_sub_quests_cnt", data) = subq_count;
-	fwrite(&subq_count, 4, 1, fp);
-	fseek(fp, cur_off, SEEK_SET);
 }
 
 int
