@@ -264,7 +264,7 @@ _idmap_set(struct pw_idmap *map, long long lid, long id, long type, void *data)
 			if (last_el) {
 				last_el->next = el->next;
 			} else {
-				map->lists[lid % PW_IDMAP_ARR_SIZE] = NULL;
+				map->lists[lid % PW_IDMAP_ARR_SIZE] = el->next;
 			}
 
 			/* update lid and put it in the map again */
@@ -308,6 +308,7 @@ _idmap_set(struct pw_idmap *map, long long lid, long id, long type, void *data)
 			if (last_el) {
 				last_el->next = el;
 			} else {
+				el->next = map->lists[lid % PW_IDMAP_ARR_SIZE];
 				map->lists[lid % PW_IDMAP_ARR_SIZE] = el;
 			}
 			return el;
