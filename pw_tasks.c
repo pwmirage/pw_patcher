@@ -1494,7 +1494,7 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 		}
 
 		void *sub_q = pw_idmap_get(taskf->idmap, id, 0);
-		if ((*(uint32_t *)sub_q) & (1 << 31)) {
+		if (!sub_q || (*(uint32_t *)sub_q) & (1 << 31)) {
 			continue;
 		}
 		write_task(taskf, sub_q, fp, is_client);
