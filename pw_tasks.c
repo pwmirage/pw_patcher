@@ -1426,6 +1426,7 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 		char *data_start = buf;
 		void *el;
 		uint16_t *name = serializer_get_field(pw_task_talk_proc_serializer, "_name", data_start);
+		uint32_t question_cnt = 0;
 
 		tbl_p = *(void **)serializer_get_field(pw_task_talk_proc_serializer, "questions", data_start);
 		if (tbl_p && tbl_p->chain->count) {
@@ -1440,7 +1441,16 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 		}
 
 		xor_bytes(name, 64, id);
-		SAVE_TBL_CNT("questions", pw_task_talk_proc_serializer, data_start);
+
+		PW_CHAIN_TABLE_FOREACH(el, tbl_p) {
+			uint32_t qid = *(uint32_t *)el;
+
+			if (qid) {
+				question_cnt++;
+			}
+		}
+
+		*(uint32_t *)serializer_get_field(pw_task_talk_proc_serializer, "_questions_cnt", data_start) = question_cnt;
 
 		fwrite(buf, 136, 1, fp);
 		buf += 136;
@@ -1449,6 +1459,12 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 		PW_CHAIN_TABLE_FOREACH(el, tbl_p) {
 			char *data_start = el;
 			void *buf = el;
+			uint32_t choice_cnt = 0;
+			uint32_t qid = *(uint32_t *)el;
+
+			if (!qid) {
+				continue;
+			}
 
 			fwrite(buf, 8, 1, fp);
 			buf += 8;
@@ -1463,7 +1479,21 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 
 			buf += PW_POINTER_BUF_SIZE;
 
-			SAVE_TBL_CNT("choices", pw_task_talk_proc_question_serializer, data_start);
+			{
+				struct pw_chain_table *tbl_p = *(void **)(buf + 4);
+				void *c;
+
+				PW_CHAIN_TABLE_FOREACH(c, tbl_p) {
+					uint32_t cid = *(uint32_t *)el;
+
+					if (cid) {
+						choice_cnt++;
+					}
+				}
+			}
+
+			*(uint32_t *)serializer_get_field(pw_task_talk_proc_question_serializer, "_choices_cnt", data_start) = choice_cnt;
+
 			fwrite(buf, 4, 1, fp);
 			buf += 4;
 
@@ -1473,6 +1503,12 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 				void *c;
 
 				PW_CHAIN_TABLE_FOREACH(c, tbl_p) {
+					uint32_t cid = *(uint32_t *)el;
+
+					if (!cid) {
+						continue;
+					}
+
 					xor_bytes(serializer_get_field(pw_task_talk_proc_choice_serializer, "text", c), 64, id);
 					fwrite(c, tbl_p->el_size, 1, fp);
 				}
