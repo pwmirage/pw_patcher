@@ -185,6 +185,55 @@ serialize_elements_id_field_fn(FILE *fp, struct serializer *f, void *data)
 	return 4;
 }
 
+static struct serializer recipes_serializer[];
+
+static void
+deserialize_recipe_id_field_async_fn(void *data, void *target_data)
+{
+	uint32_t *target_id;
+
+	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)target_data, *(uint32_t *)data);
+
+	target_id = (uint32_t *)serializer_get_field(recipes_serializer, "targets", data);
+
+	if (*target_id != 0) {
+		*(uint32_t *)target_data = *(uint32_t *)data;
+	} else {
+		*(uint32_t *)target_data = 0;
+	}
+}
+
+static size_t
+deserialize_recipe_id_field_fn(struct cjson *f, struct serializer *slzr, void *data)
+{
+	int64_t val = JSi(f);
+
+	if (f->type == CJSON_TYPE_NONE) {
+		return 4;
+	}
+
+	if (val >= 0x80000000) {
+		int rc = pw_idmap_get_async(g_elements_map, val, 0, deserialize_recipe_id_field_async_fn, data);
+
+		if (rc) {
+			assert(false);
+		}
+	} else {
+		deserialize_log(f, data);
+		*(uint32_t *)(data) = (uint32_t)val;
+	}
+
+	return 4;
+}
+
+static size_t
+serialize_recipe_id_field_fn(FILE *fp, struct serializer *f, void *data)
+{
+	/* TODO */
+	return 4;
+}
+
+
 static struct serializer equipment_addon_serializer[] = {
 	{ "id", _INT32 },
 	{ "name", _WSTRING(32) },
@@ -432,7 +481,7 @@ static struct serializer npc_crafts_serializer[] = {
 	{ "pages", _ARRAY_START(8) },
 		{ "title", _WSTRING(8) },
 		{ "recipe_id", _ARRAY_START(32) },
-			{ "", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
+			{ "", _CUSTOM, serialize_recipe_id_field_fn, deserialize_recipe_id_field_fn },
 		{ "", _ARRAY_END },
 	{ "", _ARRAY_END },
 	{ "", _TYPE_END },
