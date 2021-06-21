@@ -49,6 +49,11 @@ struct pw_idmap_async_fn_el {
 	struct pw_idmap_async_fn_el *next;
 };
 
+struct pw_idmap_async_fn_head {
+	struct pw_idmap_async_fn_el *head;
+	struct pw_idmap_async_fn_el **tail;
+};
+
 static struct pw_id_el *_idmap_set(struct pw_idmap *map, long long lid, long id, long type, void *data);
 
 struct pw_idmap *
@@ -183,6 +188,7 @@ pw_idmap_get_async(struct pw_idmap *map, long long lid, long type, pw_idmap_asyn
 {
 	struct pw_id_el *el;
 	struct pw_idmap_async_fn_el *async_el;
+	struct pw_idmap_async_fn_head *async_head;
 
 	el = map->lists[lid % PW_IDMAP_ARR_SIZE];
 
@@ -210,25 +216,39 @@ pw_idmap_get_async(struct pw_idmap *map, long long lid, long type, pw_idmap_asyn
 
 	if (!el) {
 		el = _idmap_set(map, lid, 0, type, NULL);
-		el->is_async_fn = 1;
-		el->data = async_el;
-	} else if (!el->is_async_fn) {
-		el->is_async_fn = 1;
-		el->data = async_el;
-	} else {
-		/* put it to the front */
-		async_el->next = el->data;
-		el->data = async_el;
+		if (!el) {
+			free(async_el);
+			return -1;
+		}
 	}
+	el->is_async_fn = 1;
+
+	async_head = el->data;
+	if (!async_head) {
+		async_head = calloc(1, sizeof(*async_head));
+		if (!async_head) {
+			free(async_el);
+			return -1;
+		}
+
+		async_head->tail = &async_head->head;
+		el->data = async_head;
+	}
+
+	/* put it to the end to ensure the call order. everything queued first will
+	 * be called first. */
+	*async_head->tail = async_el;
+	async_head->tail = &async_el->next;
 
 	return 0;
 }
 
 static void
-call_async_arr(struct pw_idmap_async_fn_el *async_el, void *data)
+call_async_arr(struct pw_idmap_async_fn_head *async, void *data)
 {
-	struct pw_idmap_async_fn_el *tmp;
+	struct pw_idmap_async_fn_el *async_el, *tmp;
 
+	async_el = async->head;
 	while (async_el) {
 		async_el->fn(data, async_el->ctx);
 		tmp = async_el;
@@ -283,6 +303,7 @@ _idmap_set(struct pw_idmap *map, long long lid, long id, long type, void *data)
 					if (tmp_el->is_async_fn) {
 						/* TODO do this after setting the el, so that idmap_get() works */
 						call_async_arr(tmp_el->data, data);
+						free(tmp_el->data);
 					}
 
 					if (tmp_el->is_async_fn || tmp_el->is_dummy_mapping) {
