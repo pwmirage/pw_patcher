@@ -1444,8 +1444,9 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 
 		PW_CHAIN_TABLE_FOREACH(el, tbl_p) {
 			uint32_t qid = *(uint32_t *)el;
+			uint32_t textlen = *(uint32_t*)(el + 8);
 
-			if (qid) {
+			if (qid || textlen > 1) {
 				question_cnt++;
 			}
 		}
@@ -1461,8 +1462,9 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 			void *buf = el;
 			uint32_t choice_cnt = 0;
 			uint32_t qid = *(uint32_t *)el;
+			uint32_t textlen = *(uint32_t*)(el + 8);
 
-			if (!qid) {
+			if (!qid && textlen <= 1) {
 				continue;
 			}
 
@@ -1484,7 +1486,7 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 				void *c;
 
 				PW_CHAIN_TABLE_FOREACH(c, tbl_p) {
-					uint32_t cid = *(uint32_t *)el;
+					uint32_t cid = *(uint32_t *)c;
 
 					if (cid) {
 						choice_cnt++;
@@ -1503,7 +1505,7 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 				void *c;
 
 				PW_CHAIN_TABLE_FOREACH(c, tbl_p) {
-					uint32_t cid = *(uint32_t *)el;
+					uint32_t cid = *(uint32_t *)c;
 
 					if (!cid) {
 						continue;
