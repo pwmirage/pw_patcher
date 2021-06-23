@@ -68,7 +68,7 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 				}
 				data += 2;
 			} else if (slzr->type == _INT32) {
-				if (!obj_printed || (*(uint32_t *)data != 0 && slzr->name[0] != '_')) {
+				if (!obj_printed || (*(uint32_t *)data != 0 && slzr->name[0] != '_') || slzr->ctx != NULL) {
 					if (slzr->name[0] != 0) {
 						fprintf(fp, "\"%s\":", slzr->name);
 					}
