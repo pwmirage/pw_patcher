@@ -26,6 +26,7 @@ uint32_t g_elements_last_id;
 struct pw_idmap *g_elements_map;
 int g_elements_taskmatter_idmap_id;
 int g_elements_npc_idmap_id;
+int g_elements_recipes_idmap_id;
 extern struct pw_idmap *g_tasks_map;
 
 static int
@@ -184,55 +185,6 @@ serialize_elements_id_field_fn(FILE *fp, struct serializer *f, void *data)
 	/* TODO */
 	return 4;
 }
-
-static struct serializer recipes_serializer[];
-
-static void
-deserialize_recipe_id_field_async_fn(void *data, void *target_data)
-{
-	uint32_t *target_id;
-
-	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)target_data, *(uint32_t *)data);
-
-	target_id = (uint32_t *)serializer_get_field(recipes_serializer, "targets", data);
-
-	if (*target_id != 0) {
-		*(uint32_t *)target_data = *(uint32_t *)data;
-	} else {
-		*(uint32_t *)target_data = 0;
-	}
-}
-
-static size_t
-deserialize_recipe_id_field_fn(struct cjson *f, struct serializer *slzr, void *data)
-{
-	int64_t val = JSi(f);
-
-	if (f->type == CJSON_TYPE_NONE) {
-		return 4;
-	}
-
-	if (val >= 0x80000000) {
-		int rc = pw_idmap_get_async(g_elements_map, val, 0, deserialize_recipe_id_field_async_fn, data);
-
-		if (rc) {
-			assert(false);
-		}
-	} else {
-		deserialize_log(f, data);
-		*(uint32_t *)(data) = (uint32_t)val;
-	}
-
-	return 4;
-}
-
-static size_t
-serialize_recipe_id_field_fn(FILE *fp, struct serializer *f, void *data)
-{
-	/* TODO */
-	return 4;
-}
-
 
 static struct serializer equipment_addon_serializer[] = {
 	{ "id", _INT32 },
@@ -473,6 +425,17 @@ static struct serializer npcs_serializer[] = {
 	{ "", _TYPE_END },
 };
 
+__attribute__((packed)) struct npc_crafts {
+	uint32_t id;
+	char16_t name[32];
+	uint32_t make_skill_id;
+	uint32_t _produce_type;
+	struct npc_crafts_page {
+		char16_t title[8];
+		uint32_t recipe_id[32];
+	} pages[8];
+};
+
 static struct serializer npc_crafts_serializer[] = {
 	{ "id", _INT32 },
 	{ "name", _WSTRING(32) },
@@ -481,7 +444,7 @@ static struct serializer npc_crafts_serializer[] = {
 	{ "pages", _ARRAY_START(8) },
 		{ "title", _WSTRING(8) },
 		{ "recipe_id", _ARRAY_START(32) },
-			{ "", _CUSTOM, serialize_recipe_id_field_fn, deserialize_recipe_id_field_fn },
+			{ "", _INT32 },
 		{ "", _ARRAY_END },
 	{ "", _ARRAY_END },
 	{ "", _TYPE_END },
@@ -2183,6 +2146,7 @@ pw_elements_load(struct pw_elements *el, const char *filename, const char *idmap
 	fclose(fp);
 
 	g_elements_taskmatter_idmap_id = pw_elements_get_idmap_type(el, "taskmatter_essence");
+	g_elements_recipes_idmap_id = pw_elements_get_idmap_type(el, "recipes");
 	g_elements_npc_idmap_id = pw_elements_get_idmap_type(el, "npcs");
 
 	return 0;
@@ -2255,8 +2219,34 @@ pw_elements_save(struct pw_elements *el, const char *filename, bool is_server)
 	for (i = 0; i < el->tables_count; i++) {
 		struct pw_chain_table *table = el->tables[i];
 
-		if (is_server && strcmp(table->name, "npc_crafts") == 0) {
-			pw_elements_save_table(table, fp, 72);
+		if (strcmp(table->name, "npc_crafts") == 0) {
+			void *el;
+			struct npc_crafts *crafts;
+			struct recipes *recipe;
+
+			PW_CHAIN_TABLE_FOREACH(el, table) {
+				crafts = el;
+				for (int p = 0; p < 8; p++) {
+					for (int ridx = 0; ridx < 32; ridx++) {
+						uint32_t rid = crafts->pages[p].recipe_id[ridx];
+						if (rid == 0) {
+							continue;
+						}
+
+						recipe = pw_idmap_get(g_elements_map, rid, g_elements_recipes_idmap_id);
+
+						if (!recipe || !recipe->targets[0].id) {
+							rid = 0;
+						} else {
+							rid = recipe->id;
+						}
+
+						crafts->pages[p].recipe_id[ridx] = rid;
+					}
+				}
+			}
+
+			pw_elements_save_table(table, fp, is_server ? 72 : 0);
 		} else if (is_server && strcmp(table->name, "recipes") == 0) {
 			pw_elements_save_table(table, fp, 88);
 		} else {
