@@ -214,7 +214,7 @@ on_init(int argc, char *argv[])
 		}
 	}
 
-	if (JSi(g_latest_version, "launcher_version") >= 21) {
+	if (JSi(g_latest_version, "launcher_version") >= 22) {
 		set_progress_state(PBST_PAUSED);
 
 		g_patcher_outdated = true;
@@ -284,7 +284,8 @@ on_init(int argc, char *argv[])
 	PWLOG(LOG_INFO, "%s\n", msg);
 	set_text(g_status_left_lbl, msg);
 
-	if (g_version.version == JSi(g_latest_version, "version")) {
+	if (g_version.version == JSi(g_latest_version, "version") &&
+			g_version.generation == JSi(g_latest_version, "generation")) {
 		set_progress_state(PBST_NORMAL);
 		set_text(g_status_right_lbl, "Ready to launch");
 		enable_button(g_play_button, true);
