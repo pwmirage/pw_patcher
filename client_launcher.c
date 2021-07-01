@@ -224,6 +224,11 @@ on_init(int argc, char *argv[])
 		rc = MessageBox(g_win, "New version of the launcher is available! "
 				"Would you like to download it now?", "Launcher Update", MB_YESNO);
 		if (rc == IDYES) {
+			rc = MessageBox(g_win,
+					"Many antiviruses block the auto-updater.\n"
+					"If the launcher doesn't restart, please try to\n"
+					"run patcher/updater.exe from the game dir manually.\n"
+					"We're sorry for this!", "Note", MB_OK);
 			ShellExecute(NULL, NULL, "patcher\\updater.exe", NULL, NULL, SW_SHOW);
 			ui_thread(quit_cb, NULL, NULL);
 			return;
