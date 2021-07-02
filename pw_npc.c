@@ -294,7 +294,7 @@ static struct serializer dynamic_serializer[] = {
 static struct serializer trigger_serializer[] = {
 	{ "_removed", _CUSTOM, serialize_id_removed_fn, deserialize_id_removed_fn },
 	{ "id", _INT32 },
-	{ "_console_id", _INT32 }, /* same as id */
+	{ "_ai_id", _INT32 }, /* ID to be referenced in aipolicy and API */
 	{ "name", _STRING(128) },
 	{ "auto_start", _INT8 },
 	{ "start_delay", _INT32 },
@@ -589,6 +589,8 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 		} else if (table == &npc->triggers) {
 			TRIGGER_ID(table_el) = node->id;
 
+			*(uint32_t *)serializer_get_field(trigger_serializer, "_ai_id", table_el) = node->id;
+
 			pw_idmap_set(g_triggers_map, id, table->idmap_type, table_el);
 		}
 	}
@@ -718,7 +720,6 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 
 	uint32_t no_start_time_off = serializer_get_offset(npc->triggers.serializer, "_no_start_time");
 	uint32_t no_stop_time_off = serializer_get_offset(npc->triggers.serializer, "_no_stop_time");
-	uint32_t console_id_off = serializer_get_offset(npc->triggers.serializer, "_console_id");
 	uint32_t triggers_count = 0;
 	PW_CHAIN_TABLE_FOREACH(el, &npc->triggers) {
 		if (TRIGGER_ID(el) & (1 << 31)) {
@@ -728,7 +729,6 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 
 		*(uint8_t *)(el + no_start_time_off) = 1;
 		*(uint8_t *)(el + no_stop_time_off) = 1;
-		*(uint32_t *)(el + console_id_off) = *(uint32_t *)el;
 
 		PWLOG(LOG_DEBUG_5, "trigger saved, off=%u, id=%u\n", ftell(fp), TRIGGER_ID(el));
 		fwrite(el, 1, npc->triggers.el_size, fp);
