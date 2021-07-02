@@ -65,15 +65,15 @@ void wsnprintf(uint16_t *dst, size_t dstsize, const char *src);
 static int __attribute__ ((unused)) __attribute__((optimize("O0")))
 change_charset(char *src_charset, char *dst_charset, char *src, long srclen, char *dst, long dstlen)
 {
+	if (!src || !dst) {
+		return -1;
+	}
+
 #ifdef NO_ICONV
 	return 0;
 #else
 	iconv_t cd;
 	int rc;
-
-	if (!src || !dst) {
-		return -1;
-	}
 
 	cd = iconv_open(dst_charset, src_charset);
 	if (cd == 0) {
