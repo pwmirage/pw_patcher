@@ -328,11 +328,11 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 	int rc;
 	char buf[128];
 	char buf2[256];
-	uint32_t max_id;
-
 
 	if (!g_triggers_map) {
-		g_triggers_map = pw_idmap_init("npcgen_triggers", clean_load ? NULL : "patcher/npcgen_triggers.imap");
+		g_triggers_map = pw_idmap_init("npcgen_triggers",
+				clean_load ? NULL : "patcher/npcgen_triggers.imap",
+				true);
 		if (!g_triggers_map) {
 			PWLOG(LOG_ERROR, "pw_idmap_init() failed\n");
 			return 1;
@@ -344,7 +344,7 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 
 	npc->name = name;
 	snprintf(buf2, sizeof(buf2), "patcher/%s.imap", buf);
-	npc->idmap = pw_idmap_init(buf, clean_load ? NULL : buf2);
+	npc->idmap = pw_idmap_init(buf, clean_load ? NULL : buf2, true);
 	if (!npc->idmap) {
 		PWLOG(LOG_ERROR, "pw_idmap_init() failed\n");
 		return 1;
@@ -382,7 +382,6 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 
 	npc->spawners.idmap_type = pw_idmap_register_type(npc->idmap);
 	npc->spawners.chain->count = npc->hdr.creature_sets_count;
-	max_id = 0;
 	for (int i = 0;	i < npc->hdr.creature_sets_count; i++) {
 		void *el = npc->spawners.chain->data + i * npc->spawners.el_size;
 		uint32_t id;
@@ -408,13 +407,9 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 			SPAWNER_ID(el) = i;
 		}
 		id = SPAWNER_ID(el) & ~(1UL << 31);
-		if (id > max_id) {
-			max_id = id;
-		}
 		PWLOG(LOG_DEBUG_5, "spawner parsed, off=%u, id=%u, groups=%u\n", off, id, groups_count);
-		pw_idmap_set(npc->idmap, id, id, npc->spawners.idmap_type, el);
+		pw_idmap_set(npc->idmap, id, npc->spawners.idmap_type, el);
 	}
-	pw_idmap_end_type_load(npc->idmap, npc->spawners.idmap_type, max_id);
 
 	rc = pw_chain_table_init(&npc->resources, "resources", resource_serializer, serializer_get_size(resource_serializer), npc->hdr.resource_sets_count);
 	if (rc) {
@@ -424,7 +419,6 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 
 	npc->resources.idmap_type = pw_idmap_register_type(npc->idmap);
 	npc->resources.chain->count = npc->hdr.resource_sets_count;
-	max_id = 0;
 	for (int i = 0;	i < npc->hdr.resource_sets_count; i++) {
 		void *el = npc->resources.chain->data + i * npc->resources.el_size;
 		uint32_t id;
@@ -452,13 +446,9 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 			RESOURCE_ID(el) = 100000 + i;
 		}
 		id = RESOURCE_ID(el) & ~(1UL << 31);
-		if (id > max_id) {
-			max_id = id;
-		}
 		PWLOG(LOG_DEBUG_5, "resource parsed, off=%u, id=%u, groups=%u\n", off, id, groups_count);
-		pw_idmap_set(npc->idmap, id, id, npc->resources.idmap_type, el);
+		pw_idmap_set(npc->idmap, id, npc->resources.idmap_type, el);
 	}
-	pw_idmap_end_type_load(npc->idmap, npc->resources.idmap_type, max_id);
 
 	rc = pw_chain_table_init(&npc->dynamics, "dynamics", dynamic_serializer, 24, npc->hdr.dynamics_count);
 	if (rc) {
@@ -468,7 +458,6 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 
 	npc->dynamics.idmap_type = pw_idmap_register_type(npc->idmap);
 	npc->dynamics.chain->count = npc->hdr.dynamics_count;
-	max_id = 0;
 	for (int i = 0;	i < npc->hdr.dynamics_count; i++) {
 		void *el = (void *)(npc->dynamics.chain->data + i * npc->dynamics.el_size);
 		uint32_t id;
@@ -487,12 +476,8 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 
 		id = DYNAMIC_ID(el) & ~(1UL << 31);
 		PWLOG(LOG_DEBUG_5, "dynamic parsed, off=%u, id=%u\n", ftell(fp), id);
-		if (id > max_id) {
-			max_id = id;
-		}
-		pw_idmap_set(npc->idmap, id, id, npc->dynamics.idmap_type, el);
+		pw_idmap_set(npc->idmap, id, npc->dynamics.idmap_type, el);
 	}
-	pw_idmap_end_type_load(npc->idmap, npc->dynamics.idmap_type, max_id);
 
 	rc = pw_chain_table_init(&npc->triggers, "triggers", trigger_serializer, 199, npc->hdr.triggers_count);
 	if (rc) {
@@ -502,7 +487,6 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 
 	npc->triggers.idmap_type = pw_idmap_register_type(npc->idmap);
 	npc->triggers.chain->count = npc->hdr.triggers_count;
-	max_id = 0;
 	for (int i = 0;	i < npc->hdr.triggers_count; i++) {
 		void *el = (void *)(npc->triggers.chain->data + i * npc->triggers.el_size);
 		uint32_t id;
@@ -514,16 +498,10 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 
 		id = TRIGGER_ID(el) & ~(1UL << 31);
 		PWLOG(LOG_DEBUG_5, "trigger parsed, off=%u, id=%u\n", ftell(fp), id);
-		if (id > max_id) {
-			max_id = id;
-		}
 
-		pw_idmap_set(npc->idmap, id, id, npc->triggers.idmap_type, el);
-		pw_idmap_set(g_triggers_map, id, id, 0, el);
+		pw_idmap_set(npc->idmap, id, npc->triggers.idmap_type, el);
+		pw_idmap_set(g_triggers_map, id, 0, el);
 	}
-	npc->max_trigger_id = max_id;
-
-	pw_idmap_end_type_load(npc->idmap, npc->triggers.idmap_type, max_id);
 
 	fclose(fp);
 	return 0;
@@ -537,6 +515,7 @@ int
 pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 {
 	struct pw_chain_table *table;
+	struct pw_idmap_el *node;
 	void *table_el;
 	const char *obj_type;
 	int64_t id;
@@ -550,7 +529,7 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 	obj_type = JSs(obj, "type");
 	if (strncmp(JSs(obj, "_db", "type"), "triggers_", strlen("triggers_")) == 0) {
 		table = &npc->triggers;
-		table_el = pw_idmap_get(npc->idmap, id, table->idmap_type);
+		node = pw_idmap_get(npc->idmap, id, table->idmap_type);
 	} else if (obj_type) {
 		if (strcmp(obj_type, "npc") == 0) {
 			table = &npc->spawners;
@@ -563,40 +542,30 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 			return -1;
 		}
 
-		table_el = pw_idmap_get(npc->idmap, id, table->idmap_type);
+		node = pw_idmap_get(npc->idmap, id, table->idmap_type);
 	} else {
 		table = &npc->spawners;
-		table_el = pw_idmap_get(npc->idmap, id, table->idmap_type);
-		if (!table_el) {
+		node = pw_idmap_get(npc->idmap, id, table->idmap_type);
+		if (!node) {
 			table = &npc->resources;
-			table_el = pw_idmap_get(npc->idmap, id, table->idmap_type);
-			if (!table_el) {
+			node = pw_idmap_get(npc->idmap, id, table->idmap_type);
+			if (!node) {
 				PWLOG(LOG_ERROR, "new spawner without obj.type set: %"PRIu64"\n", id);
 				return -1;
 			}
 		}
 	}
 
-	if (!table_el) {
-		uint32_t el_id = 0;
-		struct pw_chain_el *chain = table->chain;
-
-		if (table == &npc->triggers) {
-			el_id = ++npc->max_trigger_id;
-		} else {
-			while (chain) {
-				el_id += chain->count;
-				chain = chain->next;
-			}
-		}
-
-		PWLOG(LOG_DEBUG_5, "0x%llx not found, creating with id=%u\n", id, el_id);
-
+	if (node) {
+		table_el = node->data;
+	} else {
 		table_el = pw_chain_table_new_el(table);
+		node = pw_idmap_set(npc->idmap, id, table->idmap_type, table_el);
+
 		if (table == &npc->spawners) {
 			struct pw_chain_table *grp_tbl;
 
-			SPAWNER_ID(table_el) = el_id;
+			SPAWNER_ID(table_el) = node->id;
 			*(uint32_t *)serializer_get_field(table->serializer, "type", table_el) = 1;
 			*(uint8_t *)serializer_get_field(table->serializer, "auto_spawn", table_el) = 1;
 			*(uint8_t *)serializer_get_field(table->serializer, "auto_respawn", table_el) = 1;
@@ -610,7 +579,7 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 		} else if (table == &npc->resources) {
 			struct pw_chain_table *grp_tbl;
 
-			RESOURCE_ID(table_el) = el_id;
+			RESOURCE_ID(table_el) = node->id;
 
 			grp_tbl = pw_chain_table_alloc("spawner_group", resource_group_serializer, serializer_get_size(resource_group_serializer), 8);
 			if (!grp_tbl) {
@@ -619,21 +588,13 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 			}
 			*(void **)serializer_get_field(table->serializer, "groups", table_el) = grp_tbl;
 		} else if (table == &npc->triggers) {
-			TRIGGER_ID(table_el) = el_id;
+			TRIGGER_ID(table_el) = node->id;
 
-			pw_idmap_set(g_triggers_map, id, el_id, table->idmap_type, table_el);
+			pw_idmap_set(g_triggers_map, id, table->idmap_type, table_el);
 		}
-
-		pw_idmap_set(npc->idmap, id, el_id, table->idmap_type, table_el);
 	}
 
-	unsigned real_id = 0;
-	if (table == &npc->spawners) {
-		real_id = SPAWNER_ID(table_el);
-	} else {
-		real_id = RESOURCE_ID(table_el);
-	}
-	PWLOG(LOG_DEBUG_5, "0x%llx found with real id=%u\n", id, real_id);
+	PWLOG(LOG_DEBUG_5, "0x%llx found with id=%u\n", id, node->id);
 	deserialize(obj, table->serializer, table_el);
 
 	if (table == &npc->spawners) {

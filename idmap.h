@@ -8,16 +8,24 @@
 #include <stdint.h>
 #include <inttypes.h>
 
-struct pw_idmap;
+struct pw_idmap_el {
+	long long lid;
+	long id;
+	short type;
+	uint8_t is_async_fn : 1;
+	uint8_t _unused1: 7;
+	char _unused2;
+	void *data;
+	void *next;
+};
+
 typedef void (*pw_idmap_async_fn)(void *el, void *ctx);
 
-struct pw_idmap *pw_idmap_init(const char *name, const char *filename);
+struct pw_idmap *pw_idmap_init(const char *name, const char *filename, int can_set);
 long pw_idmap_register_type(struct pw_idmap *map);
-void *pw_idmap_get(struct pw_idmap *map, long long lid, long type);
+struct pw_idmap_el *pw_idmap_get(struct pw_idmap *map, long long lid, long type);
 int pw_idmap_get_async(struct pw_idmap *map, long long lid, long type, pw_idmap_async_fn fn, void *fn_ctx);
-uint32_t pw_idmap_get_mapped_id(struct pw_idmap *map, uint64_t lid, long type);
-void pw_idmap_set(struct pw_idmap *map, long long lid, long id, long type, void *data);
-void pw_idmap_end_type_load(struct pw_idmap *map, long type, uint32_t max_id);
+struct pw_idmap_el *pw_idmap_set(struct pw_idmap *map, long long lid, long type, void *data);
 int pw_idmap_save(struct pw_idmap *map, const char *filename);
 
 #endif /* PW_IDMAP_H */

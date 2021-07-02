@@ -46,6 +46,8 @@ import_stream_cb(void *ctx, struct cjson *obj)
 
 	if (strncmp(type, "spawners_", 9) == 0) {
 		/* skip those */
+	} else if (strncmp(type, "triggers_", 9) == 0) {
+		/* skip those */
 	} else if (strcmp(type, "tasks") == 0) {
 		pw_tasks_patch_obj(g_tasks, obj);
 	} else {
@@ -67,6 +69,8 @@ main(int argc, char *argv[])
 		printf("./%s branch_name hash\n", argv[0]);
 		return 0;
 	}
+
+	g_idmap_can_set = true;
 
 	const char *branch_name = argv[1];
 	const char *hash = argv[2];

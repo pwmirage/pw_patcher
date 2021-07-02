@@ -131,7 +131,7 @@ insert(struct pw_avl_node *parent, struct pw_avl_node *node)
 }
 
 void
-pw_avl_insert(struct pw_avl *avl, unsigned key, void *data)
+pw_avl_insert(struct pw_avl *avl, uint64_t key, void *data)
 {
 	struct pw_avl_node *node = (void *)(data - offsetof(struct pw_avl_node, data));
 
@@ -257,7 +257,7 @@ pw_avl_remove(struct pw_avl *avl, void *data)
 }
 
 void *
-pw_avl_get(struct pw_avl *avl, unsigned key)
+pw_avl_get(struct pw_avl *avl, uint64_t key)
 {
 	struct pw_avl_node *node = avl->root;
 
@@ -311,18 +311,18 @@ pw_avl_foreach(struct pw_avl *avl, pw_avl_foreach_cb cb, void *ctx1, void *ctx2)
 static void
 print_node(struct pw_avl_node *node)
 {
-	fprintf(stderr, "%d\n", node->key);
+	fprintf(stderr, "%"PRIu64"\n", node->key);
 	if (node->next) {
-		fprintf(stderr, "%d next:\n", node->key);
+		fprintf(stderr, "%"PRIu64" next:\n", node->key);
 		print_node(node->next);
 	}
 	if (node->left) {
-		fprintf(stderr, "%d left:\n", node->key);
+		fprintf(stderr, "%"PRIu64" left:\n", node->key);
 		print_node(node->left);
 	}
 
 	if (node->right) {
-		fprintf(stderr, "%d right:\n", node->key);
+		fprintf(stderr, "%"PRIu64" right:\n", node->key);
 		print_node(node->right);
 	}
 }

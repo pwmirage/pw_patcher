@@ -24,6 +24,7 @@
 int g_pwlog_level = 99;
 FILE *g_nullfile;
 const char g_zeroes[4096];
+int g_idmap_can_set;
 
 #ifndef NO_NETWORKING
 #ifdef __MINGW32__

@@ -11,21 +11,9 @@
 
 #include "idmap.h"
 #include "common.h"
+#include "avl.h"
 
-struct pw_id_el {
-	long long lid;
-	long id;
-	short type;
-	uint8_t is_lid_mapping : 1;
-	uint8_t is_dummy_mapping : 1;
-	uint8_t is_async_fn : 1;
-	uint8_t _unused1: 6;
-	char _unused2;
-	void *data;
-	void *next;
-};
-
-#define PW_IDMAP_ARR_SIZE 3637
+#define IDMAP_VERSION 3
 
 struct pw_idmap_file_hdr {
 	uint32_t version;
@@ -40,7 +28,11 @@ struct pw_idmap_file_entry {
 struct pw_idmap {
 	char *name;
 	long registered_types_cnt;
-	struct pw_id_el *lists[PW_IDMAP_ARR_SIZE];
+	long max_id;
+	int can_set;
+	struct pw_avl *lid_mappings;
+	struct pw_avl *by_lid;
+	struct pw_avl *by_id;
 };
 
 struct pw_idmap_async_fn_el {
@@ -54,10 +46,8 @@ struct pw_idmap_async_fn_head {
 	struct pw_idmap_async_fn_el **tail;
 };
 
-static struct pw_id_el *_idmap_set(struct pw_idmap *map, long long lid, long id, long type, void *data);
-
 struct pw_idmap *
-pw_idmap_init(const char *name, const char *filename)
+pw_idmap_init(const char *name, const char *filename, int can_set)
 {
 	struct pw_idmap *map;
 	FILE *fp;
@@ -68,12 +58,34 @@ pw_idmap_init(const char *name, const char *filename)
 		return NULL;
 	}
 
-	map->name = calloc(1, strlen(name) + 1);
+	map->name = strdup(name);
 	if (!map->name) {
 		free(map);
 		return NULL;
 	}
-	memcpy(map->name, name, strlen(name));
+
+	map->can_set = can_set;
+
+	map->by_lid = pw_avl_init(sizeof(struct pw_idmap_el));
+	if (!map->by_lid) {
+		free(map->name);
+		free(map);
+		return NULL;
+	}
+
+	map->by_id = pw_avl_init(sizeof(struct pw_idmap_el *));
+	if (!map->by_id) {
+		free(map->name);
+		free(map);
+		return NULL;
+	}
+
+	map->lid_mappings = pw_avl_init(sizeof(struct pw_idmap_file_entry));
+	if (!map->lid_mappings) {
+		free(map->name);
+		free(map);
+		return NULL;
+	}
 
 	if (!filename) {
 		return map;
@@ -88,7 +100,7 @@ pw_idmap_init(const char *name, const char *filename)
 	struct pw_idmap_file_hdr hdr;
 	fread(&hdr, 1, sizeof(hdr), fp);
 
-	if (hdr.version != 2) {
+	if (hdr.version != IDMAP_VERSION) {
 		/* pretend it's not even there */
 		fclose(fp);
 		return map;
@@ -101,48 +113,18 @@ pw_idmap_init(const char *name, const char *filename)
 	int entry_cnt = (fsize - fpos) / sizeof(struct pw_idmap_file_entry);
 
 	for (i = 0; i < entry_cnt; i++) {
-		struct pw_idmap_file_entry entry;
-		struct pw_id_el *id_el;
+		struct pw_idmap_file_entry *entry;
 
-		fread(&entry, 1, sizeof(entry), fp);
+		entry = pw_avl_alloc(map->lid_mappings);
+		assert(entry);
+		fread(entry, 1, sizeof(*entry), fp);
 
-		PWLOG(LOG_INFO, "loaded mapping. lid=0x%llx, id=%u\n", entry.lid, entry.id);
-
-		/* dummy to store the lid. When it's loaded from the regular data file
-		 * it will be set to a proper lid automatically */
-		id_el = _idmap_set(map, entry.id, entry.id, entry.type, NULL);
-		id_el->is_lid_mapping = 1;
-		id_el->data = (void *)(uintptr_t)entry.lid;
-
-		/* another dummy in case the entry is not loaded with id, but created at
-		 * runtime and the mapping is specifically requested via pw_idmap_get_mapped_id() */
-		id_el = _idmap_set(map, entry.lid, entry.id, entry.type, NULL);
-		id_el->is_dummy_mapping = 1;
+		PWLOG(LOG_INFO, "%s: lid=0x%llx, id=%u\n", map->name, entry->lid, entry->id);
+		pw_avl_insert(map->lid_mappings, entry->lid, entry);
 	}
 
 	fclose(fp);
 	return map;
-}
-
-uint32_t
-pw_idmap_get_mapped_id(struct pw_idmap *map, uint64_t lid, long type)
-{
-	struct pw_id_el *el;
-
-	el = map->lists[lid % PW_IDMAP_ARR_SIZE];
-	while (el) {
-		if (el->lid == lid && (type == 0 || el->type == 0 || el->type == type)) {
-			break;
-		}
-
-		el = el->next;
-	}
-
-	if (el) {
-		return el->id;
-	}
-
-	return 0;
 }
 
 long
@@ -151,34 +133,36 @@ pw_idmap_register_type(struct pw_idmap *map)
 	return ++map->registered_types_cnt;
 }
 
-void *
+struct pw_idmap_el *
 pw_idmap_get(struct pw_idmap *map, long long lid, long type)
 {
-	struct pw_id_el *el;
+	struct pw_idmap_el *el;
 
-	el = map->lists[lid % PW_IDMAP_ARR_SIZE];
-
-	while (el) {
-		if (el->lid == lid && (type == 0 || el->type == 0 || el->type == type)) {
-			if (el->is_dummy_mapping) {
-				return NULL;
-			}
-			if (el->is_lid_mapping) {
-				PWLOG(LOG_ERROR, "Trying to get an object that's not initialized! lid=0x%llx, id=%u\n", (int64_t)(uintptr_t)el->data, el->id);
-
-				assert(false);
-				return NULL;
-			}
-			if (el->is_async_fn) {
-				return NULL;
-			}
-			return el->data;
-		}
-
-		el = el->next;
+	el = pw_avl_get(map->by_lid, lid);
+	while (el && (el->is_async_fn || (type && el->type && el->type != type))) {
+		el = pw_avl_get_next(map->by_lid, el);
 	}
 
-	return NULL;
+	return el;
+}
+
+void *
+_idmap_get(struct pw_idmap *map, long long lid, long type)
+{
+	struct pw_idmap_el *el;
+	struct pw_idmap_el **el_p;
+
+	el = pw_avl_get(map->by_lid, lid);
+	while (el && (type && el->type && el->type != type)) {
+		el = pw_avl_get_next(map->by_lid, el);
+	}
+
+	if (el || lid >= 0x80000000) {
+		return el;
+	}
+
+	el_p = pw_avl_get(map->by_id, lid);
+	return el_p ? *el_p : NULL;
 }
 
 /* retrieve the item even if it's not set yet. The callback will be fired
@@ -186,21 +170,12 @@ pw_idmap_get(struct pw_idmap *map, long long lid, long type)
 int
 pw_idmap_get_async(struct pw_idmap *map, long long lid, long type, pw_idmap_async_fn fn, void *fn_ctx)
 {
-	struct pw_id_el *el;
+	struct pw_idmap_el *el;
 	struct pw_idmap_async_fn_el *async_el;
 	struct pw_idmap_async_fn_head *async_head;
 
-	el = map->lists[lid % PW_IDMAP_ARR_SIZE];
-
-	while (el) {
-		if (el->lid == lid && (type == 0 || el->type == 0 || el->type == type)) {
-			break;
-		}
-
-		el = el->next;
-	}
-
-	if (el && !el->is_async_fn && !el->is_dummy_mapping) {
+	el = _idmap_get(map, lid, type);
+	if (el && !el->is_async_fn) {
 		fn(el->data, fn_ctx);
 		return 0;
 	}
@@ -215,13 +190,13 @@ pw_idmap_get_async(struct pw_idmap *map, long long lid, long type, pw_idmap_asyn
 	async_el->ctx = fn_ctx;
 
 	if (!el) {
-		el = _idmap_set(map, lid, 0, type, NULL);
+		el = pw_idmap_set(map, lid, type, NULL);
 		if (!el) {
 			free(async_el);
 			return -1;
 		}
+		el->is_async_fn = 1;
 	}
-	el->is_async_fn = 1;
 
 	async_head = el->data;
 	if (!async_head) {
@@ -257,129 +232,106 @@ call_async_arr(struct pw_idmap_async_fn_head *async, void *data)
 	}
 }
 
-static struct pw_id_el *
-_idmap_set(struct pw_idmap *map, long long lid, long id, long type, void *data)
+struct pw_idmap_el *
+pw_idmap_set(struct pw_idmap *map, long long lid, long type, void *data)
 {
-	struct pw_id_el *el, *last_el = NULL;
+	struct pw_idmap_el *el, *tmp;
 
-	el = map->lists[lid % PW_IDMAP_ARR_SIZE];
-	while (el) {
-		if (el->lid == lid && (type == 0 || el->type == 0 || el->type == type)) {
-			break;
-		}
-
-		last_el = el;
-		el = el->next;
+	el = pw_idmap_get(map, lid, type);
+	if (el && !el->is_async_fn) {
+		PWLOG(LOG_ERROR, "Conflict at lid=0x%x, type=%d (el->type=%d, el->id=%d)\n", lid, type, el->type, el->id);
+		assert(false);
+		return NULL;
 	}
 
 	if (el) {
-		if (data && el->is_dummy_mapping) {
-			el->is_dummy_mapping = 0;
-		}
+		struct pw_idmap_async_fn_head *async_head = el->data;
 
-		if (el->is_lid_mapping) {
-			struct pw_id_el *tmp_el;
-
-			/* remove from the map */
-			if (last_el) {
-				last_el->next = el->next;
-			} else {
-				map->lists[lid % PW_IDMAP_ARR_SIZE] = el->next;
-			}
-
-			/* update lid and put it in the map again */
-			el->lid = lid = (long long)(uintptr_t)el->data;
-			el->is_lid_mapping = 0;
-			el->data = data;
-			el->next = NULL;
-
-			PWLOG(LOG_INFO, "found temporary at lid=0x%x, relocating to 0x%llx\n", el->id, el->lid);
-
-			tmp_el = map->lists[lid % PW_IDMAP_ARR_SIZE];
-			last_el = NULL;
-			while (tmp_el) {
-				if (tmp_el->lid == lid && (type == 0 || tmp_el->type == 0 || tmp_el->type == type)) {
-					/* target lid already set */
-					if (tmp_el->is_async_fn) {
-						/* TODO do this after setting the el, so that idmap_get() works */
-						call_async_arr(tmp_el->data, data);
-						free(tmp_el->data);
-					}
-
-					if (tmp_el->is_async_fn || tmp_el->is_dummy_mapping) {
-						/* replace tmp_el with el */
-						if (last_el) {
-							last_el->next = el;
-						} else {
-							map->lists[lid % PW_IDMAP_ARR_SIZE] = el;
-						}
-						el->next = tmp_el->next;
-						free(tmp_el);
-						return el;
-					} else {
-						assert(false);
-						break;
-					}
-				}
-
-				last_el = tmp_el;
-				tmp_el = tmp_el->next;
-			}
-
-			if (last_el) {
-				last_el->next = el;
-			} else {
-				el->next = map->lists[lid % PW_IDMAP_ARR_SIZE];
-				map->lists[lid % PW_IDMAP_ARR_SIZE] = el;
-			}
-			return el;
-		} else if (el->is_async_fn) {
-			call_async_arr(el->data, data);
-			el->is_async_fn = 0;
-			el->id = id;
-		}
-
+		el->is_async_fn = 0;
 		el->data = data;
+
+		call_async_arr(async_head, data);
+		free(async_head);
 		return el;
 	}
 
-	el = calloc(1, sizeof(struct pw_id_el));
+	/* TODO check map->by_id (for now we just dont support
+	 * get_async() with low ids */
+
+	el = pw_avl_alloc(map->by_lid);
 	if (!el) {
-		PWLOG(LOG_ERROR, "calloc() failed\n");
+		PWLOG(LOG_ERROR, "pw_avl_alloc() failed\n");
 		return NULL;
 	}
 
 	el->lid = lid;
-	el->id = id;
 	el->type = type;
 	el->data = data;
+	pw_avl_insert(map->by_lid, lid, el);
 
-	if (last_el) {
-		last_el->next = el;
+	if (lid < 0x80000000) {
+		el->id = lid;
 	} else {
-		map->lists[lid % PW_IDMAP_ARR_SIZE] = el;
+		struct pw_idmap_file_entry *entry;
+
+		entry = pw_avl_get(map->lid_mappings, lid);
+		if (entry) {
+			el->id = entry->id;
+		} else {
+
+			if (!map->can_set) {
+				PWLOG(LOG_ERROR, "Unexpected lid=0x%x\n", lid);
+				assert(false);
+				return NULL;
+			}
+
+			el->id = map->max_id + 1;
+
+			entry = pw_avl_alloc(map->lid_mappings);
+			assert(entry);
+			entry->lid = el->lid;
+			entry->id = el->id;
+			entry->type = el->type;
+
+			pw_avl_insert(map->lid_mappings, lid, entry);
+		}
 	}
+
+	if (el->id > map->max_id) {
+		assert(el->id <= 0x80000000);
+		map->max_id = el->id;
+	}
+
+	tmp = pw_avl_alloc(map->by_id);
+	if (!tmp) {
+		PWLOG(LOG_ERROR, "pw_avl_alloc() failed\n");
+		return NULL;
+	}
+
+	*(struct pw_idmap_el **)tmp = el;
+	pw_avl_insert(map->by_id, el->id, tmp);
+
 	return el;
 }
 
-void
-pw_idmap_set(struct pw_idmap *map, long long lid, long id, long type, void *data)
+static void
+idmap_save_cb(void *_node, void *ctx1, void *ctx2)
 {
-	_idmap_set(map, lid, id, type, data);
-}
+	struct pw_avl_node *node = _node;
+	struct pw_idmap_file_entry *entry = (void *)node->data;
+	FILE *fp = ctx1;
+	struct pw_idmap *map = ctx2;
 
-void
-pw_idmap_end_type_load(struct pw_idmap *map, long type_id, uint32_t max_id)
-{
+	PWLOG(LOG_INFO, "%s: lid=0x%llx, id=%u\n", map->name, entry->lid, entry->id);
+	fwrite(entry, 1, sizeof(*entry), fp);
 }
 
 int
 pw_idmap_save(struct pw_idmap *map, const char *filename)
 {
 	FILE *fp;
-	struct pw_id_el *el;
-	struct pw_idmap_file_entry entry;
-	int i;
+
+	assert(map->can_set);
 
 	fp = fopen(filename, "wb");
 	if (fp == NULL) {
@@ -388,27 +340,10 @@ pw_idmap_save(struct pw_idmap *map, const char *filename)
 	}
 
 	struct pw_idmap_file_hdr hdr;
-	hdr.version = 2;
+	hdr.version = IDMAP_VERSION;
 	fwrite(&hdr, 1, sizeof(hdr), fp);
 
-	for (i = 0; i < PW_IDMAP_ARR_SIZE; i++) {
-		el = map->lists[i];
-		while (el) {
-			if (el->lid == el->id) {
-				el = el->next;
-				continue;
-			}
-
-			PWLOG(LOG_INFO, "saving mapping. lid=0x%llx, id=%u\n", el->lid, el->id);
-			entry.lid = el->lid;
-			entry.id = el->id;
-			entry.type = el->type;
-			fwrite(&entry, 1, sizeof(entry), fp);
-
-			el = el->next;
-		}
-	}
-
+	pw_avl_foreach(map->lid_mappings, idmap_save_cb, fp, map);
 	fclose(fp);
 	return 0;
 }

@@ -79,7 +79,7 @@ pw_tasks_npc_load(const char *filepath)
 		return NULL;
 	}
 
-	tasks->idmap = pw_idmap_init("spawners_tmp", NULL);
+	tasks->idmap = pw_idmap_init("spawners_tmp", NULL, true);
 	if (!tasks->idmap) {
 		goto err;
 	}
@@ -103,7 +103,7 @@ pw_tasks_npc_load(const char *filepath)
 		entry->pos[1] = fentry.pos[2];
 		entry->pos[2] = fentry.pos[1];
 
-		pw_idmap_set(tasks->idmap, entry->npc_lid, entry->npc_lid, 0, entry);
+		pw_idmap_set(tasks->idmap, entry->npc_lid, 0, entry);
 	}
 
 	tasks->table->chain->count = tasks->hdr.npc_count;
@@ -118,6 +118,7 @@ err:
 int
 pw_tasks_npc_patch_obj(struct pw_tasks_npc *tasks, struct cjson *obj)
 {
+	struct pw_idmap_el *node;
 	struct tasks_npc_entry_tmp *entry;
 	struct cjson *pos, *_removed;
 	float pos_xyz[3];
@@ -137,8 +138,10 @@ pw_tasks_npc_patch_obj(struct pw_tasks_npc *tasks, struct cjson *obj)
 		return -1;
 	}
 
-	entry = pw_idmap_get(tasks->idmap, ltype, 0);
-	if (!entry) {
+	node = pw_idmap_get(tasks->idmap, ltype, 0);
+	if (node) {
+		entry = node->data;
+	} else {
 		entry = pw_chain_table_new_el(tasks->table);
 		if (!entry) {
 			PWLOG(LOG_ERROR, "pw_chain_table_new_el() failed\n");
@@ -146,7 +149,7 @@ pw_tasks_npc_patch_obj(struct pw_tasks_npc *tasks, struct cjson *obj)
 		}
 
 		entry->npc_lid = ltype;
-		pw_idmap_set(tasks->idmap, entry->npc_lid, entry->npc_lid, 0, entry);
+		node = pw_idmap_set(tasks->idmap, entry->npc_lid, 0, entry);
 	}
 
 	pos_xyz[0] = JSf(pos, "0");
@@ -194,20 +197,23 @@ pw_tasks_npc_save(struct pw_tasks_npc *tasks, const char *filename)
 
 		if (entry->npc_lid >= 0x80000000) {
 			/* at the time of saving all IDs should be already mapped, so go sync */
-			uint32_t npc_id = pw_idmap_get_mapped_id(g_elements_map, entry->npc_lid, g_elements_npc_idmap_id);
+			struct pw_idmap_el *node = pw_idmap_get(g_elements_map, entry->npc_lid,
+					g_elements_npc_idmap_id);
+			struct pw_idmap_el *lownode;
 			struct tasks_npc_entry_tmp *lowentry;
 
-			if (!npc_id) {
+			if (!node) {
 				PWLOG(LOG_ERROR, "found npc lid with no mapping: %llu\n", entry->npc_lid);
 				/* no mapping? */
 				continue;
 			}
 
-			lowentry = pw_idmap_get(tasks->idmap, npc_id, 0);
-			if (lowentry) {
+			lownode = pw_idmap_get(tasks->idmap, node->id, 0);
+			if (lownode) {
+				lowentry = (void *)lownode->data;
 				/* override the lowentry */
 				memcpy(lowentry, entry, sizeof(*entry));
-				lowentry->npc_lid = npc_id;
+				lowentry->npc_lid = node->id;
 			} else {
 				lowentry = pw_chain_table_new_el(tasks->table);
 				if (!lowentry) {
@@ -216,9 +222,7 @@ pw_tasks_npc_save(struct pw_tasks_npc *tasks, const char *filename)
 				}
 
 				memcpy(lowentry, entry, sizeof(*entry));
-				lowentry->npc_lid = npc_id;
-
-				pw_idmap_set(tasks->idmap, lowentry->npc_lid, lowentry->npc_lid, 0, lowentry);
+				lowentry->npc_lid = node->id;
 			}
 
 			entry = lowentry;

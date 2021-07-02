@@ -26,7 +26,6 @@ extern struct pw_idmap *g_elements_map;
 struct pw_idmap *g_tasks_map;
 extern int g_elements_taskmatter_idmap_id;
 extern int g_elements_monster_idmap_id;
-static unsigned g_tasks_last_id;
 
 #define TASK_FILE_MAGIC 0x93858361
 
@@ -156,11 +155,12 @@ static void
 deserialize_common_item_id_async_fn(void *data, void *_ctx)
 {
 	struct deserialize_common_item_id_async_ctx *ctx = _ctx;
-	void *task_item = pw_idmap_get(g_elements_map, ctx->item_lid, g_elements_taskmatter_idmap_id);
+	struct pw_idmap_el *node;
+	node = pw_idmap_get(g_elements_map, ctx->item_lid, g_elements_taskmatter_idmap_id);
 
 	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)ctx->dst_data, *(uint32_t *)data);
 	*(uint32_t *)ctx->dst_data = *(uint32_t *)data;
-	*(uint8_t *)(ctx->dst_data + 4 + ctx->offset) = !task_item;
+	*(uint8_t *)(ctx->dst_data + 4 + ctx->offset) = !node;
 
 	free(ctx);
 }
@@ -192,11 +192,12 @@ deserialize_common_item_id_fn(struct cjson *f, struct serializer *slzr, void *da
 			assert(false);
 		}
 	} else {
-		void *task_item = pw_idmap_get(g_elements_map, val, g_elements_taskmatter_idmap_id);
+		struct pw_idmap_el *node;
+		node = pw_idmap_get(g_elements_map, val, g_elements_taskmatter_idmap_id);
 
 		deserialize_log(f, data);
 		*(uint32_t *)(data) = (uint32_t)val;
-		*(uint8_t *)(data + 4 + offset) = !task_item;
+		*(uint8_t *)(data + 4 + offset) = !node;
 	}
 
 	return 4;
@@ -1066,10 +1067,6 @@ read_task(struct pw_task_file *taskf, FILE *fp, bool is_server)
 	id = *(uint32_t *)data;
 	xor_bytes(serializer_get_field(slzr, "name", data), 30, id);
 
-	if (id > g_tasks_last_id) {
-		g_tasks_last_id = id;
-	}
-
 	uint8_t *has_signature = (uint8_t *)serializer_get_field(slzr, "_has_signature", data);
 	if(*has_signature) {
 		fseek(fp, 60, SEEK_CUR);
@@ -1215,7 +1212,7 @@ read_task(struct pw_task_file *taskf, FILE *fp, bool is_server)
 		*(uint32_t *)el = rc;
 	}
 
-	pw_idmap_set(taskf->idmap, id, id, 0, data);
+	pw_idmap_set(taskf->idmap, id, 0, data);
 
 	return id;
 }
@@ -1223,7 +1220,8 @@ read_task(struct pw_task_file *taskf, FILE *fp, bool is_server)
 int
 pw_tasks_patch_obj(struct pw_task_file *taskf, struct cjson *obj)
 {
-	void **table_el;
+	void *table_el;
+	struct pw_idmap_el *node;
 	const char *obj_type;
 	int64_t id;
 
@@ -1239,22 +1237,16 @@ pw_tasks_patch_obj(struct pw_task_file *taskf, struct cjson *obj)
 		return -1;
 	}
 
-	table_el = pw_idmap_get(taskf->idmap, id, 0);
-	if (!table_el) {
-		uint32_t el_id = ++g_tasks_last_id;
-		uint32_t mapped_id;
-
-		mapped_id = pw_idmap_get_mapped_id(taskf->idmap, id, 0);
-		if (mapped_id) {
-			el_id = mapped_id;
-		}
-
+	node = pw_idmap_get(taskf->idmap, id, 0);
+	if (node) {
+		table_el = (void *)node->data;
+	} else {
 		table_el = pw_chain_table_new_el(taskf->tasks);
-		*(uint32_t *)table_el = el_id;
+		node = pw_idmap_set(taskf->idmap, id, 0, table_el);
 
+		*(uint32_t *)table_el = node->id;
 		*(uint8_t *)serializer_get_field(pw_task_serializer, "_need_record", table_el) = 1;
 
-		pw_idmap_set(taskf->idmap, id, el_id, 0, table_el);
 	}
 	deserialize(obj, pw_task_serializer, table_el);
 	return 0;
@@ -1315,8 +1307,8 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 			continue;
 		}
 
-		void *sub_q = pw_idmap_get(taskf->idmap, id, 0);
-		if (!sub_q || (*(uint32_t *)sub_q) & (1 << 31)) {
+		struct pw_idmap_el *node = pw_idmap_get(taskf->idmap, id, 0);
+		if (!node || (*(uint32_t *)node->data) & (1 << 31)) {
 			continue;
 		}
 		subq_count++;
@@ -1528,11 +1520,11 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 			continue;
 		}
 
-		void *sub_q = pw_idmap_get(taskf->idmap, id, 0);
-		if (!sub_q || (*(uint32_t *)sub_q) & (1 << 31)) {
+		struct pw_idmap_el *node = pw_idmap_get(taskf->idmap, id, 0);
+		if (!node || (*(uint32_t *)node->data) & (1 << 31)) {
 			continue;
 		}
-		write_task(taskf, sub_q, fp, is_client);
+		write_task(taskf, node->data, fp, is_client);
 	}
 }
 
@@ -1572,7 +1564,7 @@ pw_tasks_load(struct pw_task_file *taskf, const char *path, const char *idmap_fi
 		return -ENOMEM;
 	}
 
-	taskf->idmap = pw_idmap_init("tasks", idmap_filename);
+	taskf->idmap = pw_idmap_init("tasks", idmap_filename, g_idmap_can_set);
 	if (!taskf->idmap) {
 		PWLOG(LOG_ERROR, "pw_idmap_init() failed\n");
 		fclose(fp);

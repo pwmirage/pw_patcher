@@ -22,7 +22,6 @@ char g_icon_names[PW_ELEMENTS_ICON_COUNT][128];
 char g_item_colors[65536] = {};
 char *g_item_descs[65536] = {};
 
-uint32_t g_elements_last_id;
 struct pw_idmap *g_elements_map;
 int g_elements_taskmatter_idmap_id;
 int g_elements_npc_idmap_id;
@@ -1760,6 +1759,7 @@ int
 pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 {
 	struct pw_chain_table *table = NULL;
+	struct pw_idmap_el *node;
 	void **table_el;
 	const char *obj_type;
 	int64_t id;
@@ -1796,26 +1796,23 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 		return -1;
 	}
 
-	table_el = pw_idmap_get(g_elements_map, id, table->idmap_type);
-	if (!table_el) {
-		uint32_t el_id = ++g_elements_last_id;
-		uint32_t mapped_id;
+	node = pw_idmap_get(g_elements_map, id, table->idmap_type);
 
-		mapped_id = pw_idmap_get_mapped_id(g_elements_map, id, table->idmap_type);
-		if (mapped_id) {
-			el_id = mapped_id;
-		}
-
+	if (node) {
+		table_el = node->data;
+	} else {
 		table_el = pw_chain_table_new_el(table);
-		*(uint32_t *)table_el = el_id;
+		node = pw_idmap_set(g_elements_map, id, table->idmap_type, table_el);
+
+		*(uint32_t *)table_el = node->id;
 
 		if (strcmp(obj_type, "npcs") == 0) {
 			*(uint32_t *)serializer_get_field(table->serializer, "base_monster_id", table_el) = 2111;
 			*(uint32_t *)serializer_get_field(table->serializer, "id_type", table_el) = 3214;
 		}
 
-		pw_idmap_set(g_elements_map, id, el_id, table->idmap_type, table_el);
 	}
+
 	deserialize(obj, table->serializer, table_el);
 	return 0;
 }
@@ -1828,7 +1825,6 @@ pw_elements_load_table(struct pw_elements *elements, const char *name, uint32_t 
 	int32_t i, count;
 	void *el;
 	long idmap_type;
-	unsigned table_max_id = 0;
 
 	table = calloc(1, sizeof(*table));
 	if (!table) {
@@ -1860,19 +1856,11 @@ pw_elements_load_table(struct pw_elements *elements, const char *name, uint32_t 
 
 		unsigned id = *(uint32_t *)el;
 
-		if (id > table_max_id) {
-			table_max_id = id;
-			if (id > g_elements_last_id) {
-				g_elements_last_id = id;
-			}
-		}
-
-		pw_idmap_set(g_elements_map, id, id, idmap_type, el);
+		pw_idmap_set(g_elements_map, id, idmap_type, el);
 		el += el_size;
 	}
 
 	table->idmap_type = idmap_type;
-	pw_idmap_end_type_load(g_elements_map, idmap_type, table_max_id);
 	elements->tables[elements->tables_count++] = table;
 }
 
@@ -1997,7 +1985,7 @@ pw_elements_load(struct pw_elements *el, const char *filename, const char *idmap
 		return 1;
 	}
 
-	g_elements_map = pw_idmap_init("elements", idmap_filename);
+	g_elements_map = pw_idmap_init("elements", idmap_filename, g_idmap_can_set);
 	if (!g_elements_map) {
 		PWLOG(LOG_ERROR, "pw_idmap_init() failed\n");
 		fclose(fp);
@@ -2222,6 +2210,7 @@ pw_elements_save(struct pw_elements *el, const char *filename, bool is_server)
 		if (strcmp(table->name, "npc_crafts") == 0) {
 			void *el;
 			struct npc_crafts *crafts;
+			struct pw_idmap_el *node;
 			struct recipes *recipe;
 
 			PW_CHAIN_TABLE_FOREACH(el, table) {
@@ -2233,12 +2222,13 @@ pw_elements_save(struct pw_elements *el, const char *filename, bool is_server)
 							continue;
 						}
 
-						recipe = pw_idmap_get(g_elements_map, rid, g_elements_recipes_idmap_id);
+						node = pw_idmap_get(g_elements_map, rid, g_elements_recipes_idmap_id);
 
-						if (!recipe || !recipe->targets[0].id) {
-							rid = 0;
+						if (node) {
+							recipe = node->data;
+							rid = recipe->targets[0].id ? node->id : 0;
 						} else {
-							rid = recipe->id;
+							rid = 0;
 						}
 
 						crafts->pages[p].recipe_id[ridx] = rid;
@@ -2328,12 +2318,12 @@ pw_elements_prepare(struct pw_elements *elements)
 			}
 		}
 	}
-
 }
 
 void
 pw_elements_adjust_rates(struct pw_elements *elements, struct cjson *rates)
 {
+	struct pw_idmap_el *node;
 	double xp_rate = JSf(rates, "mob", "xp");
 	double sp_rate = JSf(rates, "mob", "sp");
 	double coin_rate = JSf(rates, "mob", "coin");
@@ -2346,7 +2336,8 @@ pw_elements_adjust_rates(struct pw_elements *elements, struct cjson *rates)
 	PWLOG(LOG_INFO, "  pet xp:   %8.4f\n", pet_xp);
 
 	struct pw_chain_table *tbl = get_chain_table(elements, "param_adjust_config");
-	struct param_adjust_config *exp_penalty_cfg = pw_idmap_get(g_elements_map, 10, tbl->idmap_type);
+	node = pw_idmap_get(g_elements_map, 10, tbl->idmap_type);
+	struct param_adjust_config *exp_penalty_cfg = (void *)node->data;
 
 	for (int i = 0; i < 16; i++) {
 		exp_penalty_cfg->adjust[i].matter = 1.0f;
@@ -2368,7 +2359,8 @@ pw_elements_adjust_rates(struct pw_elements *elements, struct cjson *rates)
 	}
 
 	tbl = get_chain_table(elements, "player_levelexp_config");
-	struct player_levelexp_config *pet_exp_cfg = pw_idmap_get(g_elements_map, 592, tbl->idmap_type);
+	node = pw_idmap_get(g_elements_map, 592, tbl->idmap_type);
+	struct player_levelexp_config *pet_exp_cfg = (void *)node->data;
 	for (int i = 0; i < 150; i++) {
 		pet_exp_cfg->exp[i] /= pet_xp;
 	}

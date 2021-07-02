@@ -42,6 +42,7 @@
 
 extern const char g_zeroes[4096];
 extern FILE *g_nullfile;
+extern int g_idmap_can_set;
 
 #define PW_VERSION_MAGIC 0xb78e97a1
 struct pw_version {
