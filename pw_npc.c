@@ -460,7 +460,6 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 	npc->dynamics.chain->count = npc->hdr.dynamics_count;
 	for (int i = 0;	i < npc->hdr.dynamics_count; i++) {
 		void *el = (void *)(npc->dynamics.chain->data + i * npc->dynamics.el_size);
-		uint32_t id;
 
 		fread(el, 1, 19, fp);
 
@@ -474,9 +473,8 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 		    *(uint8_t *)(el + 23) = 16;
 		}
 
-		id = DYNAMIC_ID(el) & ~(1UL << 31);
-		PWLOG(LOG_DEBUG_5, "dynamic parsed, off=%u, id=%u\n", ftell(fp), id);
-		pw_idmap_set(npc->idmap, id, npc->dynamics.idmap_type, el);
+		PWLOG(LOG_DEBUG_5, "dynamic parsed, off=%u, id=%u\n", ftell(fp), i + 1);
+		pw_idmap_set(npc->idmap, i + 1, npc->dynamics.idmap_type, el);
 	}
 
 	rc = pw_chain_table_init(&npc->triggers, "triggers", trigger_serializer, 199, npc->hdr.triggers_count);
@@ -712,11 +710,7 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 
 	uint32_t dynamics_count = 0;
 	PW_CHAIN_TABLE_FOREACH(el, &npc->dynamics) {
-		if (DYNAMIC_ID(el) & (1 << 31)) {
-			PWLOG(LOG_DEBUG_5, "dynamic ignored, off=%u, id=%u\n", ftell(fp), DYNAMIC_ID(el));
-			continue;
-		}
-		PWLOG(LOG_DEBUG_5, "dynamic saved, off=%u, id=%u\n", ftell(fp), DYNAMIC_ID(el));
+		PWLOG(LOG_DEBUG_5, "dynamic saved, off=%u, id=%u\n", ftell(fp), dynamics_count + 1);
 		fwrite(el, 1, npc->dynamics.el_size, fp);
 		dynamics_count++;
 	}
