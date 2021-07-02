@@ -337,6 +337,7 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 			PWLOG(LOG_ERROR, "pw_idmap_init() failed\n");
 			return 1;
 		}
+		pw_idmap_ignore_dups(g_triggers_map);
 	}
 
 	memset(npc, 0, sizeof(*npc));
