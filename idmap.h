@@ -19,7 +19,7 @@ struct pw_idmap_el {
 	void *next;
 };
 
-typedef void (*pw_idmap_async_fn)(void *el, void *ctx);
+typedef void (*pw_idmap_async_fn)(struct pw_idmap_el *node, void *ctx);
 
 struct pw_idmap *pw_idmap_init(const char *name, const char *filename, int can_set);
 void pw_idmap_ignore_dups(struct pw_idmap *map);

@@ -113,10 +113,10 @@ deserialize_id_removed_fn(struct cjson *f, struct serializer *slzr, void *data)
 }
 
 static void
-deserialize_elements_id_field_async_fn(void *data, void *target_data)
+deserialize_elements_id_field_async_fn(struct pw_idmap_el *node, void *target_data)
 {
-	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)target_data, *(uint32_t *)data);
-	*(uint32_t *)target_data = *(uint32_t *)data;
+	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)target_data, node->id);
+	*(uint32_t *)target_data = node->id;
 }
 
 static size_t
@@ -159,10 +159,10 @@ serialize_trigger_id_fn(FILE *fp, struct serializer *f, void *data)
 }
 
 static void
-deserialize_trigger_id_async_fn(void *data, void *target_data)
+deserialize_trigger_id_async_fn(struct pw_idmap_el *node, void *target_data)
 {
-	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)target_data, *(uint32_t *)data);
-	*(uint32_t *)target_data = *(uint32_t *)data;
+	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)target_data, node->id);
+	*(uint32_t *)target_data = node->id;
 }
 
 static size_t

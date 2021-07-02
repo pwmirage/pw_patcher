@@ -169,7 +169,12 @@ _idmap_get(struct pw_idmap *map, long long lid, long type)
 	}
 
 	el_p = pw_avl_get(map->by_id, lid);
-	return el_p ? *el_p : NULL;
+	el = el_p ? *el_p : NULL;
+
+	while (el && (type && el->type && el->type != type)) {
+		el = pw_avl_get_next(map->by_lid, el);
+	}
+	return el;
 }
 
 /* retrieve the item even if it's not set yet. The callback will be fired
@@ -226,13 +231,13 @@ pw_idmap_get_async(struct pw_idmap *map, long long lid, long type, pw_idmap_asyn
 }
 
 static void
-call_async_arr(struct pw_idmap_async_fn_head *async, void *data)
+call_async_arr(struct pw_idmap_async_fn_head *async, struct pw_idmap_el *node)
 {
 	struct pw_idmap_async_fn_el *async_el, *tmp;
 
 	async_el = async->head;
 	while (async_el) {
-		async_el->fn(data, async_el->ctx);
+		async_el->fn(node, async_el->ctx);
 		tmp = async_el;
 		async_el = async_el->next;
 		free(tmp);
@@ -244,7 +249,7 @@ pw_idmap_set(struct pw_idmap *map, long long lid, long type, void *data)
 {
 	struct pw_idmap_el *el, *tmp;
 
-	el = pw_idmap_get(map, lid, type);
+	el = _idmap_get(map, lid, type);
 	if (el && map->ignore_dups) {
 		return NULL;
 	}
@@ -261,7 +266,7 @@ pw_idmap_set(struct pw_idmap *map, long long lid, long type, void *data)
 		el->is_async_fn = 0;
 		el->data = data;
 
-		call_async_arr(async_head, data);
+		call_async_arr(async_head, el);
 		free(async_head);
 		return el;
 	}

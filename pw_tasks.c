@@ -152,15 +152,13 @@ struct deserialize_common_item_id_async_ctx {
 };
 
 static void
-deserialize_common_item_id_async_fn(void *data, void *_ctx)
+deserialize_common_item_id_async_fn(struct pw_idmap_el *node, void *_ctx)
 {
 	struct deserialize_common_item_id_async_ctx *ctx = _ctx;
-	struct pw_idmap_el *node;
-	node = pw_idmap_get(g_elements_map, ctx->item_lid, g_elements_taskmatter_idmap_id);
 
-	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)ctx->dst_data, *(uint32_t *)data);
-	*(uint32_t *)ctx->dst_data = *(uint32_t *)data;
-	*(uint8_t *)(ctx->dst_data + 4 + ctx->offset) = !node;
+	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)ctx->dst_data, node->id);
+	*(uint32_t *)ctx->dst_data = node->id;
+	*(uint8_t *)(ctx->dst_data + 4 + ctx->offset) = node->type != g_elements_taskmatter_idmap_id;
 
 	free(ctx);
 }
@@ -204,10 +202,10 @@ deserialize_common_item_id_fn(struct cjson *f, struct serializer *slzr, void *da
 }
 
 static void
-deserialize_elements_id_field_async_fn(void *data, void *target_data)
+deserialize_id_field_async_fn(struct pw_idmap_el *node, void *target_data)
 {
-	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)target_data, *(uint32_t *)data);
-	*(uint32_t *)target_data = *(uint32_t *)data;
+	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)target_data, node->id);
+	*(uint32_t *)target_data = node->id;
 }
 
 static size_t
@@ -220,7 +218,7 @@ deserialize_elements_id_field_fn(struct cjson *f, struct serializer *slzr, void 
 	}
 
 	if (val >= 0x80000000) {
-		int rc = pw_idmap_get_async(g_elements_map, val, 0, deserialize_elements_id_field_async_fn, data);
+		int rc = pw_idmap_get_async(g_elements_map, val, 0, deserialize_id_field_async_fn, data);
 		if (rc) {
 			assert(false);
 		}
@@ -241,13 +239,6 @@ serialize_elements_id_field_fn(FILE *fp, struct serializer *f, void *data)
 	return 4;
 }
 
-static void
-deserialize_tasks_id_field_async_fn(void *data, void *target_data)
-{
-	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)target_data, *(uint32_t *)data);
-	*(uint32_t *)target_data = *(uint32_t *)data;
-}
-
 static size_t
 deserialize_tasks_id_field_fn(struct cjson *f, struct serializer *slzr, void *data)
 {
@@ -258,7 +249,7 @@ deserialize_tasks_id_field_fn(struct cjson *f, struct serializer *slzr, void *da
 	}
 
 	if (val >= 0x80000000) {
-		int rc = pw_idmap_get_async(g_tasks_map, val, 0, deserialize_tasks_id_field_async_fn, data);
+		int rc = pw_idmap_get_async(g_tasks_map, val, 0, deserialize_id_field_async_fn, data);
 		if (rc) {
 			assert(false);
 		}
@@ -279,13 +270,6 @@ serialize_tasks_id_field_fn(FILE *fp, struct serializer *f, void *data)
 	return 4;
 }
 
-static void
-deserialize_trigger_id_async_fn(void *data, void *target_data)
-{
-	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)target_data, *(uint32_t *)data);
-	*(uint32_t *)target_data = *(uint32_t *)data;
-}
-
 static size_t
 deserialize_trigger_id_fn(struct cjson *f, struct serializer *slzr, void *data)
 {
@@ -296,7 +280,7 @@ deserialize_trigger_id_fn(struct cjson *f, struct serializer *slzr, void *data)
 	}
 
 	if (val >= 0x80000000) {
-		int rc = pw_idmap_get_async(g_triggers_map, val, 0, deserialize_trigger_id_async_fn, data);
+		int rc = pw_idmap_get_async(g_triggers_map, val, 0, deserialize_id_field_async_fn, data);
 		if (rc) {
 			assert(false);
 		}
