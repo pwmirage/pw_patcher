@@ -443,7 +443,7 @@ static struct serializer npc_crafts_serializer[] = {
 	{ "pages", _ARRAY_START(8) },
 		{ "title", _WSTRING(8) },
 		{ "recipe_id", _ARRAY_START(32) },
-			{ "", _INT32 },
+			{ "", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 		{ "", _ARRAY_END },
 	{ "", _ARRAY_END },
 	{ "", _TYPE_END },
@@ -2219,7 +2219,7 @@ pw_elements_save(struct pw_elements *el, const char *filename, bool is_server)
 
 						if (node) {
 							recipe = node->data;
-							rid = recipe->targets[0].id ? node->id : 0;
+							rid = recipe->targets[0].id ? rid : 0;
 						} else {
 							rid = 0;
 						}
