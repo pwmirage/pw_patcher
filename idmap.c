@@ -31,6 +31,7 @@ struct pw_idmap {
 	long max_id;
 	int can_set;
 	struct pw_avl *lid_mappings;
+	struct pw_avl *id_mappings;
 	struct pw_avl *by_lid;
 	struct pw_avl *by_id;
 	bool ignore_dups;
@@ -88,6 +89,13 @@ pw_idmap_init(const char *name, const char *filename, int can_set)
 		return NULL;
 	}
 
+	map->id_mappings = pw_avl_init(sizeof(struct pw_idmap_file_entry *));
+	if (!map->id_mappings) {
+		free(map->name);
+		free(map);
+		return NULL;
+	}
+
 	if (!filename) {
 		return map;
 	}
@@ -115,13 +123,20 @@ pw_idmap_init(const char *name, const char *filename, int can_set)
 
 	for (i = 0; i < entry_cnt; i++) {
 		struct pw_idmap_file_entry *entry;
+		struct pw_idmap_file_entry **id_entry;
 
 		entry = pw_avl_alloc(map->lid_mappings);
 		assert(entry);
+		id_entry = pw_avl_alloc(map->id_mappings);
+		assert(id_entry);
+
+		*id_entry = entry;
+
 		fread(entry, 1, sizeof(*entry), fp);
 
 		PWLOG(LOG_INFO, "%s: lid=0x%llx, id=%u\n", map->name, entry->lid, entry->id);
 		pw_avl_insert(map->lid_mappings, entry->lid, entry);
+		pw_avl_insert(map->id_mappings, entry->id, id_entry);
 	}
 
 	fclose(fp);
@@ -141,26 +156,13 @@ pw_idmap_register_type(struct pw_idmap *map)
 }
 
 struct pw_idmap_el *
-pw_idmap_get(struct pw_idmap *map, long long lid, long type)
-{
-	struct pw_idmap_el *el;
-
-	el = pw_avl_get(map->by_lid, lid);
-	while (el && (el->is_async_fn || (type && el->type && el->type != type))) {
-		el = pw_avl_get_next(map->by_lid, el);
-	}
-
-	return el;
-}
-
-void *
-_idmap_get(struct pw_idmap *map, long long lid, long type)
+_idmap_get(struct pw_idmap *map, long long lid, long type, bool async)
 {
 	struct pw_idmap_el *el;
 	struct pw_idmap_el **el_p;
 
 	el = pw_avl_get(map->by_lid, lid);
-	while (el && (type && el->type && el->type != type)) {
+	while (el && ((!async && el->is_async_fn) || (type && el->type && el->type != type))) {
 		el = pw_avl_get_next(map->by_lid, el);
 	}
 
@@ -172,9 +174,16 @@ _idmap_get(struct pw_idmap *map, long long lid, long type)
 	el = el_p ? *el_p : NULL;
 
 	while (el && (type && el->type && el->type != type)) {
-		el = pw_avl_get_next(map->by_lid, el);
+		el_p = pw_avl_get_next(map->by_id, el_p);
+		el = el_p ? *el_p : NULL;
 	}
 	return el;
+}
+
+struct pw_idmap_el *
+pw_idmap_get(struct pw_idmap *map, long long lid, long type)
+{
+	return _idmap_get(map, lid, type, false);
 }
 
 /* retrieve the item even if it's not set yet. The callback will be fired
@@ -186,9 +195,13 @@ pw_idmap_get_async(struct pw_idmap *map, long long lid, long type, pw_idmap_asyn
 	struct pw_idmap_async_fn_el *async_el;
 	struct pw_idmap_async_fn_head *async_head;
 
-	el = _idmap_get(map, lid, type);
+	el = pw_avl_get(map->by_lid, lid);
+	while (el && (type && el->type && el->type != type)) {
+		el = pw_avl_get_next(map->by_lid, el);
+	}
+
 	if (el && !el->is_async_fn) {
-		fn(el->data, fn_ctx);
+		fn(el, fn_ctx);
 		return 0;
 	}
 
@@ -249,12 +262,12 @@ pw_idmap_set(struct pw_idmap *map, long long lid, long type, void *data)
 {
 	struct pw_idmap_el *el, *tmp;
 
-	el = _idmap_get(map, lid, type);
-	if (el && map->ignore_dups) {
-		return NULL;
-	}
-
+	el = _idmap_get(map, lid, type, true);
 	if (el && !el->is_async_fn) {
+		if (map->ignore_dups) {
+			return NULL;
+		}
+
 		PWLOG(LOG_ERROR, "Conflict at lid=0x%x, type=%d (el->type=%d, el->id=%d)\n", lid, type, el->type, el->id);
 		assert(false);
 		return NULL;
@@ -271,13 +284,28 @@ pw_idmap_set(struct pw_idmap *map, long long lid, long type, void *data)
 		return el;
 	}
 
-	/* TODO check map->by_id (for now we just dont support
-	 * get_async() with low ids */
-
 	el = pw_avl_alloc(map->by_lid);
 	if (!el) {
 		PWLOG(LOG_ERROR, "pw_avl_alloc() failed\n");
 		return NULL;
+	}
+
+	if (lid < 0x80000000) {
+		struct pw_idmap_file_entry **entry_p;
+		struct pw_idmap_file_entry *entry;
+
+		entry_p = pw_avl_get(map->id_mappings, lid);
+		entry = entry_p ? *entry_p : NULL;
+
+		while (entry && (type && entry->type && entry->type != type)) {
+			entry_p = pw_avl_get_next(map->by_id, entry_p);
+			entry = entry_p ? *entry_p : NULL;
+		}
+
+		if (entry) {
+			el->id = entry->id;
+			lid = entry->lid;
+		}
 	}
 
 	el->lid = lid;
