@@ -331,7 +331,7 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 	char buf2[256];
 
 	if (!g_triggers_map) {
-		g_triggers_map = pw_idmap_init("npcgen_triggers", NULL, true);
+		g_triggers_map = pw_idmap_init("npcgen_triggers", "patcher/triggers.imap", true);
 		if (!g_triggers_map) {
 			PWLOG(LOG_ERROR, "pw_idmap_init() failed\n");
 			return 1;
@@ -755,8 +755,13 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 	fclose(fp);
 
 	/* save idmap immediately, it's only used server-side */
+	if (g_triggers_map) {
+		pw_idmap_save(g_triggers_map, "patcher/triggers.imap");
+		g_triggers_map = NULL;
+	}
+
 	char tmpbuf[1024];
-	snprintf(tmpbuf, sizeof(tmpbuf), "patcher/%s.imap", npc->name);
+	snprintf(tmpbuf, sizeof(tmpbuf), "patcher/npcgen_%s.imap", npc->name);
 	return pw_idmap_save(npc->idmap, tmpbuf);
 }
 
