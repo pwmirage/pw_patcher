@@ -137,6 +137,10 @@ pw_idmap_init(const char *name, const char *filename, int can_set)
 		PWLOG(LOG_INFO, "%s: lid=0x%llx, id=%u\n", map->name, entry->lid, entry->id);
 		pw_avl_insert(map->lid_mappings, entry->lid, entry);
 		pw_avl_insert(map->id_mappings, entry->id, id_entry);
+
+		if (entry->id > map->max_id) {
+			map->max_id = entry->id;
+		}
 	}
 
 	fclose(fp);
