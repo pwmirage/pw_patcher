@@ -14,11 +14,13 @@
 #include "cjson.h"
 #include "cjson_ext.h"
 #include "gui.h"
+#include "game_config.h"
 
 #define MG_GUI_ID_QUIT 1
 #define MG_GUI_ID_PATCH 2
 #define MG_GUI_ID_PLAY 3
 #define MG_GUI_ID_REPAIR 4
+#define MG_GUI_ID_SETTINGS 5
 
 int calc_sha1_hash(const char *path, char *hash_buf, size_t buflen);
 
@@ -96,6 +98,23 @@ on_init(int argc, char *argv[])
 
 	set_text(g_status_left_lbl, "Reading local version ...");
 
+	if (access("patcher", F_OK) != 0) {
+		set_progress_state(PBST_ERROR);
+		set_progress(100);
+		MessageBox(g_win, "Can't find the \"patcher\" directory. Please redownload the full client.", "Error", MB_OK);
+		ui_thread(quit_cb, NULL, NULL);
+		return;
+	}
+
+	rc = game_config_parse("patcher\\game.cfg");
+	if (rc != 0) {
+		PWLOG(LOG_ERROR, "game_config_parse() failed with rc=%d\n", rc);
+		set_text(g_status_right_lbl, "Failed. Invalid file permissions?");
+		set_progress_state(PBST_ERROR);
+		set_progress(100);
+		return;
+	}
+
 	rc = pw_version_load(&g_version);
 	if (rc < 0) {
 		PWLOG(LOG_ERROR, "pw_version_load() failed with rc=%d\n", rc);
@@ -114,14 +133,6 @@ on_init(int argc, char *argv[])
 		g_force_update = true;
 		g_version.generation = 0;
 		snprintf(g_version.branch, sizeof(g_version.branch), "%s", g_branch_name);
-	}
-
-	if (access("patcher", F_OK) != 0) {
-		set_progress_state(PBST_ERROR);
-		set_progress(100);
-		MessageBox(g_win, "Can't find the \"patcher\" directory. Please redownload the full client.", "Error", MB_OK);
-		ui_thread(quit_cb, NULL, NULL);
-		return;
 	}
 
 	set_text(g_status_left_lbl, "Fetching latest version ...");
@@ -214,7 +225,7 @@ on_init(int argc, char *argv[])
 		}
 	}
 
-	if (JSi(g_latest_version, "launcher_version") >= 22) {
+	if (JSi(g_latest_version, "launcher_version") >= 23) {
 		set_progress_state(PBST_PAUSED);
 
 		g_patcher_outdated = true;
@@ -238,8 +249,8 @@ on_init(int argc, char *argv[])
 
 	set_text(g_status_right_lbl, "");
 
-	if (access("element\\d3d8.dll", F_OK) != 0) {
-		rc = download("https://github.com/crosire/d3d8to9/releases/latest/download/d3d8.dll", "element\\d3d8.dll");
+	if (access("element\\_d3d8.dll", F_OK) != 0 && access("element\\d3d8.dll", F_OK) != 0) {
+		rc = download("https://github.com/crosire/d3d8to9/releases/latest/download/d3d8.dll", "element\\_d3d8.dll");
 		if (rc != 0) {
 			MessageBox(g_win, "Failed to download d3d8.dll. Perfect World might not run to its full potential", "Status", MB_OK);
 		}
@@ -309,6 +320,8 @@ on_init(int argc, char *argv[])
 void
 on_fini(void)
 {
+	game_config_save();
+
 	if (g_latest_version) {
 		cjson_free(g_latest_version);
 	}
@@ -390,6 +403,7 @@ patch_cb(void *arg1, void *arg2)
 	set_progress(0);
 
 	enable_button(g_play_button, false);
+
 	if (g_patcher_outdated) {
 		set_progress_state(PBST_PAUSED);
 		set_progress(100);
@@ -465,12 +479,21 @@ on_button_click(int btn)
 		BOOL result = FALSE;
 
 		SetCurrentDirectory("element");
+
+		if (game_config_get("d3d9", "0")[0] == '1') {
+			rename("_d3d8.dll", "d3d8.dll");
+		} else {
+			rename("d3d8.dll", "_d3d8.dll");
+		}
+
+		game_config_save();
+
 		pw_proc_startup_info.cb = sizeof(STARTUPINFO);
 		char buf[] = "game.exe game:mpw";
 		result = CreateProcess(NULL, buf,
 				NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, NULL,
 				&pw_proc_startup_info, &pw_proc_info);
-		if(!result) {
+		if (!result) {
 			MessageBox(g_win, "Could not start the PW process", "Error", MB_ICONERROR);
 			return;
 		}
@@ -478,18 +501,14 @@ on_button_click(int btn)
 		inject_dll(pw_proc_info.dwProcessId, "..\\patcher\\gamehook.dll");
 		ResumeThread(pw_proc_info.hThread);
 		PostQuitMessage(0);
-	}
-
-	if (btn == MG_GUI_ID_QUIT) {
+	} else if (btn == MG_GUI_ID_QUIT) {
 		PostQuitMessage(0);
 		return;
-	}
-
-	if (btn == MG_GUI_ID_PATCH) {
+	} else if (btn == MG_GUI_ID_PATCH) {
 		task(patch_cb, NULL, NULL);
-	}
-
-	if (btn == MG_GUI_ID_REPAIR) {
+	} else if (btn == MG_GUI_ID_REPAIR) {
 		task(repair_cb, NULL, NULL);
+	} else if (btn == MG_GUI_ID_SETTINGS) {
+		show_settings_win(true);
 	}
 }

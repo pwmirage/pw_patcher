@@ -3,7 +3,7 @@ ALL_OBJECTS := $(OBJECTS) export.o srv_patcher.o idmap_gen.o mgpck.o zpipe.o
 _CFLAGS := -O3 -MD -MP -fno-strict-aliasing -Wall -Wno-format-truncation $(CFLAGS)
 
 ifeq ($(OS),Windows_NT)
-	ALL_OBJECTS := $(ALL_OBJECTS) gui.o client_patcher.o client_launcher.o updater.o sha1.o pw_pck.o
+	ALL_OBJECTS := $(ALL_OBJECTS) gui.o client_patcher.o client_launcher.o client_launcher_settings.o updater.o sha1.o pw_pck.o game_config.o
 endif
 
 $(@shell mkdir -p build &>/dev/null)
@@ -31,15 +31,15 @@ build/idmap_gen: build/gcc_ver.h $(OBJECTS:%.o=build/%.o) build/idmap_gen.o
 
 build/client_patcher: build/gcc_ver.h $(OBJECTS:%.o=build/%.o) build/client_patcher.o build/pw_pck.o build/zpipe.o
 	windres -i patcher.rc -o patcher_rc.o
-	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ patcher_rc.o -Wl,--no-whole-archive -s -lwininet -mwindows -lcrypt32 -Wl,-Bstatic -lz -liconv -Wl,-Bdynamic
+	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ patcher_rc.o -Wl,--no-whole-archive -lwininet -mwindows -lcrypt32 -Wl,-Bstatic -lz -liconv -Wl,-Bdynamic
 
-build/client_launcher: build/gcc_ver.h build/cjson.o build/common.o build/sha1.o build/gui.o build/client_launcher.o
+build/client_launcher: build/gcc_ver.h build/cjson.o build/common.o build/sha1.o build/gui.o build/client_launcher.o build/client_launcher_settings.o build/game_config.o build/avl.o
 	windres -i launcher.rc -o launcher_rc.o
-	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ launcher_rc.o -Wl,--no-whole-archive -s -Wl,--subsystem,windows -lwininet -mwindows -lcrypt32
+	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ launcher_rc.o -Wl,--no-whole-archive -Wl,--subsystem,windows -lwininet -mwindows -lcrypt32
 
 build/updater: build/gcc_ver.h build/updater.o
 	windres -i updater.rc -o updater_rc.o
-	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ updater_rc.o -Wl,--no-whole-archive -s -Wl,--subsystem,windows -lwininet -Wno-address-of-packed-member
+	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ updater_rc.o -Wl,--no-whole-archive -Wl,--subsystem,windows -lwininet -Wno-address-of-packed-member
 
 build/mgpck: build/gcc_ver.h build/cjson.o build/common.o build/mgpck.o build/pw_pck.o build/avl.o build/zpipe.o
 	gcc $(_CFLAGS) -o $@ $^ -Wl,--subsystem,console -lwininet -Wl,-Bstatic -lz -liconv -Wl,-Bdynamic

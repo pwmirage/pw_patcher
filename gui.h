@@ -13,6 +13,8 @@
 
 typedef void (*mg_callback)(void *arg1, void *arg2);
 
+extern HINSTANCE g_instance;
+
 extern HWND g_win;
 extern HWND g_changelog_lbl;
 extern HWND g_status_left_lbl;
@@ -25,6 +27,7 @@ extern HWND g_quit_button;
 extern HWND g_patch_button;
 extern HWND g_play_button;
 extern HWND g_repair_button;
+extern HWND g_settings_button;
 
 extern HBITMAP g_bmp;
 extern HDC g_hdc;
@@ -50,5 +53,7 @@ void enable_button(HWND button, bool enable);
 void show_ui(HWND ui, bool enable);
 void set_banner(const char *path);
 void quit_cb(void *arg1, void *arg2);
+
+void show_settings_win(bool show);
 
 #endif /* PW_GUI_H */

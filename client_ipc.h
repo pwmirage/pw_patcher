@@ -13,6 +13,7 @@
 #define MG_GUI_ID_PATCH 2
 #define MG_GUI_ID_PLAY 3
 #define MG_GUI_ID_REPAIR 4
+#define MG_GUI_ID_SETTINGS 5
 
 enum mg_patcher_msg_command {
 	MGP_MSG_INIT = 0,

@@ -14,6 +14,7 @@
 
 #define MG_CB_MSG (WM_USER + 165)
 
+HINSTANCE g_instance;
 HWND g_win;
 HWND g_changelog_lbl;
 HWND g_status_left_lbl;
@@ -27,6 +28,7 @@ HWND g_quit_button;
 HWND g_patch_button;
 HWND g_play_button;
 HWND g_repair_button;
+HWND g_settings_button;
 
 HBITMAP g_bmp;
 HDC g_hdc;
@@ -52,6 +54,7 @@ static bool g_button_state[16];
 
 static struct button_brush g_brush_btn;
 static struct button_brush g_brush_btn_play;
+static struct button_brush g_brush_btn_patch;
 
 static HCURSOR g_cursor_hand;
 static HCURSOR g_cursor_arrow;
@@ -121,6 +124,8 @@ enable_button_cb(void *_button, void *_enable)
 		id = MG_GUI_ID_PLAY;
 	} else if (_button == g_repair_button) {
 		id = MG_GUI_ID_REPAIR;
+	} else if (_button == g_settings_button) {
+		id = MG_GUI_ID_SETTINGS;
 	} else {
 		return;
 	}
@@ -226,6 +231,8 @@ static WNDPROC g_orig_button_handler;
 static void
 init_gui(HWND hwnd, HINSTANCE hInst)
 {
+	g_instance = hInst;
+
 	HICON hIcon = LoadIcon(hInst, MAKEINTRESOURCE(18253));
 	SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
 
@@ -288,9 +295,14 @@ init_gui(HWND hwnd, HINSTANCE hInst)
 			WS_VISIBLE | WS_CHILD | WS_TABSTOP | 0x00000001,
 			471, 289, 83, 23, hwnd, (HMENU)MG_GUI_ID_REPAIR, hInst, 0);
 
+	g_settings_button = CreateWindowW(L"Button", L"Settings",
+			WS_VISIBLE | WS_CHILD | WS_TABSTOP, 471, 219, 83, 23,
+			hwnd, (HMENU)MG_GUI_ID_SETTINGS, hInst, 0);
+
 	reload_banner("patcher/banner");
 
 	g_button_state[MG_GUI_ID_QUIT] = true;
+	g_button_state[MG_GUI_ID_SETTINGS] = true;
 
 	/* create bold font for labels */
 	HFONT default_font = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
@@ -314,6 +326,7 @@ init_gui(HWND hwnd, HINSTANCE hInst)
 	SetWindowLongPtr(g_repair_button, GWLP_WNDPROC, (LONG_PTR)WndProcButton);
 	SetWindowLongPtr(g_patch_button, GWLP_WNDPROC, (LONG_PTR)WndProcButton);
 	SetWindowLongPtr(g_quit_button, GWLP_WNDPROC, (LONG_PTR)WndProcButton);
+	SetWindowLongPtr(g_settings_button, GWLP_WNDPROC, (LONG_PTR)WndProcButton);
 }
 
 static char *g_cmdline;
@@ -453,6 +466,7 @@ WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 				g_brush_btn.disabled.bg_brush = create_pattern_brush(RGB(223, 223, 223), NULL, item);
 				g_brush_btn.disabled.text_color = RGB(165, 165, 165);
 
+
 				g_brush_btn_play.regular.bg_brush = create_pattern_brush(RGB(207, 69, 69), NULL, item);
 				g_brush_btn_play.regular.text_color = RGB(255, 255, 255);
 				g_brush_btn_play.hover.bg_brush = create_pattern_brush(RGB(172, 56, 56), NULL, item);
@@ -461,6 +475,16 @@ WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 				g_brush_btn_play.pressed.text_color = RGB(255, 255, 255);
 				g_brush_btn_play.disabled.bg_brush = create_pattern_brush(RGB(223, 223, 223), NULL, item);
 				g_brush_btn_play.disabled.text_color = RGB(165, 165, 165);
+
+
+				g_brush_btn_patch.regular.bg_brush = create_pattern_brush(RGB(207, 200, 69), NULL, item);
+				g_brush_btn_patch.regular.text_color = RGB(33, 33, 33);
+				g_brush_btn_patch.hover.bg_brush = create_pattern_brush(RGB(177, 171, 59), NULL, item);
+				g_brush_btn_patch.hover.text_color = RGB(0, 0, 0);
+				g_brush_btn_patch.pressed.bg_brush = create_pattern_brush(RGB(140, 135, 45), NULL, item);
+				g_brush_btn_patch.pressed.text_color = RGB(255, 255, 255);
+				g_brush_btn_patch.disabled.bg_brush = create_pattern_brush(RGB(223, 223, 223), NULL, item);
+				g_brush_btn_patch.disabled.text_color = RGB(165, 165, 165);
 			}
 
 			switch (lpnmhdr->idFrom) {
@@ -474,10 +498,14 @@ WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 					break;
 				case MG_GUI_ID_PATCH:
 					btn = g_patch_button;
-					btn_brush = &g_brush_btn;
+					btn_brush = &g_brush_btn_patch;
 					break;
 				case MG_GUI_ID_REPAIR:
 					btn = g_repair_button;
+					btn_brush = &g_brush_btn;
+					break;
+				case MG_GUI_ID_SETTINGS:
+					btn = g_settings_button;
 					btn_brush = &g_brush_btn;
 					break;
 			}
@@ -561,12 +589,6 @@ WndProcButton(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 	return CallWindowProc(g_orig_button_handler, hwnd, msg, arg1, arg2);
 }
 
-
-static void
-on_fini_cb(void *arg1, void *arg2) {
-	on_fini();
-}
-
 static void
 parse_patcher_msg(enum mg_patcher_msg_command type, unsigned param)
 {
@@ -611,6 +633,9 @@ parse_patcher_msg(enum mg_patcher_msg_command type, unsigned param)
 				case MG_GUI_ID_REPAIR:
 					enable_button(g_repair_button, bval);
 					break;
+				case MG_GUI_ID_SETTINGS:
+					enable_button(g_settings_button, bval);
+					break;
 				default:
 					break;
 			}
@@ -647,6 +672,6 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrevInstance,
 		}
 	}
 
-	task(on_fini_cb, NULL, NULL);
+	on_fini();
 	return (int) msg.wParam;
 }
