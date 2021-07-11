@@ -160,6 +160,13 @@ on_init(int argc, char *argv[])
 
 	char *motd = JSs(g_latest_version, "message");
 	normalize_json_string(motd, true);
+	size_t motd_len = strlen(motd);
+
+	/* note: there will always be space in the buffer */
+	motd[motd_len] = '\r';
+	motd[motd_len + 1] = '\n';
+	motd[motd_len + 2] = 0;
+
 	set_text(g_changelog_lbl, motd);
 
 	set_text(g_status_left_lbl, "Checking prerequisites ...");
