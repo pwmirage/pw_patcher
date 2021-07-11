@@ -487,10 +487,10 @@ on_button_click(int btn)
 
 		SetCurrentDirectory("element");
 
-		if (game_config_get("d3d9", "1")[0] == '1') {
-			rename("_d3d8.dll", "d3d8.dll");
-		} else {
+		if (game_config_get("d3d8", "0")[0] == '1') {
 			rename("d3d8.dll", "_d3d8.dll");
+		} else {
+			rename("_d3d8.dll", "d3d8.dll");
 		}
 
 		game_config_save();

@@ -11,7 +11,7 @@
 #include "common.h"
 #include "game_config.h"
 
-#define CHECKBOX_D3D9 1
+#define CHECKBOX_D3D8 1
 #define CHECKBOX_CFONT 2
 #define CHECKBOX_MAX 3
 
@@ -31,8 +31,8 @@ show_settings_win(bool show)
 {
         WNDCLASS wc = {0};
 	RECT rect;
-	int w = 230;
-	int h = 120;
+	int w = 235;
+	int h = 180;
 
 	GetClientRect(g_win, &rect);
 	MapWindowPoints(g_win, NULL, (LPPOINT)&rect, 2);
@@ -68,19 +68,23 @@ init_gui(HWND hwnd, HINSTANCE hInst)
                 WS_VISIBLE | WS_CHILD | WS_GROUP | SS_LEFT,
                 10, 11, 210, 15, hwnd, (HMENU)0, hInst, 0);
 
-        CreateWindow("button", "Run with Direct3D9 (faster, but may\r\n"
-				"cause problems on older PCs)",
+        CreateWindow("button", "Run with legacy Direct3D8 (slower, and\r\n"
+				"won't support any of Mirage's custom\r\n"
+				"windows, but might be required to work\r\n"
+				"on older PCs)",
                 WS_VISIBLE | WS_CHILD | BS_CHECKBOX | BS_MULTILINE,
-                10, 30, 210, 25,
-                hwnd, (HMENU)CHECKBOX_D3D9, hInst, NULL);
+                10, 35, 210, 60,
+                hwnd, (HMENU)CHECKBOX_D3D8, hInst, NULL);
 
-        CreateWindow("button", "Use custom font for player/object names",
-                WS_VISIBLE | WS_CHILD | BS_CHECKBOX,
-                10, 55, 210, 25,
+        CreateWindow("button", "Use custom font for player/object names\r\n"
+				"(More natural font for systems with\r\n"
+				"Chinese language)",
+                WS_VISIBLE | WS_CHILD | BS_CHECKBOX | BS_MULTILINE,
+                10, 100, 210, 45,
                 hwnd, (HMENU)CHECKBOX_CFONT, hInst, NULL);
 
-	CheckDlgButton(hwnd, CHECKBOX_D3D9,
-			game_config_get("d3d9", "1")[0] == '1' ?
+	CheckDlgButton(hwnd, CHECKBOX_D3D8,
+			game_config_get("d3d8", "0")[0] == '1' ?
 			BST_CHECKED : BST_UNCHECKED);
 
 	CheckDlgButton(hwnd, CHECKBOX_CFONT,
@@ -106,8 +110,8 @@ WndProc(HWND hwnd, UINT msg, WPARAM data, LPARAM ldata)
                 bool check = !IsDlgButtonChecked(hwnd, checkbox_id);
                 CheckDlgButton(hwnd, checkbox_id, check ? BST_CHECKED : BST_UNCHECKED);
                 switch (checkbox_id) {
-                        case CHECKBOX_D3D9:
-				game_config_set("d3d9", check ? "1" : "0");
+                        case CHECKBOX_D3D8:
+				game_config_set("d3d8", check ? "1" : "0");
                                 break;
                         case CHECKBOX_CFONT:
 				game_config_set("custom_tag_font", check ? "1" : "0");
