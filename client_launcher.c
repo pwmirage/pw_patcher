@@ -232,7 +232,7 @@ on_init(int argc, char *argv[])
 		}
 	}
 
-	if (JSi(g_latest_version, "launcher_version") >= 23) {
+	if (JSi(g_latest_version, "launcher_version") > 2210) {
 		set_progress_state(PBST_PAUSED);
 
 		g_patcher_outdated = true;
