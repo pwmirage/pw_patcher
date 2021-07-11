@@ -26,7 +26,7 @@ download(const char *url, char *filename)
 	}
 
 	flags = INTERNET_FLAG_DONT_CACHE | INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_NO_CACHE_WRITE;
-	hURL = InternetOpenUrl(hInternetSession, url,  NULL, 0, 0, 0);
+	hURL = InternetOpenUrl(hInternetSession, url,  NULL, 0, flags, 0);
 
 	char buf[1024];
 
@@ -68,7 +68,7 @@ main(void)
 		Sleep(300);
 	}
 
-	if (i == 10 || rename("pwmirage.dat", "../pwmirage.exe") != 0) {
+	if (rename("pwmirage.dat", "../pwmirage.exe") != 0) {
 		MessageBox(0, "Failed to replace the old patcher. Could it be it's still running?", "Status", MB_OK);
 		return 1;
 	}
