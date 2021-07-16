@@ -501,7 +501,7 @@ serialize_type_fn(FILE *fp, struct serializer *f, void *data)
 	}
 
 	val = *(uint32_t *)serializer_get_field(pw_task_serializer, "_type", task);
-	if (*(uint32_t *)serializer_get_field(pw_task_serializer, "_is_gold_quest", task)) val = 10;
+	if (*(uint8_t *)serializer_get_field(pw_task_serializer, "_is_gold_quest", task)) val = 10;
 
 	if (val) {
 		fprintf(fp, "\"%s\":%d,", f->name, val);
