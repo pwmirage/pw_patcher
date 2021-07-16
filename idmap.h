@@ -8,16 +8,6 @@
 #include <stdint.h>
 #include <inttypes.h>
 
-struct pw_idmap_file_hdr {
-	uint32_t version;
-};
-
-struct pw_idmap_file_entry {
-	uint64_t lid;
-	uint32_t id;
-	uint8_t type;
-};
-
 struct pw_idmap_el {
 	long long lid;
 	long id;
