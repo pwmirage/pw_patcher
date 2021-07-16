@@ -521,16 +521,18 @@ deserialize_type_fn(struct cjson *f, struct serializer *slzr, void *data)
 	}
 
 	val = JSi(f);
-	*(uint32_t *)serializer_get_field(pw_task_serializer, "_type", task) = val;
 
 	switch (val) {
 		case 10:
 			*(uint8_t *)serializer_get_field(pw_task_serializer, "_is_gold_quest", task) = 1;
+			val = 0;
 			break;
 		default:
 			*(uint8_t *)serializer_get_field(pw_task_serializer, "_is_gold_quest", task) = 0;
 			break;
 	}
+
+	*(uint32_t *)serializer_get_field(pw_task_serializer, "_type", task) = val;
 
 	return 0;
 }
