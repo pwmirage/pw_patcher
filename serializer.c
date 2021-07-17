@@ -202,7 +202,12 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 		if (obj_printed) {
 			fprintf(fp, "}");
 		}
-		fprintf(fp, ",");
+		if (!force_object && skip_empty_objs && ftell(fp) < arr_sz) {
+			/* we overwrote this before, time to restore it */
+			fprintf(fp, "[");
+		} else {
+			fprintf(fp, ",");
+		}
 		if (newlines) {
 			fprintf(fp, "\n");
 		}
