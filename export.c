@@ -58,6 +58,67 @@ load_icons(void) {
 }
 
 static int
+load_descriptions(void)
+{
+	FILE *fp = fopen("patcher/item_ext_desc.txt", "r");
+	size_t len = 0;
+	ssize_t read;
+	char *line = NULL;
+
+	if (fp == NULL) {
+		PWLOG(LOG_ERROR, "Can't open item_ext_desc.txt\n");
+		return -1;
+	}
+
+	/* skip header */
+	for (int i = 0; i < 5; i++) {
+		getline(&line, &len, fp);
+	}
+
+	unsigned i = 0;
+
+	len = 2048;
+	line = malloc(len);
+	if (!line) {
+		PWLOG(LOG_ERROR, "malloc() failed\n");
+		return -1;
+	}
+	while ((read = getline(&line, &len, fp)) != -1) {
+		char *id, *txt;
+
+		id = strtok(line, " ");
+		if (id == NULL || strlen(id) == 0) {
+			break;
+		}
+
+		txt = strtok(NULL, "\"");
+		txt = strtok(NULL, "\"");
+		g_item_descs[atoi(id)] = txt;
+		/* FIXME: line is technically leaked */
+
+		while (*txt) {
+			if (*txt == '\r') {
+				*txt = '\n';
+			}
+			txt++;
+		}
+
+		len = 2048;
+		line = malloc(len);
+		if (!line) {
+			PWLOG(LOG_ERROR, "malloc() failed\n");
+			return -1;
+		}
+		i++;
+	}
+
+	PWLOG(LOG_INFO, "Parsed %u item descriptions\n", i);
+	fclose(fp);
+	return 0;
+}
+
+
+static int
 print_elements(const char *path)
 {
 	struct pw_elements elements;
@@ -69,7 +130,25 @@ print_elements(const char *path)
 	}
 
 	load_icons();
+	load_descriptions();
 	pw_elements_prepare(&elements);
+
+	char tmpbuf[1024];
+	char *buf;
+	size_t num_bytes = 0;
+
+	snprintf(tmpbuf, sizeof(tmpbuf), "https://pwmirage.com/editor/project/cache/public/rates.json");
+	rc = download_mem(tmpbuf, &buf, &num_bytes);
+	if (rc) {
+		PWLOG(LOG_ERROR, "download_mem failed for %s\n", tmpbuf);
+		return 1;
+	}
+
+	struct cjson *rates = cjson_parse(buf);
+	pw_elements_adjust_rates(&elements, rates);
+	cjson_free(rates);
+	free(buf);
+
 	pw_elements_serialize(&elements);
 
 	pw_elements_save(&elements, "config/elements.data.srv", true);
@@ -112,6 +191,22 @@ print_tasks(const char *path)
 		PWLOG(LOG_ERROR, "pw_tasks_load(%s) failed: %d\n", path, rc);
 		return rc;
 	}
+
+	char *buf;
+	size_t num_bytes = 0;
+	char tmpbuf[1024];
+
+	snprintf(tmpbuf, sizeof(tmpbuf), "https://pwmirage.com/editor/project/cache/public/rates.json");
+	rc = download_mem(tmpbuf, &buf, &num_bytes);
+	if (rc) {
+		PWLOG(LOG_ERROR, "download_mem failed for %s\n", tmpbuf);
+		return 1;
+	}
+
+	struct cjson *rates = cjson_parse(buf);
+	pw_tasks_adjust_rates(&taskf, rates);
+	cjson_free(rates);
+	free(buf);
 
 	rc = pw_tasks_serialize(&taskf, "tasks.json");
 	if (rc) {
