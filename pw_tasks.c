@@ -266,7 +266,11 @@ serialize_tasks_id_field_fn(FILE *fp, struct serializer *f, void *data)
 {
 	uint32_t id = *(uint32_t *)data;
 
-	fprintf(fp, "\"%s\":%d,", f->name, id);
+	if (f->name[0]) {
+		fprintf(fp, "\"%s\":%d,", f->name, id);
+	} else if (id) {
+		fprintf(fp, "%d,", id);
+	}
 	return 4;
 }
 
@@ -764,9 +768,9 @@ static struct serializer pw_task_serializer[] = {
 	{ "premise_reputation_min", _INT32 },
 	{ "premise_reputation_max", _INT32 },
 	{ "show_without_premise_reputation", _INT8 },
-	{ "_req_quests_done_cnt", _INT32 },
+	{ "_premise_quests_cnt", _INT32 },
 	{ "premise_quests", _ARRAY_START(5) },
-		{ "", _INT32 },
+		{ "", _CUSTOM, serialize_tasks_id_field_fn, deserialize_tasks_id_field_fn },
 	{ "", _ARRAY_END },
 	{ "show_without_premise_quests", _INT8 },
 	{ "premise_cultivation", _INT32 },
@@ -787,7 +791,7 @@ static struct serializer pw_task_serializer[] = {
 	{ "_premise_global_quest_cond", _INT32 },
 	{ "_mutex_quests_cnt", _INT32 },
 	{ "mutex_quests", _ARRAY_START(5) },
-		{ "", _INT32 },
+		{ "", _CUSTOM, serialize_tasks_id_field_fn, deserialize_tasks_id_field_fn },
 	{ "", _ARRAY_END },
 	{ "premise_blacksmith_level", _INT32 },
 	{ "premise_tailor_level", _INT32 },
@@ -1339,6 +1343,18 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 	}
 
 	*(uint32_t *)serializer_get_field(slzr, "_need_npc_finish", data) = subq_count == 0 && _need_npc_finish;
+	uint32_t *premise_quests_cnt = serializer_get_field(slzr, "_premise_quests_cnt", data);
+	uint32_t *mutex_quests_cnt = serializer_get_field(slzr, "_mutex_quests_cnt", data);
+	*premise_quests_cnt = 0;
+	*mutex_quests_cnt = 0;
+	for (int i = 0; i < 5; i++) {
+		if (*(premise_quests_cnt+ 1 + i)) {
+			*premise_quests_cnt += 1;
+		}
+		if (*(mutex_quests_cnt + 1 + i)) {
+			*mutex_quests_cnt += 1;
+		}
+	}
 
 	fwrite(buf, 534, 1, fp);
 	buf += 534;
