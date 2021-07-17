@@ -674,6 +674,7 @@ deserialize_avail_frequency_fn(struct cjson *f, struct serializer *slzr, void *d
 	void *task = data;
 	uint32_t *_avail_frequency = serializer_get_field(slzr, "_avail_frequency", task);
 	uint8_t *_need_record = serializer_get_field(slzr, "_need_record", task);
+	uint8_t *_can_retake = serializer_get_field(slzr, "_can_retake", task);
 	uint32_t val = JSi(f);
 
 	switch (val) {
@@ -685,10 +686,12 @@ deserialize_avail_frequency_fn(struct cjson *f, struct serializer *slzr, void *d
 		case 5:
 			*_need_record = 0;
 			*_avail_frequency = val;
+			*_can_retake = 1;
 			break;
 		case 6:
-			*_avail_frequency = 0;
 			*_need_record = 1;
+			*_avail_frequency = 0;
+			*_can_retake = 0;
 			break;
 	}
 
@@ -1231,7 +1234,7 @@ pw_tasks_patch_obj(struct pw_task_file *taskf, struct cjson *obj)
 		node = pw_idmap_set(taskf->idmap, id, 0, table_el);
 
 		*(uint32_t *)table_el = node->id;
-		*(uint8_t *)serializer_get_field(pw_task_serializer, "_need_record", table_el) = 1;
+		*(uint8_t *)serializer_get_field(pw_task_serializer, "_can_retake", table_el) = 1;
 
 	}
 	deserialize(obj, pw_task_serializer, table_el);
