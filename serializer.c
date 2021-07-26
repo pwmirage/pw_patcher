@@ -442,9 +442,16 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p,
 
 			if (json_f->type != CJSON_TYPE_NONE) {
 				normalize_json_string(json_f->s, true);
+
+				uint8_t *c = (uint8_t *)json_f->s + strlen(json_f->s) - 1;
+				while (c != (uint8_t *)json_f->s && (*c == ' ' || *c == 0xa0 || *c == 0xc2)) {
+					*c = 0;
+					c--;
+				}
+
 				deserialize_log(json_f, data);
 				memset(data, 0, len * 2);
-				change_charset("UTF-8", "UTF-16LE", json_f->s, strlen(json_f->s), (char *)data, len * 2);
+				change_charset("UTF-8", "UTF-16LE", json_f->s, strlen(json_f->s), (char *)data, len * 2 - 2);
 			}
 			data += len * 2;
 		} else if (slzr->type > _STRING(0) && slzr->type <= _STRING(0x1000)) {
@@ -464,9 +471,16 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p,
 
 			if (json_f->type != CJSON_TYPE_NONE) {
 				normalize_json_string(json_f->s, true);
+
+				uint8_t *c = (uint8_t *)json_f->s + strlen(json_f->s) - 1;
+				while (c != (uint8_t *)json_f->s && (*c == ' ' || *c == 0xa0 || *c == 0xc2)) {
+					*c = 0;
+					c--;
+				}
+
 				deserialize_log(json_f, data);
 				memset(data, 0, len);
-				change_charset("UTF-8", "GB2312", json_f->s, strlen(json_f->s), (char *)data, len);
+				change_charset("UTF-8", "GB2312", json_f->s, strlen(json_f->s), (char *)data, len - 1);
 			}
 			data += len;
 		} else if (slzr->type > _ARRAY_START(0) && slzr->type <= _ARRAY_START(0x1000)) {
