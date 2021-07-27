@@ -17,6 +17,8 @@
 #include "chain_arr.h"
 #include "idmap.h"
 #include "pw_elements.h"
+#include "avl.h"
+#include "pw_item_desc.h"
 
 char g_icon_names[PW_ELEMENTS_ICON_COUNT][128];
 char g_item_colors[65536] = {};
@@ -1757,6 +1759,7 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 	const char *obj_type;
 	int64_t id;
 	int i;
+	bool is_item;
 
 	obj_type = JSs(obj, "_db", "type");
 	if (!obj_type) {
@@ -1764,7 +1767,8 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 		return -1;
 	}
 
-	if (strcmp(obj_type, "items") == 0) {
+	is_item = strcmp(obj_type, "items") == 0;
+	if (is_item) {
 		uint32_t type = JSi(obj, "type");
 		obj_type = get_item_type_by_id(type);
 	}
@@ -1804,6 +1808,15 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 			*(uint32_t *)serializer_get_field(table->serializer, "id_type", table_el) = 3214;
 		}
 
+	}
+
+	if (is_item) {
+		const char *desc = JSs(obj, "desc");
+		if (desc) {
+			uint32_t id = *(uint32_t *)table_el;
+
+			pw_item_desc_set(id, desc);
+		}
 	}
 
 	deserialize(obj, table->serializer, table_el);
@@ -2130,7 +2143,7 @@ pw_elements_load(struct pw_elements *el, const char *filename, const char *idmap
 	g_elements_recipes_idmap_id = pw_elements_get_idmap_type(el, "recipes");
 	g_elements_npc_idmap_id = pw_elements_get_idmap_type(el, "npcs");
 
-	return 0;
+	return pw_item_desc_load("patcher/item_desc.data");
 }
 
 static void
@@ -2262,7 +2275,7 @@ pw_elements_save(struct pw_elements *el, const char *filename, bool is_server)
 
 	fclose(fp);
 
-	return 0;
+	return pw_item_desc_save();
 }
 
 int

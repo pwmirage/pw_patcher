@@ -1,4 +1,4 @@
-OBJECTS = common.o serializer.o chain_arr.o pw_elements.o cjson.o idmap.o pw_npc.o pw_tasks.o pw_tasks_npc.o avl.o
+OBJECTS = common.o serializer.o chain_arr.o pw_elements.o cjson.o idmap.o pw_npc.o pw_tasks.o pw_tasks_npc.o avl.o pw_item_desc.o
 ALL_OBJECTS := $(OBJECTS) export.o srv_patcher.o idmap_gen.o mgpck.o zpipe.o
 _CFLAGS := -O3 -MD -MP -fno-strict-aliasing -Wall -Wno-format-truncation $(CFLAGS)
 
