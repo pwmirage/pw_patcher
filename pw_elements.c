@@ -2275,6 +2275,10 @@ pw_elements_save(struct pw_elements *el, const char *filename, bool is_server)
 
 	fclose(fp);
 
+	if (is_server) {
+		return 0;
+	}
+
 	return pw_item_desc_save();
 }
 
