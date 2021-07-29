@@ -425,7 +425,7 @@ struct __attribute__((packed)) pw_task_award {
 static struct serializer pw_task_award_serializer[] = {
 	{ "coins", _INT32 },
 	{ "xp", _INT32 },
-	{ "new_quest", _INT32 },
+	{ "new_quest", _CUSTOM, serialize_tasks_id_field_fn, deserialize_tasks_id_field_fn },
 	{ "sp", _INT32 },
 	{ "rep", _INT32 },
 	{ "culti", _INT32 },
