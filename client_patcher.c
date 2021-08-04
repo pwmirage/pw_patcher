@@ -539,6 +539,7 @@ main(int argc, char *argv[])
 	}
 
 	setlocale(LC_ALL, "en_US.UTF-8");
+	unlink("patcher/patch.log");
 	freopen("patcher/patch.log", "w", stderr);
 
 	print_time();
