@@ -1581,8 +1581,7 @@ pw_pck_open(struct pw_pck *pck, const char *path) {
 		goto err_close;
 	}
 
-	fseek(pck->fp, 0, SEEK_END);
-	fsize = ftell(pck->fp);
+	fsize = pck->hdr.file_size;
 
 	if (fsize < sizeof(pck->hdr) + sizeof(pck->ftr)) {
 		PWLOG(LOG_ERROR, "file way too small\n");
@@ -2068,8 +2067,7 @@ pw_pck_apply_patch(struct pw_pck *pck, const char *patch_path)
 		goto out;
 	}
 
-	fseek(fp_patch, 0, SEEK_END);
-	fsize = ftell(fp_patch);
+	fsize = hdr.file_size;
 
 	if (fsize < sizeof(hdr) + sizeof(ftr)) {
 		PWLOG(LOG_ERROR, "patch file way too small\n");
