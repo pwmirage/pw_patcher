@@ -270,7 +270,10 @@ apply_pck_patch(const char *pck_name, const char *url)
 	SetCurrentDirectory("element");
 	rc = pw_pck_apply_patch(&pck->data, "../patcher/tmp.patch");
 	SetCurrentDirectory(cur_path);
-	unlink("patcher/tmp.patch");
+
+	if (rc == 0) {
+		unlink("patcher/tmp.patch");
+	}
 
 	return rc;
 }
