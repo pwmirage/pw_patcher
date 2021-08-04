@@ -30,6 +30,36 @@ int g_idmap_can_set;
 #ifdef __MINGW32__
 #include <wininet.h>
 
+const char *
+get_basename(const char *in)
+{
+	const char *ret = in;
+	char c;
+
+	while ((c = *in++)) {
+		if (c == '\\' || c == '/') {
+			ret = in;
+		}
+	}
+
+	return ret;
+}
+
+const char *
+get_extension(const char *in)
+{
+	const char *ret = in;
+	char c;
+
+	while ((c = *in++)) {
+		if (c == '.') {
+			ret = in;
+		}
+	}
+
+	return ret;
+}
+
 static int
 download_wininet(const char *url, const char *filename)
 {

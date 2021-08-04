@@ -190,6 +190,9 @@ on_init(int argc, char *argv[])
 		char namebuf[280];
 		if (strcmp(name, "game.exe") == 0) {
 			snprintf(namebuf, sizeof(namebuf), "element\\%s", name);
+		} else if (strcmp(name, "gamehook.dll") != 0 &&
+				strcmp(get_extension(name), "dll") == 0) {
+			snprintf(namebuf, sizeof(namebuf), "element\\%s", name);
 		} else if (strcmp(name, "calibrib.ttf") == 0) {
 			snprintf(namebuf, sizeof(namebuf), "element\\fonts\\%s", name);
 		} else {
@@ -232,7 +235,7 @@ on_init(int argc, char *argv[])
 		}
 	}
 
-	if (JSi(g_latest_version, "launcher_version") > 2210) {
+	if (JSi(g_latest_version, "launcher_version") > 2220) {
 		set_progress_state(PBST_PAUSED);
 
 		g_patcher_outdated = true;
