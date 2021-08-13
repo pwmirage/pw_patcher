@@ -444,7 +444,7 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p,
 				normalize_json_string(json_f->s, true);
 
 				uint8_t *c = (uint8_t *)json_f->s + strlen(json_f->s) - 1;
-				while (c != (uint8_t *)json_f->s && (*c == ' ' || *c == 0xa0 || *c == 0xc2)) {
+				while (c != (uint8_t *)json_f->s && *c == ' ') {
 					*c = 0;
 					c--;
 				}
@@ -473,7 +473,7 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p,
 				normalize_json_string(json_f->s, true);
 
 				uint8_t *c = (uint8_t *)json_f->s + strlen(json_f->s) - 1;
-				while (c != (uint8_t *)json_f->s && (*c == ' ' || *c == 0xa0 || *c == 0xc2)) {
+				while (c != (uint8_t *)json_f->s && *c == ' ') {
 					*c = 0;
 					c--;
 				}

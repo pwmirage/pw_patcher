@@ -229,6 +229,12 @@ normalize_json_string(char *str, bool use_crlf)
 			read_b++;
 		}
 
+		if ((unsigned char)*read_b == 0xc2 && (unsigned char)*(read_b + 1) == 0xa0) {
+			/* replace UTF-8 whitespace with normal space */
+			c = ' ';
+			read_b++;
+		}
+
 		if (!*read_b) {
 			break;
 		}
