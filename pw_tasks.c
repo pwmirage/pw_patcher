@@ -929,6 +929,32 @@ read_award(void **buf_p, FILE *fp, bool is_server)
 		*(uint32_t *)serializer_get_field(slzr, "_" name "_cnt", data) = cnt; \
 	})
 
+#define SAVE_TRUNCATED_TBL_CNT(name, slzr, data) \
+	({ \
+		struct pw_chain_table *tbl = *(void **)serializer_get_field(slzr, name, data); \
+		void *el; \
+		uint32_t cnt = 0; \
+		PW_CHAIN_TABLE_FOREACH(el, tbl) { \
+			uint32_t id = *(uint32_t *)el; \
+			if (id) { \
+				cnt++; \
+			} \
+		} \
+		*(uint32_t *)serializer_get_field(slzr, "_" name "_cnt", data) = cnt; \
+	})
+
+#define TRUNCATE_TBL(name, slzr, data) \
+	({ \
+		struct pw_chain_table *tbl = *(void **)serializer_get_field(slzr, name, data); \
+		struct pw_chain_el *chain = tbl ? tbl->chain : NULL; \
+		uint32_t cnt = 0; \
+		while (chain) { \
+			cnt += chain->count; \
+			chain = chain->next; \
+		} \
+		*(uint32_t *)serializer_get_field(slzr, "_" name "_cnt", data) = cnt; \
+	})
+
 static void
 write_award(void **buf_p, FILE *fp, bool is_client)
 {
@@ -982,13 +1008,15 @@ write_award(void **buf_p, FILE *fp, bool is_client)
 			item_count++;
 		}
 
-		SAVE_TBL_CNT("items", table->serializer, el_start);
+		SAVE_TRUNCATED_TBL_CNT("items", table->serializer, el_start);
 
 		fwrite(el, 5, 1, fp);
 		el += 5;
 
 		PW_CHAIN_TABLE_FOREACH(item, item_table) {
-			fwrite(item, item_table->el_size, 1, fp);
+			if (*(uint32_t *)item != 0) {
+				fwrite(item, item_table->el_size, 1, fp);
+			}
 		}
 	}
 
@@ -1252,13 +1280,16 @@ pw_tasks_idmap_save(struct pw_task_file *taskf, const char *filename)
 }
 
 static void
-save_chain_tbl(FILE *fp, void **buf)
+save_chain_tbl(FILE *fp, void **buf, bool nonzero_only)
 {
 	void **tbl_ptr = *(void ***)buf;
 	struct pw_chain_table *tbl = *tbl_ptr;
 	void *el;
 
 	PW_CHAIN_TABLE_FOREACH(el, tbl) {
+		if (nonzero_only && *(uint32_t *)el == 0) {
+			continue;
+		}
 		fwrite(el, tbl->el_size, 1, fp);
 	}
 
@@ -1310,11 +1341,11 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 
 	invert_bools(data);
 	SAVE_TBL_CNT("date_spans", slzr, data);
-	SAVE_TBL_CNT("premise_items", slzr, data);
-	SAVE_TBL_CNT("free_given_items", slzr, data);
+	SAVE_TRUNCATED_TBL_CNT("premise_items", slzr, data);
+	SAVE_TRUNCATED_TBL_CNT("free_given_items", slzr, data);
 	SAVE_TBL_CNT("premise_squad", slzr, data);
-	SAVE_TBL_CNT("req_monsters", slzr, data);
-	SAVE_TBL_CNT("req_items", slzr, data);
+	SAVE_TRUNCATED_TBL_CNT("req_monsters", slzr, data);
+	SAVE_TRUNCATED_TBL_CNT("req_items", slzr, data);
 	finalize_id_field("start_npc", slzr, data);
 	finalize_id_field("finish_npc", slzr, data);
 
@@ -1359,12 +1390,12 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 	fwrite(buf, 534, 1, fp);
 	buf += 534;
 
-	save_chain_tbl(fp, &buf);
-	save_chain_tbl(fp, &buf);
-	save_chain_tbl(fp, &buf);
-	save_chain_tbl(fp, &buf);
-	save_chain_tbl(fp, &buf);
-	save_chain_tbl(fp, &buf);
+	save_chain_tbl(fp, &buf, false);
+	save_chain_tbl(fp, &buf, true);
+	save_chain_tbl(fp, &buf, true);
+	save_chain_tbl(fp, &buf, false);
+	save_chain_tbl(fp, &buf, true);
+	save_chain_tbl(fp, &buf, true);
 
 	write_award(&buf, fp, is_client);
 	write_award(&buf, fp, is_client);
