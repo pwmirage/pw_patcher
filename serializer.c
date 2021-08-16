@@ -505,6 +505,11 @@ _deserialize(struct cjson *obj, struct serializer **slzr_table_p, void **data_p,
 					continue;
 				}
 
+				if (idx >= cnt) {
+					json_el = json_el->next;
+					continue;
+				}
+
 				void *arr_data_el = data + arr_el_size * idx;
 				tmp_slzr = slzr;
 
