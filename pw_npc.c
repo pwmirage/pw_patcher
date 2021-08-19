@@ -571,7 +571,9 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 			SPAWNER_ID(table_el) = node->id;
 			*(uint32_t *)serializer_get_field(table->serializer, "type", table_el) = 1;
 			*(uint8_t *)serializer_get_field(table->serializer, "auto_spawn", table_el) = 1;
-			*(uint8_t *)serializer_get_field(table->serializer, "auto_respawn", table_el) = 1;
+			if (strcmp(obj_type, "npc") == 0) {
+				*(uint8_t *)serializer_get_field(table->serializer, "auto_respawn", table_el) = 1;
+			}
 			grp_tbl = pw_chain_table_alloc("spawner_group", spawner_group_serializer, serializer_get_size(spawner_group_serializer), 8);
 			if (!grp_tbl) {
 				PWLOG(LOG_ERROR, "pw_chain_table_alloc() failed for spawner->groups\n");
