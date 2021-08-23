@@ -192,7 +192,7 @@ deserialize_trigger_id_fn(struct cjson *f, struct serializer *slzr, void *data)
 static struct serializer spawner_group_serializer[] = {
 	{ "type", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 	{ "count", _INT32 },
-	{ "_unused1", _INT32 },
+	{ "respawn_time", _INT32 },
 	{ "_unused2", _INT32 },
 	{ "aggro", _INT32 },
 	{ "_unused3", _FLOAT },
