@@ -372,7 +372,7 @@ static struct serializer recipes_serializer[] = {
 
 static struct serializer npc_sells_serializer[] = {
 	{ "id", _INT32 },
-	{ "name", _WSTRING(32) },
+	{ "option", _WSTRING(32) },
 	{ "pages", _ARRAY_START(8) },
 		{ "title", _WSTRING(8) },
 		{ "item_id", _ARRAY_START(32) },
@@ -428,7 +428,7 @@ static struct serializer npcs_serializer[] = {
 
 __attribute__((packed)) struct npc_crafts {
 	uint32_t id;
-	char16_t name[32];
+	char16_t option[32];
 	uint32_t make_skill_id;
 	uint32_t _produce_type;
 	struct npc_crafts_page {
@@ -439,7 +439,7 @@ __attribute__((packed)) struct npc_crafts {
 
 static struct serializer npc_crafts_serializer[] = {
 	{ "id", _INT32 },
-	{ "name", _WSTRING(32) },
+	{ "option", _WSTRING(32) },
 	{ "make_skill_id", _INT32 },
 	{ "_produce_type", _INT32 },
 	{ "pages", _ARRAY_START(8) },
