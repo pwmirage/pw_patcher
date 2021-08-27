@@ -1496,12 +1496,65 @@ static struct serializer npc_task_matter_service_serializer[] = {
 	{ "", _TYPE_END },
 };
 
-static struct serializer damagerune_sub_type_serializer[] = { { "", _TYPE_END } };
-static struct serializer armorrune_sub_type_serializer[] = { { "", _TYPE_END } };
+static struct serializer damagerune_sub_type_serializer[] = {
+	{ "id", _INT32 },
+	{ "name", _WSTRING(32) },
+	{ "", _TYPE_END },
+};
+
+static struct serializer armorrune_sub_type_serializer[] = {
+	{ "id", _INT32 },
+	{ "name", _WSTRING(32) },
+	{ "", _TYPE_END },
+};
+
+static struct serializer monster_addon_serializer[] = {
+	{ "id", _INT32 },
+	{ "name", _WSTRING(32) },
+	{ "num_params", _INT32 },
+	{ "params", _ARRAY_START(3) },
+		{ "", _INT32 },
+	{ "", _ARRAY_END },
+	{ "", _TYPE_END },
+};
+
+static struct serializer monster_type_serializer[] = {
+	{ "id", _INT32 },
+	{ "name", _WSTRING(32) },
+	{ "addons", _ARRAY_START(16) },
+		{ "id", _INT32 },
+		{ "prob", _FLOAT },
+	{ "", _ARRAY_END },
+	{ "", _TYPE_END },
+};
+
+static struct serializer fashion_major_type_serializer[] = {
+	{ "id", _INT32 },
+	{ "name", _WSTRING(32) },
+	{ "", _TYPE_END },
+};
+
+static struct serializer fashion_sub_type_serializer[] = {
+	{ "id", _INT32 },
+	{ "name", _WSTRING(32) },
+	{ "equip_mask", _INT32 },
+	{ "", _TYPE_END },
+};
+
+static struct serializer gm_generator_type_serializer[] = {
+	{ "id", _INT32 },
+	{ "name", _WSTRING(32) },
+	{ "", _TYPE_END },
+};
+
+static struct serializer pet_type_serializer[] = {
+	{ "id", _INT32 },
+	{ "name", _WSTRING(32) },
+	{ "", _TYPE_END },
+};
+
 static struct serializer skilltome_sub_type_serializer[] = { { "", _TYPE_END } };
 static struct serializer unionscroll_essence_serializer[] = { { "", _TYPE_END } };
-static struct serializer monster_addon_serializer[] = { { "", _TYPE_END } };
-static struct serializer monster_type_serializer[] = { { "", _TYPE_END } };
 static struct serializer npc_talk_service_serializer[] = { { "", _TYPE_END } };
 static struct serializer npc_buy_service_serializer[] = { { "", _TYPE_END } };
 static struct serializer npc_repair_service_serializer[] = { { "", _TYPE_END } };
@@ -1532,14 +1585,10 @@ static struct serializer face_faling_essence_serializer[] = { { "", _TYPE_END } 
 static struct serializer player_levelexp_config_serializer[] = { { "", _TYPE_END } };
 static struct serializer mine_type_serializer[] = { { "", _TYPE_END } };
 static struct serializer npc_identify_service_serializer[] = { { "", _TYPE_END } };
-static struct serializer fashion_major_type_serializer[] = { { "", _TYPE_END } };
-static struct serializer fashion_sub_type_serializer[] = { { "", _TYPE_END } };
 static struct serializer faceticket_major_type_serializer[] = { { "", _TYPE_END } };
 static struct serializer faceticket_sub_type_serializer[] = { { "", _TYPE_END } };
 static struct serializer facepill_major_type_serializer[] = { { "", _TYPE_END } };
 static struct serializer facepill_sub_type_serializer[] = { { "", _TYPE_END } };
-static struct serializer gm_generator_type_serializer[] = { { "", _TYPE_END } };
-static struct serializer pet_type_serializer[] = { { "", _TYPE_END } };
 static struct serializer pet_essence_serializer[] = { { "", _TYPE_END } };
 static struct serializer npc_war_towerbuild_service_serializer[] = { { "", _TYPE_END } };
 static struct serializer player_secondlevel_config_serializer[] = { { "", _TYPE_END } };
@@ -1594,21 +1643,31 @@ pw_elements_serialize(struct pw_elements *elements)
 	EXPORT_TABLE(elements, npc_sells, "npc_sells.json");
 	EXPORT_TABLE(elements, npc_crafts, "npc_crafts.json");
 
-	EXPORT_TABLE(elements, weapon_major_types, "weapon_major_typess.json");
+	EXPORT_TABLE(elements, weapon_major_types, "weapon_major_types.json");
 	EXPORT_TABLE(elements, weapon_minor_types, "weapon_minor_types.json");
-	EXPORT_TABLE(elements, armor_major_types, "armor_major_typess.json");
+	EXPORT_TABLE(elements, armor_major_types, "armor_major_types.json");
 	EXPORT_TABLE(elements, armor_minor_types, "armor_minor_types.json");
-	EXPORT_TABLE(elements, decoration_major_types, "decoration_major_typess.json");
+	EXPORT_TABLE(elements, decoration_major_types, "decoration_major_types.json");
 	EXPORT_TABLE(elements, decoration_minor_types, "decoration_minor_types.json");
 
-	EXPORT_TABLE(elements, medicine_major_types, "medicine_major_typess.json");
-	EXPORT_TABLE(elements, medicine_minor_types, "medicine_minor_types.json");
-	EXPORT_TABLE(elements, material_major_type, "material_major_types.json");
-	EXPORT_TABLE(elements, material_sub_type, "material_minor_types.json");
+	EXPORT_TABLE(elements, armorrune_sub_type, "armorrune_types.json");
+	EXPORT_TABLE(elements, damagerune_sub_type, "attackrune_types.json");
 
-	EXPORT_TABLE(elements, projectile_types, "projectile_typess.json");
+	EXPORT_TABLE(elements, medicine_major_types, "medicine_major_types.json");
+	EXPORT_TABLE(elements, medicine_minor_types, "medicine_minor_types.json");
+
+	EXPORT_TABLE(elements, projectile_types, "projectile_types.json");
 	EXPORT_TABLE(elements, quiver_sub_type, "quiver_types.json");
 	EXPORT_TABLE(elements, stone_types, "stone_types.json");
+
+	EXPORT_TABLE(elements, monster_addon, "monster_addons.json");
+	EXPORT_TABLE(elements, monster_type, "monster_types.json");
+	EXPORT_TABLE(elements, npc_type, "npc_types.json");
+	EXPORT_TABLE(elements, mine_type, "mine_types.json");
+	EXPORT_TABLE(elements, fashion_major_type, "fashion_major_types.json");
+	EXPORT_TABLE(elements, fashion_sub_type, "fashion_sub_types.json");
+	EXPORT_TABLE(elements, gm_generator_type, "gm_generator_types.json");
+	EXPORT_TABLE(elements, pet_type, "pet_types.json");
 
 	EXPORT_TABLE(elements, armor_sets, "armor_sets.json");
 	EXPORT_TABLE(elements, equipment_addon, "equipment_addon.json");
