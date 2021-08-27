@@ -2273,34 +2273,6 @@ pw_elements_save(struct pw_elements *el, const char *filename, bool is_server)
 		struct pw_chain_table *table = el->tables[i];
 
 		if (strcmp(table->name, "npc_crafts") == 0) {
-			void *el;
-			struct npc_crafts *crafts;
-			struct pw_idmap_el *node;
-			struct recipes *recipe;
-
-			PW_CHAIN_TABLE_FOREACH(el, table) {
-				crafts = el;
-				for (int p = 0; p < 8; p++) {
-					for (int ridx = 0; ridx < 32; ridx++) {
-						uint32_t rid = crafts->pages[p].recipe_id[ridx];
-						if (rid == 0) {
-							continue;
-						}
-
-						node = pw_idmap_get(g_elements_map, rid, g_elements_recipes_idmap_id);
-
-						if (node) {
-							recipe = node->data;
-							rid = recipe->targets[0].id ? rid : 0;
-						} else {
-							rid = 0;
-						}
-
-						crafts->pages[p].recipe_id[ridx] = rid;
-					}
-				}
-			}
-
 			pw_elements_save_table(table, fp, is_server ? 72 : 0);
 		} else if (is_server && strcmp(table->name, "recipes") == 0) {
 			pw_elements_save_table(table, fp, 88);
