@@ -23,6 +23,8 @@
 #include "pw_npc.h"
 #include "pw_tasks.h"
 
+void extra_drops_load(const char *filename);
+
 static void
 load_icons(void) {
 	FILE *fp = fopen("patcher/iconlist_ivtrm.txt", "r");
@@ -245,6 +247,8 @@ main(int argc, char *argv[])
 		rc = print_tasks(argv[2]);
 	} else if (strcmp(type, "npcs") == 0) {
 		print_npcgen();
+	} else if (strcmp(type, "extra_drops") == 0) {
+		extra_drops_load("extra_drops.sev");
 	} else {
 		print_help(argv);
 		return 1;
