@@ -521,12 +521,15 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 	const char *obj_type;
 	const char *db_type;
 	int64_t id;
+	struct cjson *c;
 
-	id = JSi(obj, "id");
-	if (!id) {
+	c = JS(obj, "id");
+	if (c->type != CJSON_TYPE_INTEGER) {
 		PWLOG(LOG_ERROR, "missing obj.id\n");
 		return -1;
 	}
+
+	id = c->i;
 
 	db_type = JSs(obj, "_db", "type");
 	obj_type = JSs(obj, "type");
