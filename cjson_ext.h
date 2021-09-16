@@ -24,8 +24,8 @@ struct cjson *cjson_js_ext(size_t argc, ...);
 #define PP_RSEQ_N() 8, 7, 6, 5, 4, 3, 2, 1, 0
 
 #define JS(...) cjson_js_ext(PP_NARG(__VA_ARGS__), __VA_ARGS__)
-#define JSi(...) JS(__VA_ARGS__)->i
-#define JSf(...) JS(__VA_ARGS__)->d
-#define JSs(...) JS(__VA_ARGS__)->s
+#define JSi(...) cjson_int(JS(__VA_ARGS__))
+#define JSf(...) cjson_float(JS(__VA_ARGS__))
+#define JSs(...) cjson_str(JS(__VA_ARGS__))
 
 #endif /* CJSON_EXT_H */

@@ -47,4 +47,8 @@ struct cjson *cjson_obj(struct cjson *json, const char *key);
 int cjson_add_child(struct cjson *parent, struct cjson *child);
 void cjson_free(struct cjson *json);
 
+int64_t cjson_int(struct cjson *json);
+double cjson_float(struct cjson *json);
+char *cjson_str(struct cjson *json);
+
 #endif /* CJSON_H */

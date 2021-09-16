@@ -686,3 +686,51 @@ cjson_js_ext(size_t argc, ...)
 
 	return obj;
 }
+
+int64_t
+cjson_int(struct cjson *c)
+{
+	switch (c->type) {
+		case 2:
+			return atoi(c->s);
+		case 5:
+			return c->d;
+		case 3:
+		case 4:
+			return c->i;
+		default:
+			return 0;
+	}
+}
+
+double
+cjson_float(struct cjson *c)
+{
+	switch (c->type) {
+		case 2:
+			return atof(c->s);
+		case 5:
+			return c->d;
+		case 3:
+		case 4:
+			return c->i;
+		default:
+			return 0;
+	}
+}
+
+char *
+cjson_str(struct cjson *c)
+{
+	switch (c->type) {
+		case 2:
+			return c->s;
+		case 5:
+			return "";
+		case 3:
+		case 4:
+			return "";
+		default:
+			return "";
+	}
+}
