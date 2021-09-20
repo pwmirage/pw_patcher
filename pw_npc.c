@@ -536,7 +536,7 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 	if (strncmp(db_type, "triggers_", strlen("triggers_")) == 0) {
 		table = &npc->triggers;
 		node = pw_idmap_get(npc->idmap, id, table->idmap_type);
-	} else if (obj_type) {
+	} else if (strlen(obj_type) > 0) {
 		if (strcmp(obj_type, "npc") == 0) {
 			table = &npc->spawners;
 		} else if (strcmp(obj_type, "monster") == 0) {
