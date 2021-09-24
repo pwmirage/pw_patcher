@@ -70,6 +70,12 @@ check_deps(void)
 	DWORD nResult = 0;
 
 	RegQueryValueEx(hKey, "Installed", 0, NULL, (LPBYTE)&nResult, &dwBufferSize);
+	if (nResult != 0) {
+		return 0;
+	}
+
+	RegOpenKeyEx(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x86", 0, KEY_READ, &hKey);
+	RegQueryValueEx(hKey, "Installed", 0, NULL, (LPBYTE)&nResult, &dwBufferSize);
 	return nResult == 0 ? -1 : 0;
 }
 
