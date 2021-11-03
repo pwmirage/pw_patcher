@@ -1022,6 +1022,37 @@ static struct serializer stone_essence_serializer[] = {
 	{ "", _TYPE_END },
 };
 
+static size_t
+deserialize_tasks_id_field_fn(struct cjson *f, struct serializer *slzr, void *data)
+{
+	int64_t val = JSi(f);
+
+	if (f->type == CJSON_TYPE_NONE) {
+		return 4;
+	}
+
+	if (val >= 0x80000000) {
+		int rc = pw_idmap_get_async(g_tasks_map, val, 0, deserialize_id_field_async_fn, data);
+		if (rc) {
+			assert(false);
+		}
+	} else {
+		deserialize_log(f, data);
+		*(uint32_t *)(data) = (uint32_t)val;
+	}
+
+	return 4;
+}
+
+static size_t
+serialize_tasks_id_field_fn(FILE *fp, struct serializer *f, void *data)
+{
+	uint32_t id = *(uint32_t *)data;
+
+	fprintf(fp, "\"%s\":%d,", f->name, id);
+	return 4;
+}
+
 static struct serializer taskdice_essence_serializer[] = {
 	{ "id", _CUSTOM, serialize_item_id_fn, deserialize_item_id_fn },
 	{ "type", _CONST_INT(19) },
@@ -1029,7 +1060,7 @@ static struct serializer taskdice_essence_serializer[] = {
 	{ "file_matter", _STRING(128) },
 	{ "icon", _CUSTOM, icon_serialize_fn, icon_deserialize_fn },
 	{ "tasks", _ARRAY_START(8) },
-		{ "id", _INT32 },
+		{ "id", _CUSTOM, serialize_tasks_id_field_fn, deserialize_tasks_id_field_fn },
 		{ "prob", _FLOAT },
 	{ "", _ARRAY_END },
 	{ "use_on_pick", _INT32 },
@@ -1432,38 +1463,6 @@ struct __attribute__((packed)) player_levelexp_config {
 	uint16_t name[32];
 	int32_t exp[150];
 };
-
-static size_t
-deserialize_tasks_id_field_fn(struct cjson *f, struct serializer *slzr, void *data)
-{
-	int64_t val = JSi(f);
-
-	if (f->type == CJSON_TYPE_NONE) {
-		return 4;
-	}
-
-	if (val >= 0x80000000) {
-		int rc = pw_idmap_get_async(g_tasks_map, val, 0, deserialize_id_field_async_fn, data);
-		if (rc) {
-			assert(false);
-		}
-	} else {
-		deserialize_log(f, data);
-		*(uint32_t *)(data) = (uint32_t)val;
-	}
-
-	return 4;
-}
-
-static size_t
-serialize_tasks_id_field_fn(FILE *fp, struct serializer *f, void *data)
-{
-	uint32_t id = *(uint32_t *)data;
-
-	fprintf(fp, "\"%s\":%d,", f->name, id);
-	return 4;
-}
-
 
 static struct serializer npc_tasks_in_serializer[] = {
 	{ "id", _INT32 },
@@ -1879,6 +1878,16 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 	}
 
 	deserialize(obj, table->serializer, table_el);
+
+	if (is_item && strcmp(obj_type, "taskdice_essence") == 0) {
+		void *tasks = serializer_get_field(table->serializer, "tasks", table_el);
+		float *prob = (float *)(tasks + 4);
+
+		if (*prob == 0) {
+			*prob = 1.0;
+		}
+	}
+
 	return 0;
 }
 
