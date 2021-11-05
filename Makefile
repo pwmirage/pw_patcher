@@ -4,6 +4,7 @@ _CFLAGS := -O3 -MD -MP -fno-strict-aliasing -Wall -Wno-format-truncation $(CFLAG
 
 ifeq ($(OS),Windows_NT)
 	ALL_OBJECTS := $(ALL_OBJECTS) gui.o client_patcher.o client_launcher.o client_launcher_settings.o updater.o sha1.o pw_pck.o game_config.o
+	_CFLAGS := -D_WIN32_WINNT=0x0502 $(_CFLAGS)
 endif
 
 $(@shell mkdir -p build &>/dev/null)
@@ -42,7 +43,8 @@ build/updater: build/gcc_ver.h build/updater.o
 	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ updater_rc.o -Wl,--no-whole-archive -Wl,--subsystem,windows -lwininet -Wno-address-of-packed-member
 
 build/mgpck: build/gcc_ver.h build/cjson.o build/common.o build/mgpck.o build/pw_pck.o build/avl.o build/zpipe.o
-	gcc $(_CFLAGS) -o $@ $^ -Wl,--subsystem,console -lwininet -Wl,-Bstatic -lz -liconv -Wl,-Bdynamic
+	windres -i mgpck.rc -o mgpck_rc.o
+	gcc $(_CFLAGS) -o $@ $^ mgpck_rc.o -Wl,--subsystem,console -lwininet -Wl,-Bstatic -lz -liconv -Wl,-Bdynamic
 
 build/%.o: %.c
 	gcc $(_CFLAGS) -c -o $@ $<
