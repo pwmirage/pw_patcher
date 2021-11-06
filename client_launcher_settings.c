@@ -68,10 +68,9 @@ init_gui(HWND hwnd, HINSTANCE hInst)
                 WS_VISIBLE | WS_CHILD | WS_GROUP | SS_LEFT,
                 10, 11, 210, 15, hwnd, (HMENU)0, hInst, 0);
 
-        CreateWindow("button", "Run with legacy Direct3D8 (slower, and\r\n"
-				"won't support any of Mirage's custom\r\n"
-				"windows, but might be required to work\r\n"
-				"on older PCs)",
+        CreateWindow("button", "Run with legacy Direct3D8 (slower, but\r\n"
+				"but might be required to work on some\r\n"
+				"systems)",
                 WS_VISIBLE | WS_CHILD | BS_CHECKBOX | BS_MULTILINE,
                 10, 35, 210, 60,
                 hwnd, (HMENU)CHECKBOX_D3D8, hInst, NULL);
