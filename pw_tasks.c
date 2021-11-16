@@ -702,6 +702,70 @@ deserialize_avail_frequency_fn(struct cjson *f, struct serializer *slzr, void *d
 	return 0;
 }
 
+static size_t
+serialize_premise_class_fn(FILE *fp, struct serializer *f, void *data)
+{
+	uint32_t arr_cnt = *(uint32_t *)data;
+	uint32_t *arr = (uint32_t *)(data + 4);
+	uint8_t classmask = 0;
+
+	if (fp == g_nullfile) {
+		return 0;
+	}
+
+	for (int i = 0; i < arr_cnt; i++) {
+		uint32_t val = arr[i];
+		assert(val < 8);
+
+		classmask |= (1 << val);
+	}
+
+	if (arr_cnt == 0) {
+		classmask = 255;
+	}
+
+	fprintf(fp, "\"%s\":%d,", f->name, classmask);
+	return 0;
+}
+
+static size_t
+deserialize_premise_class_fn(struct cjson *f, struct serializer *slzr, void *data)
+{
+	if (f->type == CJSON_TYPE_NONE) {
+		return 0;
+	}
+
+	uint32_t *arr_cnt = (uint32_t *)data;
+	uint32_t *arr = (uint32_t *)(data + 4);
+
+	uint32_t val = JSi(f);
+	if (val == 0) {
+		/* pw treats no class requirement as all-class available, so we make
+		 * it require sin and psychic */
+		val = (1 << 2) | (1 << 5);
+	}
+
+	uint32_t fullmask = 255 & ~((1 << 2) | (1 << 5));
+	if ((val & fullmask) == fullmask) {
+		*arr_cnt = 0;
+		return 0;
+	}
+
+	*arr_cnt = 0;
+	for (int i = 0; i < 8; i++) {
+		bool isset = val & (1 << i);
+
+		if (!isset) {
+			continue;
+		}
+
+		arr[(*arr_cnt)++] = i;
+	}
+
+	return 0;
+}
+
+
 static struct serializer pw_task_serializer[] = {
 	{ "start_by", _CUSTOM, serialize_start_by_fn, deserialize_start_by },
 	{ "avail_frequency", _CUSTOM, serialize_avail_frequency_fn, deserialize_avail_frequency_fn },
@@ -779,8 +843,9 @@ static struct serializer pw_task_serializer[] = {
 	{ "show_without_premise_faction_role", _INT8 },
 	{ "premise_gender", _INT32 },
 	{ "show_without_premise_gender", _INT8 },
+	{ "premise_class", _CUSTOM, serialize_premise_class_fn, deserialize_premise_class_fn },
 	{ "_premise_class_cnt", _INT32 },
-	{ "premise_class", _ARRAY_START(8) },
+	{ "_premise_class_arr", _ARRAY_START(8) },
 		{ "", _INT32 },
 	{ "", _ARRAY_END },
 	{ "show_without_class", _INT8 },
