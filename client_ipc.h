@@ -14,6 +14,12 @@
 #define MG_GUI_ID_PLAY 3
 #define MG_GUI_ID_REPAIR 4
 #define MG_GUI_ID_SETTINGS 5
+#define MG_GUI_ID_CHANGELOG 6
+#define MG_GUI_ID_STATUS_LEFT 7
+#define MG_GUI_ID_STATUS_RIGHT 8
+#define MG_GUI_ID_VERSION 9
+#define MG_GUI_ID_PROGRESS 10
+#define MG_GUI_ID_IMAGE 11
 
 enum mg_patcher_msg_command {
 	MGP_MSG_INIT = 0,
@@ -29,7 +35,7 @@ struct mg_patcher_msg_status {
 	unsigned num_params;
 };
 
-struct mg_patcher_msg_status mg_patcher_msg_status_left[] = {
+static struct mg_patcher_msg_status mg_patcher_msg_status_left[] = {
 #define MGP_LMSG_FETCHING_CHANGES 0
 	{ "Fetching changes ..." },
 #define MGP_LMSG_DOWNLOADING_CHANGES 1
@@ -42,7 +48,7 @@ struct mg_patcher_msg_status mg_patcher_msg_status_left[] = {
 	{ "Ready to play" },
 };
 
-struct mg_patcher_msg_status mg_patcher_msg_status_right[] = {
+static struct mg_patcher_msg_status mg_patcher_msg_status_right[] = {
 #define MGP_RMSG_CANT_FETCH 0
 	{ "Can't fetch patch list" },
 #define MGP_RMSG_CANT_PARSE 1

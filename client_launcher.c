@@ -15,6 +15,7 @@
 #include "cjson_ext.h"
 #include "gui.h"
 #include "game_config.h"
+#include "client_ipc.h"
 
 #define MG_GUI_ID_QUIT 1
 #define MG_GUI_ID_PATCH 2
@@ -102,7 +103,7 @@ on_init(int argc, char *argv[])
 		argc--;
 	}
 
-	set_text(g_status_left_lbl, "Reading local version ...");
+	set_text(MG_GUI_ID_STATUS_LEFT, "Reading local version ...");
 
 	if (access("patcher", F_OK) != 0) {
 		set_progress_state(PBST_ERROR);
@@ -115,7 +116,7 @@ on_init(int argc, char *argv[])
 	rc = game_config_parse("patcher\\game.cfg");
 	if (rc != 0) {
 		PWLOG(LOG_ERROR, "game_config_parse() failed with rc=%d\n", rc);
-		set_text(g_status_right_lbl, "Failed. Invalid file permissions?");
+		set_text(MG_GUI_ID_STATUS_RIGHT, "Failed. Invalid file permissions?");
 		set_progress_state(PBST_ERROR);
 		set_progress(100);
 		return;
@@ -124,7 +125,7 @@ on_init(int argc, char *argv[])
 	rc = pw_version_load(&g_version);
 	if (rc < 0) {
 		PWLOG(LOG_ERROR, "pw_version_load() failed with rc=%d\n", rc);
-		set_text(g_status_right_lbl, "Failed. Invalid file permissions?");
+		set_text(MG_GUI_ID_STATUS_RIGHT, "Failed. Invalid file permissions?");
 		set_progress_state(PBST_ERROR);
 		set_progress(100);
 		return;
@@ -141,14 +142,14 @@ on_init(int argc, char *argv[])
 		snprintf(g_version.branch, sizeof(g_version.branch), "%s", g_branch_name);
 	}
 
-	set_text(g_status_left_lbl, "Fetching latest version ...");
+	set_text(MG_GUI_ID_STATUS_LEFT, "Fetching latest version ...");
 
 	snprintf(tmpbuf, sizeof(tmpbuf), "https://pwmirage.com/editor/project/fetch/%s/since/%u/%u",
 			g_branch_name, g_version.version, g_version.generation);
 
 	rc = download_mem(tmpbuf, &g_latest_version_str, &len);
 	if (rc) {
-		set_text(g_status_right_lbl, "Can't fetch patch list");
+		set_text(MG_GUI_ID_STATUS_RIGHT, "Can't fetch patch list");
 		set_progress_state(PBST_ERROR);
 		set_progress(100);
 		return;
@@ -156,7 +157,7 @@ on_init(int argc, char *argv[])
 
 	g_latest_version = cjson_parse(g_latest_version_str);
 	if (!g_latest_version) {
-		set_text(g_status_right_lbl, "Can't parse patch list");
+		set_text(MG_GUI_ID_STATUS_RIGHT, "Can't parse patch list");
 		PWLOG(LOG_ERROR, "Can't parse patch list: %s\n", tmpbuf);
 		fprintf(stderr, g_latest_version_str);
 		set_progress_state(PBST_ERROR);
@@ -173,9 +174,9 @@ on_init(int argc, char *argv[])
 	motd[motd_len + 1] = '\n';
 	motd[motd_len + 2] = 0;
 
-	set_text(g_changelog_lbl, motd);
+	set_text(MG_GUI_ID_CHANGELOG, motd);
 
-	set_text(g_status_left_lbl, "Checking prerequisites ...");
+	set_text(MG_GUI_ID_STATUS_LEFT, "Checking prerequisites ...");
 
 	struct cjson *files = JS(g_latest_version, "files");
 	for (i = 0; i < files->count; i++) {
@@ -215,7 +216,7 @@ on_init(int argc, char *argv[])
 		PWLOG(LOG_INFO, "sha mismatch on %s. expected=%s, got=%s\n", name, sha, tmpbuf);
 
 		snprintf(tmpbuf, sizeof(tmpbuf), "Downloading %s", name);
-		set_text(g_status_right_lbl, tmpbuf);
+		set_text(MG_GUI_ID_STATUS_RIGHT, tmpbuf);
 
 		rc = download(url, namebuf);
 		if (rc != 0) {
@@ -231,7 +232,7 @@ on_init(int argc, char *argv[])
 				set_progress_state(PBST_ERROR);
 				set_progress(100);
 				snprintf(errmsg, sizeof(errmsg), "Failed to download \"%s\".", namebuf);
-				set_text(g_status_right_lbl, errmsg);
+				set_text(MG_GUI_ID_STATUS_RIGHT, errmsg);
 				return;
 			}
 		}
@@ -245,9 +246,9 @@ on_init(int argc, char *argv[])
 		set_progress_state(PBST_PAUSED);
 
 		g_patcher_outdated = true;
-		set_text(g_patch_button, "Update");
-		enable_button(g_patch_button, true);
-		set_text(g_status_right_lbl, "Launcher outdated. Click the update button or download at pwmirage.com/launcher");
+		set_text(MG_GUI_ID_PATCH, "Update");
+		enable_button(MG_GUI_ID_PATCH, true);
+		set_text(MG_GUI_ID_STATUS_RIGHT, "Launcher outdated. Click the update button or download at pwmirage.com/launcher");
 		rc = MessageBox(g_win, "New version of the launcher is available! "
 				"Would you like to download it now?", "Launcher Update", MB_YESNO);
 		if (rc == IDYES) {
@@ -263,7 +264,7 @@ on_init(int argc, char *argv[])
 		return;
 	}
 
-	set_text(g_status_right_lbl, "");
+	set_text(MG_GUI_ID_STATUS_RIGHT, "");
 
 	if (access("element\\_d3d8.dll", F_OK) != 0 && access("element\\d3d8.dll", F_OK) != 0) {
 		rc = download("https://github.com/crosire/d3d8to9/releases/latest/download/d3d8.dll", "element\\_d3d8.dll");
@@ -277,12 +278,12 @@ on_init(int argc, char *argv[])
 
 	if (rc != 0) {
 		set_progress_state(PBST_PAUSED);
-		set_text(g_status_right_lbl, "Missing Visual Studio C++ Redistributable 2019 x86");
+		set_text(MG_GUI_ID_STATUS_RIGHT, "Missing Visual Studio C++ Redistributable 2019 x86");
 		int install = MessageBox(g_win, "Missing Visual Studio C++ Redistributable 2019 x86.\nWould you like to download now?", "Status", MB_YESNO);
 		if (install == IDYES) {
 			rc = download("https://aka.ms/vs/16/release/vc_redist.x86.exe", "patcher\\vc_redist.x86.exe");
 			if (rc != 0) {
-				set_text(g_status_right_lbl, "vc_redist.x86 download failed!");
+				set_text(MG_GUI_ID_STATUS_RIGHT, "vc_redist.x86 download failed!");
 				return;
 			}
 
@@ -292,7 +293,7 @@ on_init(int argc, char *argv[])
 			si.cb = sizeof(si);
 			char buf[] = "patcher\\vc_redist.x86.exe";
 			if(!CreateProcess(NULL, buf, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-				set_text(g_status_right_lbl, "vc_redist.x86 execution failed!");
+				set_text(MG_GUI_ID_STATUS_RIGHT, "vc_redist.x86 execution failed!");
 				return;
 			}
 
@@ -303,7 +304,7 @@ on_init(int argc, char *argv[])
 
 			if (check_deps() != 0) {
 				set_progress_state(PBST_ERROR);
-				set_text(g_status_right_lbl, "vc_redist.x86 installation failed!");
+				set_text(MG_GUI_ID_STATUS_RIGHT, "vc_redist.x86 installation failed!");
 				return;
 			}
 		} else {
@@ -314,19 +315,19 @@ on_init(int argc, char *argv[])
 	char msg[256];
 	snprintf(msg, sizeof(msg), "Current version: %d. Latest: %d", g_version.version, (int)JSi(g_latest_version, "version"));
 	PWLOG(LOG_INFO, "%s\n", msg);
-	set_text(g_status_left_lbl, msg);
+	set_text(MG_GUI_ID_STATUS_LEFT, msg);
 
 	if (g_version.version == JSi(g_latest_version, "version") &&
 			g_version.generation == JSi(g_latest_version, "generation")) {
 		set_progress_state(PBST_NORMAL);
-		set_text(g_status_right_lbl, "Ready to launch");
-		enable_button(g_play_button, true);
+		set_text(MG_GUI_ID_STATUS_RIGHT, "Ready to launch");
+		enable_button(MG_GUI_ID_PLAY, true);
 	} else {
 		set_progress_state(PBST_PAUSED);
-		set_text(g_status_right_lbl, "Update is required");
-		enable_button(g_patch_button, true);
+		set_text(MG_GUI_ID_STATUS_RIGHT, "Update is required");
+		enable_button(MG_GUI_ID_PATCH, true);
 	}
-	enable_button(g_repair_button, true);
+	enable_button(MG_GUI_ID_REPAIR, true);
 
 	if (g_quickupdate) {
 		patch_cb(NULL, NULL);
@@ -418,7 +419,7 @@ patch_cb(void *arg1, void *arg2)
 	set_progress_state(PBST_NORMAL);
 	set_progress(0);
 
-	enable_button(g_play_button, false);
+	enable_button(MG_GUI_ID_PLAY, false);
 
 	if (g_patcher_outdated) {
 		set_progress_state(PBST_PAUSED);
@@ -433,8 +434,8 @@ patch_cb(void *arg1, void *arg2)
 		return;
 	}
 
-	enable_button(g_patch_button, false);
-	set_text(g_status_right_lbl, "Loading local files");
+	enable_button(MG_GUI_ID_PATCH, false);
+	set_text(MG_GUI_ID_STATUS_RIGHT, "Loading local files");
 
 	STARTUPINFO si = {};
 	PROCESS_INFORMATION pi = {};
@@ -443,7 +444,7 @@ patch_cb(void *arg1, void *arg2)
 	PWLOG(LOG_INFO, "tid: %u\n", g_win_tid);
 	snprintf(tmpbuf, sizeof(tmpbuf), "patcher\\patcher.exe -branch %s -tid %u %s", g_branch_name, (unsigned)g_win_tid, g_force_update ? "--fresh" : "");
 	if(!CreateProcess(NULL, tmpbuf, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-		set_text(g_status_right_lbl, "Failed to start the patcher!");
+		set_text(MG_GUI_ID_STATUS_RIGHT, "Failed to start the patcher!");
 		set_progress_state(PBST_ERROR);
 		set_progress(100);
 		goto err_retry;
@@ -460,23 +461,23 @@ patch_cb(void *arg1, void *arg2)
 		set_progress(100);
 
 		if (exit_code != EXIT_FAILURE) {
-			set_text(g_status_right_lbl, "Patcher failed with an unexpected error. Check the log file for details");
+			set_text(MG_GUI_ID_STATUS_RIGHT, "Patcher failed with an unexpected error. Check the log file for details");
 		}
 		goto err_retry;
 	}
 
 	int written = snprintf(tmpbuf, sizeof(tmpbuf), "Current version: %d. ", (int)JSi(g_latest_version, "version"));
 	snprintf(tmpbuf + written, sizeof(tmpbuf) - written, "Latest: %d", (int)JSi(g_latest_version, "version"));
-	set_text(g_status_left_lbl, tmpbuf);
+	set_text(MG_GUI_ID_STATUS_LEFT, tmpbuf);
 
-	enable_button(g_patch_button, false);
-	enable_button(g_play_button, true);
+	enable_button(MG_GUI_ID_PATCH, false);
+	enable_button(MG_GUI_ID_PLAY, true);
 
 	return;
 
 err_retry:
 	set_progress(0);
-	enable_button(g_patch_button, true);
+	enable_button(MG_GUI_ID_PATCH, true);
 }
 
 void

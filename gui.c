@@ -17,14 +17,9 @@
 HINSTANCE g_instance;
 HWND g_win;
 HWND g_changelog_lbl;
-HWND g_status_left_lbl;
 static HWND g_status_left_lbl_shadow[4];
-HWND g_status_right_lbl;
 static HWND g_status_right_lbl_shadow[4];
-HWND g_version_lbl;
-HWND g_progress_bar;
 
-HWND g_quit_button;
 HWND g_patch_button;
 HWND g_play_button;
 HWND g_repair_button;
@@ -36,59 +31,73 @@ unsigned g_win_tid;
 
 static LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 static LRESULT CALLBACK WndProcChangelogBox(HWND, UINT, WPARAM, LPARAM);
-static LRESULT CALLBACK WndProcButton(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2);
 
-struct button_state_brush {
-	HBRUSH bg_brush;
-	COLORREF text_color;
+/* red play */
+static struct button_brush g_brush_red = {
+	.regular = { .bg = 0xcf4545, .text = 0xffffff },
+	.hover = { .bg = 0xac3838, .text = 0xffffff },
+	.pressed = { .bg = 0x8e3030, .text = 0xffffff },
+	.disabled = { .bg = 0xdfdfdf, .text = 0xa5a5a5 }
 };
 
-struct button_brush {
-	struct button_state_brush regular;
-	struct button_state_brush hover;
-	struct button_state_brush pressed;
-	struct button_state_brush disabled;
+/* yellow patch */
+static struct button_brush g_brush_yellow = {
+	.regular = { .bg = 0xcfc845, .text = 0x212121 },
+	.hover = { .bg = 0xb1ab3b, .text = 0x000000 },
+	.pressed = { .bg = 0x8e3030, .text = 0xffffff },
+	.disabled = { .bg = 0xdfdfdf, .text = 0xa5a5a5 }
 };
 
-static bool g_button_state[16];
+static struct button_brush g_brush_settings = {
+	.regular = { .bg_res_id = 18254 },
+	.hover = { .bg_res_id = 18255 },
+	.pressed = { .bg_res_id = 18256 },
+	.disabled = { .bg_res_id = 18256 }
+};
 
-static struct button_brush g_brush_btn;
-static struct button_brush g_brush_btn_play;
-static struct button_brush g_brush_btn_patch;
-
-static HCURSOR g_cursor_hand;
-static HCURSOR g_cursor_arrow;
+HCURSOR g_cursor_hand;
+HCURSOR g_cursor_arrow;
 
 static void
-set_text_cb(void *_label, void *_txt)
+set_hwnd_text(HWND hwnd, const char *txt)
 {
-	SetWindowText(_label, _txt);
-	ShowWindow(_label, SW_HIDE);
-	ShowWindow(_label, SW_SHOW);
+	SetWindowText(hwnd, txt);
+	ShowWindow(hwnd, SW_HIDE);
+	ShowWindow(hwnd, SW_SHOW);
+}
 
-	if (_label == g_status_right_lbl) {
+static void
+set_text_cb(void *_hwnd_id, void *_txt)
+{
+	int hwnd_id = (int)(uintptr_t)_hwnd_id;
+
+	HWND hwnd = GetDlgItem(g_win, hwnd_id);
+	set_hwnd_text(hwnd, _txt);
+
+	if (hwnd_id == MG_GUI_ID_STATUS_RIGHT) {
 		for (int i = 0; i < 4; i++) {
-			set_text_cb(g_status_right_lbl_shadow[i], _txt);
+			set_hwnd_text(g_status_right_lbl_shadow[i], _txt);
 		}
-	} else if (_label == g_status_left_lbl) {
+	} else if (hwnd_id == MG_GUI_ID_STATUS_LEFT) {
 		for (int i = 0; i < 4; i++) {
-			set_text_cb(g_status_left_lbl_shadow[i], _txt);
+			set_hwnd_text(g_status_left_lbl_shadow[i], _txt);
 		}
 	}
 }
 
 void
-set_text(HWND label, const char *txt)
+set_text(int hwnd_id, const char *txt)
 {
-	ui_thread(set_text_cb, label, (void *)txt);
+	ui_thread(set_text_cb, (void *)(uintptr_t)hwnd_id, (void *)txt);
 }
 
 static void
 set_progress_cb(void *_percent, void *arg2)
 {
 	int percent = (int)(uintptr_t)_percent;
+	HWND bar = GetDlgItem(g_win, MG_GUI_ID_PROGRESS);
 
-	SendMessage(g_progress_bar, PBM_SETPOS, percent, 0);
+	SendMessage(bar, PBM_SETPOS, percent, 0);
 }
 
 void
@@ -101,8 +110,9 @@ static void
 set_progress_state_cb(void *_state, void *arg2)
 {
 	unsigned state = (int)(uintptr_t)_state;
+	HWND bar = GetDlgItem(g_win, MG_GUI_ID_PROGRESS);
 
-	SendMessage(g_progress_bar, (WM_USER + 16), state, 0);
+	SendMessage(bar, (WM_USER + 16), state, 0);
 }
 
 void
@@ -112,32 +122,24 @@ set_progress_state(unsigned state)
 }
 
 static void
-enable_button_cb(void *_button, void *_enable)
+enable_button_cb(void *_btn_id, void *_enable)
 {
-	int id = 0;
+	struct gui_button *btn;
+	int id = (int)(uintptr_t)_btn_id;
 
-	if (_button == g_quit_button) {
-		id = MG_GUI_ID_QUIT;
-	} else if (_button == g_patch_button) {
-		id = MG_GUI_ID_PATCH;
-	} else if (_button == g_play_button) {
-		id = MG_GUI_ID_PLAY;
-	} else if (_button == g_repair_button) {
-		id = MG_GUI_ID_REPAIR;
-	} else if (_button == g_settings_button) {
-		id = MG_GUI_ID_SETTINGS;
-	} else {
+	btn = gui_button_get(id);
+	if (!btn) {
 		return;
 	}
 
-	g_button_state[id] = (bool)(uintptr_t)_enable;
+	btn->enabled = (bool)(uintptr_t)_enable;
 	RedrawWindow(g_win, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW);
 }
 
 void
-enable_button(HWND button, bool enable)
+enable_button(int btn_id, bool enable)
 {
-	ui_thread(enable_button_cb, button, (void *)(uintptr_t)enable);
+	ui_thread(enable_button_cb, (void *)(uintptr_t)btn_id, (void *)(uintptr_t)enable);
 }
 
 static void
@@ -226,15 +228,15 @@ init_win(HINSTANCE hInst)
 }
 
 static WNDPROC g_orig_changelog_event_handler;
-static WNDPROC g_orig_button_handler;
 
 static void
 init_gui(HWND hwnd, HINSTANCE hInst)
 {
-	g_instance = hInst;
-
+	struct gui_button *btn;
 	HICON hIcon = LoadIcon(hInst, MAKEINTRESOURCE(18253));
+
 	SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
+	g_instance = hInst;
 
 	struct shadow_off {
 		int x, y;
@@ -252,9 +254,10 @@ init_gui(HWND hwnd, HINSTANCE hInst)
 				379, 21, hwnd, (HMENU)0, hInst, 0);
 	}
 
-	g_status_left_lbl = CreateWindowW(L"Static", L"",
+	CreateWindowW(L"Static", L"",
 			WS_VISIBLE | WS_CHILD | WS_GROUP | SS_LEFT,
-			20, 351, 379, 21, hwnd, (HMENU)0, hInst, 0);
+			20, 351, 379, 21, hwnd,
+			(HMENU)MG_GUI_ID_STATUS_LEFT, hInst, 0);
 
 	for (int i = 0; i < 4; i++) {
 		g_status_right_lbl_shadow[i] = CreateWindowW(L"Static", L"",
@@ -263,46 +266,44 @@ init_gui(HWND hwnd, HINSTANCE hInst)
 				379, 21, hwnd, (HMENU)0, hInst, 0);
 	}
 
-	g_status_right_lbl = CreateWindowW(L"Static", L"",
+	CreateWindowW(L"Static", L"",
 			WS_VISIBLE | WS_CHILD | WS_GROUP | SS_RIGHT,
-			20, 351, 379, 21, hwnd, (HMENU)0, hInst, 0);
+			20, 351, 379, 21, hwnd,
+			(HMENU)MG_GUI_ID_STATUS_RIGHT, hInst, 0);
 
 	g_changelog_lbl = CreateWindowW(L"Edit", L"[...]",
 			WS_VISIBLE | WS_CHILD | WS_GROUP | WS_VSCROLL | ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL,
-			580, 50, 320, 360, hwnd, (HMENU)0, hInst, 0);
+			580, 50, 320, 360, hwnd, (HMENU)MG_GUI_ID_CHANGELOG, hInst, 0);
 
-	g_version_lbl = CreateWindowW(L"Static", L"Patcher v1.15.0",
+	CreateWindowW(L"Static", L"Patcher v1.15.0",
 			WS_VISIBLE | WS_CHILD | WS_GROUP | SS_LEFT,
-			102, 500, 162, 18, hwnd, (HMENU)0, hInst, 0);
+			102, 500, 162, 18, hwnd, (HMENU)MG_GUI_ID_VERSION, hInst, 0);
 
-	g_progress_bar = CreateWindow(PROGRESS_CLASS, (LPTSTR) NULL,
+	CreateWindow(PROGRESS_CLASS, (LPTSTR) NULL,
 		WS_CHILD | WS_VISIBLE, 16, 372, 385, 32,
-		hwnd, (HMENU) 0, hInst, NULL);
+		hwnd, (HMENU)MG_GUI_ID_PROGRESS, hInst, NULL);
 
-	g_quit_button = CreateWindowW(L"Button", L"Quit",
-			WS_VISIBLE | WS_CHILD | WS_TABSTOP, 471, 260, 83, 23,
-			hwnd, (HMENU)MG_GUI_ID_QUIT, hInst, 0);
+	btn = gui_button_init(MG_GUI_ID_SETTINGS, "",
+			526, 12, 32, 32, hwnd, hInst);
+	btn->draw_ctx = &g_brush_settings;
+	btn->enabled = true;
 
-	g_patch_button = CreateWindowW(L"Button", L"Patch",
-			WS_VISIBLE | WS_CHILD | WS_TABSTOP | 0x00000001,
-			418, 330, 136, 34, hwnd, (HMENU)MG_GUI_ID_PATCH, hInst, 0);
+	btn = gui_button_init(MG_GUI_ID_QUIT, "Quit",
+			471, 260, 83, 23, hwnd, hInst);
+	btn->enabled = true;
 
-	g_play_button = CreateWindowW(L"Button", L"Play!",
-			WS_VISIBLE | WS_CHILD | WS_TABSTOP | 0x00000001,
-			418, 371, 136, 34, hwnd, (HMENU)MG_GUI_ID_PLAY, hInst, 0);
+	btn = gui_button_init(MG_GUI_ID_PATCH, "Patch",
+			418, 330, 136, 34, hwnd, hInst);
+	btn->draw_ctx = &g_brush_yellow;
 
-	g_repair_button = CreateWindowW(L"Button", L"Repair files",
-			WS_VISIBLE | WS_CHILD | WS_TABSTOP | 0x00000001,
-			471, 289, 83, 23, hwnd, (HMENU)MG_GUI_ID_REPAIR, hInst, 0);
+	btn = gui_button_init(MG_GUI_ID_PLAY, "Play!",
+			418, 371, 136, 34, hwnd, hInst);
+	btn->draw_ctx = &g_brush_red;
 
-	g_settings_button = CreateWindowW(L"Button", L"Settings",
-			WS_VISIBLE | WS_CHILD | WS_TABSTOP, 471, 219, 83, 23,
-			hwnd, (HMENU)MG_GUI_ID_SETTINGS, hInst, 0);
+	btn = gui_button_init(MG_GUI_ID_REPAIR, "Repair files",
+			471, 289, 83, 23, hwnd, hInst);
 
 	reload_banner("patcher/banner");
-
-	g_button_state[MG_GUI_ID_QUIT] = true;
-	g_button_state[MG_GUI_ID_SETTINGS] = true;
 
 	/* create bold font for labels */
 	HFONT default_font = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
@@ -318,15 +319,6 @@ init_gui(HWND hwnd, HINSTANCE hInst)
 	g_orig_changelog_event_handler =
 			(WNDPROC)SetWindowLongPtr(g_changelog_lbl,
 			GWLP_WNDPROC, (LONG_PTR)WndProcChangelogBox);
-
-	g_orig_button_handler =
-			(WNDPROC)SetWindowLongPtr(g_play_button,
-			GWLP_WNDPROC, (LONG_PTR)WndProcButton);
-
-	SetWindowLongPtr(g_repair_button, GWLP_WNDPROC, (LONG_PTR)WndProcButton);
-	SetWindowLongPtr(g_patch_button, GWLP_WNDPROC, (LONG_PTR)WndProcButton);
-	SetWindowLongPtr(g_quit_button, GWLP_WNDPROC, (LONG_PTR)WndProcButton);
-	SetWindowLongPtr(g_settings_button, GWLP_WNDPROC, (LONG_PTR)WndProcButton);
 }
 
 static char *g_cmdline;
@@ -359,34 +351,6 @@ on_init_cb(void *arg1, void *arg2)
 	on_init(argc, argv);
 }
 
-static HBRUSH
-create_pattern_brush(COLORREF color, HDC hdc, LPNMCUSTOMDRAW item)
-{
-	HDC hdcmem = CreateCompatibleDC(item->hdc);
-	HBITMAP hbitmap = CreateCompatibleBitmap(item->hdc, item->rc.right-item->rc.left, item->rc.bottom-item->rc.top);
-	HBRUSH pattern;
-
-	SelectObject(hdcmem, hbitmap);
-
-	if (hdc) {
-		BitBlt(hdcmem, 0, 0,
-			item->rc.right-item->rc.right - item->rc.right-item->rc.left,
-			item->rc.right-item->rc.bottom - item->rc.right-item->rc.top,
-			hdc, 0, 0, SRCCOPY);
-	} else {
-		HBRUSH brush = CreateSolidBrush(color);
-		FillRect(hdcmem, &item->rc, brush);
-		DeleteObject(brush);
-	}
-
-	pattern = CreatePatternBrush(hbitmap);
-
-	DeleteDC(hdcmem);
-	DeleteObject(hbitmap);
-
-	return pattern;
-}
-
 static LRESULT CALLBACK
 WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 {
@@ -399,11 +363,15 @@ WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 			task(on_init_cb, NULL, NULL);
 			break;
 		}
-		case WM_COMMAND:
-			if (g_button_state[(int)LOWORD(arg1)]) {
+		case WM_COMMAND: {
+			int btn_id = (int)LOWORD(arg1);
+			struct gui_button *btn = gui_button_get(btn_id);
+
+			if (btn && btn->enabled) {
 				on_button_click((int)LOWORD(arg1));
 			}
 			break;
+		 }
 		case MG_CB_MSG: {
 			struct ui_thread_ctx ctx, *org_ctx = (void *)arg2;
 
@@ -413,14 +381,16 @@ WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 			break;
 		}
 		case WM_CTLCOLOREDIT:
-		case WM_CTLCOLORSTATIC:
-			if ((HWND)arg2 == g_changelog_lbl) {
+		case WM_CTLCOLORSTATIC: {
+			int id = GetDlgCtrlID((HWND)arg2);
+
+			if (id == MG_GUI_ID_CHANGELOG) {
 				SetBkColor((HDC)arg1, RGB(250, 250, 250));
 				SetTextColor((HDC)arg1, RGB(80,44,44));
 				return (LRESULT)GetStockObject(HOLLOW_BRUSH);
-			} else if ((HWND)arg2 == g_status_left_lbl ||
-					(HWND)arg2 == g_status_right_lbl ||
-					(HWND)arg2 == g_version_lbl) {
+			} else if (id == MG_GUI_ID_STATUS_LEFT ||
+					id == MG_GUI_ID_STATUS_RIGHT ||
+					id == MG_GUI_ID_VERSION) {
 				SetBkMode((HDC)arg1, TRANSPARENT);
 				SetTextColor((HDC)arg1, RGB(250, 250, 250));
 				return (LRESULT)GetStockObject(HOLLOW_BRUSH);
@@ -434,6 +404,7 @@ WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 				}
 			}
 			break;
+		}
 		case WM_PAINT: {
 			PAINTSTRUCT ps;
 			HDC hdcDestination;
@@ -445,100 +416,21 @@ WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 		}
 		case WM_NOTIFY: {
 			LPNMHDR lpnmhdr = (LPNMHDR)arg2;
-			struct button_brush *btn_brush = NULL;
-			struct button_state_brush *btn_brush_state = NULL;
-			HWND btn;
+			LPNMCUSTOMDRAW item = (LPNMCUSTOMDRAW)lpnmhdr;
+			struct gui_button *btn;
+			unsigned ret = CDRF_DODEFAULT;
 
 			if (lpnmhdr->code != NM_CUSTOMDRAW) {
 				return CDRF_DODEFAULT;
 			}
 
-			LPNMCUSTOMDRAW item = (LPNMCUSTOMDRAW)lpnmhdr;
-			HGDIOBJ old_brush;
-
-			if (!g_brush_btn.regular.bg_brush) {
-				g_brush_btn.regular.bg_brush = create_pattern_brush(RGB(220, 207, 207), NULL, item);
-				g_brush_btn.regular.text_color = RGB(33, 33, 33);
-				g_brush_btn.hover.bg_brush = create_pattern_brush(RGB(191, 181, 181), NULL, item);
-				g_brush_btn.hover.text_color = RGB(0, 0, 0);
-				g_brush_btn.pressed.bg_brush = create_pattern_brush(RGB(162, 154, 154), NULL, item);
-				g_brush_btn.pressed.text_color = RGB(0, 0, 0);
-				g_brush_btn.disabled.bg_brush = create_pattern_brush(RGB(223, 223, 223), NULL, item);
-				g_brush_btn.disabled.text_color = RGB(165, 165, 165);
-
-
-				g_brush_btn_play.regular.bg_brush = create_pattern_brush(RGB(207, 69, 69), NULL, item);
-				g_brush_btn_play.regular.text_color = RGB(255, 255, 255);
-				g_brush_btn_play.hover.bg_brush = create_pattern_brush(RGB(172, 56, 56), NULL, item);
-				g_brush_btn_play.hover.text_color = RGB(255, 255, 255);
-				g_brush_btn_play.pressed.bg_brush = create_pattern_brush(RGB(142, 48, 48), NULL, item);
-				g_brush_btn_play.pressed.text_color = RGB(255, 255, 255);
-				g_brush_btn_play.disabled.bg_brush = create_pattern_brush(RGB(223, 223, 223), NULL, item);
-				g_brush_btn_play.disabled.text_color = RGB(165, 165, 165);
-
-
-				g_brush_btn_patch.regular.bg_brush = create_pattern_brush(RGB(207, 200, 69), NULL, item);
-				g_brush_btn_patch.regular.text_color = RGB(33, 33, 33);
-				g_brush_btn_patch.hover.bg_brush = create_pattern_brush(RGB(177, 171, 59), NULL, item);
-				g_brush_btn_patch.hover.text_color = RGB(0, 0, 0);
-				g_brush_btn_patch.pressed.bg_brush = create_pattern_brush(RGB(140, 135, 45), NULL, item);
-				g_brush_btn_patch.pressed.text_color = RGB(255, 255, 255);
-				g_brush_btn_patch.disabled.bg_brush = create_pattern_brush(RGB(223, 223, 223), NULL, item);
-				g_brush_btn_patch.disabled.text_color = RGB(165, 165, 165);
+			btn = gui_button_get(lpnmhdr->idFrom);
+			if (btn) {
+				assert(btn->draw_cb);
+				ret = btn->draw_cb(btn, item);
 			}
 
-			switch (lpnmhdr->idFrom) {
-				case MG_GUI_ID_PLAY:
-					btn_brush = &g_brush_btn_play;
-					btn = g_play_button;
-					break;
-				case MG_GUI_ID_QUIT:
-					btn = g_quit_button;
-					btn_brush = &g_brush_btn;
-					break;
-				case MG_GUI_ID_PATCH:
-					btn = g_patch_button;
-					btn_brush = &g_brush_btn_patch;
-					break;
-				case MG_GUI_ID_REPAIR:
-					btn = g_repair_button;
-					btn_brush = &g_brush_btn;
-					break;
-				case MG_GUI_ID_SETTINGS:
-					btn = g_settings_button;
-					btn_brush = &g_brush_btn;
-					break;
-			}
-
-			if (!btn_brush || lpnmhdr->idFrom >= sizeof(g_button_state) / sizeof(g_button_state[0])) {
-				return CDRF_DODEFAULT;
-			}
-
-			if (!g_button_state[lpnmhdr->idFrom]) {
-				/* disabled */
-				btn_brush_state = &btn_brush->disabled;
-			} else if (item->uItemState & CDIS_SELECTED) {
-				/* pressed */
-				btn_brush_state = &btn_brush->pressed;
-			} else if (item->uItemState & CDIS_HOT) {
-				/* mouse hover */
-				btn_brush_state = &btn_brush->hover;
-			} else {
-				/* default state */
-				btn_brush_state = &btn_brush->regular;
-			}
-
-			old_brush = SelectObject(item->hdc, btn_brush_state->bg_brush);
-			FillRect(item->hdc, &item->rc, btn_brush_state->bg_brush);
-			SelectObject(item->hdc, old_brush);
-
-			SetBkMode(item->hdc, TRANSPARENT);
-			SetTextColor(item->hdc, btn_brush_state->text_color);
-
-			char buf[64];
-			GetWindowText(btn, buf, sizeof(buf));
-			DrawTextA(item->hdc, buf, -1, &item->rc, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
-			return CDRF_SKIPDEFAULT;
+			return ret;
 	       }
 		case WM_DESTROY:
 			PostQuitMessage(0);
@@ -570,30 +462,10 @@ WndProcChangelogBox(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 	return ret;
 }
 
-static LRESULT CALLBACK
-WndProcButton(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
-{
-	switch(msg) {
-		case WM_SETCURSOR: {
-			int id = GetDlgCtrlID(hwnd);
-			if (id >= sizeof(g_button_state) / sizeof(g_button_state[0]) ||
-					g_button_state[id]) {
-				SetCursor(g_cursor_hand);
-			} else {
-				SetCursor(g_cursor_arrow);
-			}
-			return TRUE;
-		}
-	}
-
-	return CallWindowProc(g_orig_button_handler, hwnd, msg, arg1, arg2);
-}
-
 static void
 parse_patcher_msg(enum mg_patcher_msg_command type, unsigned param)
 {
 	int rc;
-	bool bval;
 	char tmpbuf[512];
 
 	fprintf(stderr, "patcher msg: %u, %u\n", (unsigned)type, param);
@@ -611,34 +483,14 @@ parse_patcher_msg(enum mg_patcher_msg_command type, unsigned param)
 			}
 
 			if (type == MGP_MSG_SET_STATUS_LEFT) {
-				set_text(g_status_left_lbl, tmpbuf);
+				set_text(MG_GUI_ID_STATUS_LEFT, tmpbuf);
 			} else {
-				set_text(g_status_right_lbl, tmpbuf);
+				set_text(MG_GUI_ID_STATUS_RIGHT, tmpbuf);
 			}
 			break;
 		case MGP_MSG_ENABLE_BUTTON:
 		case MGP_MSG_DISABLE_BUTTON:
-			bval = type == MGP_MSG_ENABLE_BUTTON;
-
-			switch (param) {
-				case MG_GUI_ID_QUIT:
-					enable_button(g_quit_button, bval);
-					break;
-				case MG_GUI_ID_PATCH:
-					enable_button(g_patch_button, bval);
-					break;
-				case MG_GUI_ID_PLAY:
-					enable_button(g_play_button, bval);
-					break;
-				case MG_GUI_ID_REPAIR:
-					enable_button(g_repair_button, bval);
-					break;
-				case MG_GUI_ID_SETTINGS:
-					enable_button(g_settings_button, bval);
-					break;
-				default:
-					break;
-			}
+			enable_button(param, type == MGP_MSG_ENABLE_BUTTON);
 			break;
 		case MGP_MSG_SET_PROGRESS:
 			set_progress(param);

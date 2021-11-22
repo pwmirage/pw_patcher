@@ -2,10 +2,13 @@
 
 1 RT_MANIFEST app.manifest
 18253 ICON "icon.ico"
+18254 BITMAP "settings.bmp"
+18255 BITMAP "settings_hover.bmp"
+18256 BITMAP "settings_press.bmp"
 
 1 VERSIONINFO
-FILEVERSION     2,2,3,0
-PRODUCTVERSION  2,2,3,0
+FILEVERSION     2,3,0,0
+PRODUCTVERSION  2,3,0,0
 BEGIN
   BLOCK "StringFileInfo"
   BEGIN
@@ -13,12 +16,12 @@ BEGIN
     BEGIN
       VALUE "CompanyName", "Perfect World Mirage"
       VALUE "FileDescription", "PW Mirage Patcher"
-      VALUE "FileVersion", "2.2.3.0"
+      VALUE "FileVersion", "2.3.0.0"
       VALUE "InternalName", "pwmirage"
       VALUE "LegalCopyright", "Beta @ pwmirage.com"
       VALUE "OriginalFilename", "pwmirage.exe"
       VALUE "ProductName", "Mirage Patcher"
-      VALUE "ProductVersion", "2.2.3"
+      VALUE "ProductVersion", "2.3.0"
     END
   END
   BLOCK "VarFileInfo"
