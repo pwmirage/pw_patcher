@@ -166,13 +166,12 @@ on_init(int argc, char *argv[])
 	}
 
 	char *motd = JSs(g_latest_version, "message");
-	normalize_json_string(motd, true);
+	normalize_json_string(motd, false);
 	size_t motd_len = strlen(motd);
 
 	/* note: there will always be space in the buffer */
-	motd[motd_len] = '\r';
-	motd[motd_len + 1] = '\n';
-	motd[motd_len + 2] = 0;
+	motd[motd_len] = '\n';
+	motd[motd_len + 1] = 0;
 
 	set_text(MG_GUI_ID_CHANGELOG, motd);
 
@@ -242,7 +241,7 @@ on_init(int argc, char *argv[])
 		}
 	}
 
-	if (JSi(g_latest_version, "launcher_version") > 2220) {
+	if (JSi(g_latest_version, "launcher_version") > 2300) {
 		set_progress_state(PBST_PAUSED);
 
 		g_patcher_outdated = true;

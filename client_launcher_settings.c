@@ -10,10 +10,12 @@
 #include "gui.h"
 #include "common.h"
 #include "game_config.h"
+#include "client_ipc.h"
 
 #define CHECKBOX_D3D8 1
 #define CHECKBOX_CFONT 2
 #define CHECKBOX_MAX 3
+#define BUTTON_REPAIR 4
 
 static BOOL CALLBACK
 hwnd_set_font(HWND child, LPARAM font)
@@ -31,8 +33,8 @@ show_settings_win(bool show)
 {
         WNDCLASS wc = {0};
 	RECT rect;
-	int w = 235;
-	int h = 180;
+	int w = 280;
+	int h = 170;
 
 	GetClientRect(g_win, &rect);
 	MapWindowPoints(g_win, NULL, (LPPOINT)&rect, 2);
@@ -64,22 +66,20 @@ init_gui(HWND hwnd, HINSTANCE hInst)
 	HICON hIcon = LoadIcon(hInst, MAKEINTRESOURCE(18253));
 	SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
 
-        CreateWindow("Static", "Changes are effective on next launch",
+        CreateWindow("Static", "Changes are effective immediately",
                 WS_VISIBLE | WS_CHILD | WS_GROUP | SS_LEFT,
                 10, 11, 210, 15, hwnd, (HMENU)0, hInst, 0);
 
-        CreateWindow("button", "Run with legacy Direct3D8 (slower, but\r\n"
-				"but might be required to work on some\r\n"
-				"systems)",
+        CreateWindow("button", "Run with legacy Direct3D8 (slower, but might be "
+				"required to work on some systems)",
                 WS_VISIBLE | WS_CHILD | BS_CHECKBOX | BS_MULTILINE,
-                10, 35, 210, 60,
+                10, 35, 260, 30,
                 hwnd, (HMENU)CHECKBOX_D3D8, hInst, NULL);
 
-        CreateWindow("button", "Use custom font for player/object names\r\n"
-				"(More natural font for systems with\r\n"
-				"Chinese language)",
+        CreateWindow("button", "Use custom font for player/object names (More "
+				"natural font for systems with Chinese language)",
                 WS_VISIBLE | WS_CHILD | BS_CHECKBOX | BS_MULTILINE,
-                10, 100, 210, 45,
+                10, 69, 260, 30,
                 hwnd, (HMENU)CHECKBOX_CFONT, hInst, NULL);
 
 	CheckDlgButton(hwnd, CHECKBOX_D3D8,
@@ -89,6 +89,16 @@ init_gui(HWND hwnd, HINSTANCE hInst)
 	CheckDlgButton(hwnd, CHECKBOX_CFONT,
 			game_config_get("custom_tag_font", "0")[0] == '1' ?
 			BST_CHECKED : BST_UNCHECKED);
+
+	CreateWindow("Button", "Repair files",
+                WS_VISIBLE | WS_CHILD,
+                10, 110, 80, 24,
+		hwnd, (HMENU)BUTTON_REPAIR, hInst, NULL);
+
+        CreateWindow("Static", "Undo all game patches and\r\napply them anew",
+                WS_VISIBLE | WS_CHILD | WS_GROUP | SS_LEFT,
+                100, 108, 170, 30, hwnd, (HMENU)0, hInst, 0);
+
 
         EnumChildWindows(hwnd, (WNDENUMPROC)hwnd_set_font,
                 (LPARAM)GetStockObject(DEFAULT_GUI_FONT));
@@ -105,19 +115,29 @@ WndProc(HWND hwnd, UINT msg, WPARAM data, LPARAM ldata)
         case WM_MOUSEACTIVATE:
                 return MA_NOACTIVATE;
         case WM_COMMAND: {
-                int checkbox_id = LOWORD(data);
-                bool check = !IsDlgButtonChecked(hwnd, checkbox_id);
-                CheckDlgButton(hwnd, checkbox_id, check ? BST_CHECKED : BST_UNCHECKED);
-                switch (checkbox_id) {
-                        case CHECKBOX_D3D8:
+                int id = LOWORD(data);
+
+		switch (id) {
+			case CHECKBOX_D3D8: {
+				bool check = !IsDlgButtonChecked(hwnd, id);
+				CheckDlgButton(hwnd, id, check ? BST_CHECKED : BST_UNCHECKED);
 				game_config_set("d3d8", check ? "1" : "0");
-                                break;
-                        case CHECKBOX_CFONT:
+				break;
+			}
+			case CHECKBOX_CFONT: {
+				bool check = !IsDlgButtonChecked(hwnd, id);
+				CheckDlgButton(hwnd, id, check ? BST_CHECKED : BST_UNCHECKED);
 				game_config_set("custom_tag_font", check ? "1" : "0");
-                                break;
+				break;
+			}
+			case BUTTON_REPAIR: {
+				ShowWindow(g_settings_win, SW_HIDE);
+				on_button_click(MG_GUI_ID_REPAIR);
+				break;
+			}
 			default:
 				break;
-                }
+		}
                 break;
         }
         case WM_DESTROY:

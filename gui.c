@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <windows.h>
 #include <commctrl.h>
+#include <richedit.h>
 #include <stdbool.h>
 #include <locale.h>
 
@@ -29,6 +30,7 @@ HBITMAP g_bmp;
 HDC g_hdc;
 unsigned g_win_tid;
 
+static char *g_changelog_txt;
 static LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 static LRESULT CALLBACK WndProcChangelogBox(HWND, UINT, WPARAM, LPARAM);
 
@@ -70,6 +72,12 @@ static void
 set_text_cb(void *_hwnd_id, void *_txt)
 {
 	int hwnd_id = (int)(uintptr_t)_hwnd_id;
+
+	if (hwnd_id == MG_GUI_ID_CHANGELOG) {
+		free(g_changelog_txt);
+		g_changelog_txt = strdup(_txt);
+		assert(g_changelog_txt);
+	}
 
 	HWND hwnd = GetDlgItem(g_win, hwnd_id);
 	set_hwnd_text(hwnd, _txt);
@@ -271,13 +279,13 @@ init_gui(HWND hwnd, HINSTANCE hInst)
 			20, 351, 379, 21, hwnd,
 			(HMENU)MG_GUI_ID_STATUS_RIGHT, hInst, 0);
 
-	g_changelog_lbl = CreateWindowW(L"Edit", L"[...]",
-			WS_VISIBLE | WS_CHILD | WS_GROUP | WS_VSCROLL | ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL,
+	g_changelog_lbl = CreateWindowW(L"RichEdit20W", L"[...]",
+			WS_VISIBLE | WS_CHILD | WS_GROUP | WS_VSCROLL | ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | ES_DISABLENOSCROLL,
 			580, 50, 320, 360, hwnd, (HMENU)MG_GUI_ID_CHANGELOG, hInst, 0);
 
-	CreateWindowW(L"Static", L"Patcher v1.15.0",
+	CreateWindowW(L"Static", L"Patcher v2.3.0",
 			WS_VISIBLE | WS_CHILD | WS_GROUP | SS_LEFT,
-			102, 500, 162, 18, hwnd, (HMENU)MG_GUI_ID_VERSION, hInst, 0);
+			102, 600, 162, 18, hwnd, (HMENU)MG_GUI_ID_VERSION, hInst, 0);
 
 	CreateWindow(PROGRESS_CLASS, (LPTSTR) NULL,
 		WS_CHILD | WS_VISIBLE, 16, 372, 385, 32,
@@ -288,8 +296,25 @@ init_gui(HWND hwnd, HINSTANCE hInst)
 	btn->draw_ctx = &g_brush_settings;
 	btn->enabled = true;
 
+	HWND combo = CreateWindow("Combobox", NULL,
+		WS_CHILD |  WS_VISIBLE | CBS_DROPDOWNLIST | CBS_HASSTRINGS,
+		420, 19, 100, 32,
+		hwnd, (HMENU)MG_GUI_ID_PROFILE, hInst, 0);
+
+	const char *profiles[] = {
+		"Profile 0",
+		"Profile 1",
+		"Profile 2",
+		"Profile 3"
+	};
+
+	for (int i = 0; i <= sizeof(profiles) / sizeof(profiles[0]); i++) {
+		SendMessage(combo, CB_ADDSTRING, 0, (LPARAM)profiles[i]);
+	}
+	SendMessage(combo, CB_SETCURSEL, 2, 0);
+
 	btn = gui_button_init(MG_GUI_ID_QUIT, "Quit",
-			471, 260, 83, 23, hwnd, hInst);
+			471, 289, 83, 23, hwnd, hInst);
 	btn->enabled = true;
 
 	btn = gui_button_init(MG_GUI_ID_PATCH, "Patch",
@@ -299,9 +324,6 @@ init_gui(HWND hwnd, HINSTANCE hInst)
 	btn = gui_button_init(MG_GUI_ID_PLAY, "Play!",
 			418, 371, 136, 34, hwnd, hInst);
 	btn->draw_ctx = &g_brush_red;
-
-	btn = gui_button_init(MG_GUI_ID_REPAIR, "Repair files",
-			471, 289, 83, 23, hwnd, hInst);
 
 	reload_banner("patcher/banner");
 
@@ -313,8 +335,28 @@ init_gui(HWND hwnd, HINSTANCE hInst)
 	lf.lfWeight = FW_BOLD;
 	HFONT bold_font = CreateFontIndirect(&lf);
 
+	LOGFONT lf_combo = lf;
+	GetObject(default_font, sizeof(lf), &lf_combo);
+	strcpy(lf_combo.lfFaceName, "Microsoft Sans Serif");
+	lf_combo.lfWeight = FW_BOLD;
+	lf_combo.lfWidth = 0;
+	lf_combo.lfHeight = 16;
+	HFONT combo_font = CreateFontIndirect(&lf_combo);
+
 	EnumChildWindows(hwnd, (WNDENUMPROC)hwnd_set_font, (LPARAM)bold_font);
 	SendMessage(g_changelog_lbl, WM_SETFONT, (WPARAM)default_font, TRUE);
+	SendMessage(combo, WM_SETFONT, (WPARAM)combo_font, TRUE);
+
+	CHARFORMAT cf;
+	cf.cbSize = sizeof(cf);
+	cf.dwMask = CFM_COLOR;
+	cf.crTextColor = RGB(80, 44, 44);
+	cf.dwEffects = 0;
+	SendMessage(g_changelog_lbl, EM_SETCHARFORMAT, SCF_ALL, (LPARAM)&cf);
+	SendMessage(g_changelog_lbl, EM_SETBKGNDCOLOR, 0, RGB(250, 250, 250));
+	LRESULT mask = SendMessage(g_changelog_lbl, EM_GETEVENTMASK, 0, 0);
+	SendMessage(g_changelog_lbl, EM_SETEVENTMASK, 0, mask | ENM_LINK);
+	SendMessage(g_changelog_lbl, EM_AUTOURLDETECT, 1, 0);
 
 	g_orig_changelog_event_handler =
 			(WNDPROC)SetWindowLongPtr(g_changelog_lbl,
@@ -381,14 +423,12 @@ WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 			break;
 		}
 		case WM_CTLCOLOREDIT:
+		case WM_CTLCOLORBTN:
+		case WM_CTLCOLORDLG:
 		case WM_CTLCOLORSTATIC: {
 			int id = GetDlgCtrlID((HWND)arg2);
 
-			if (id == MG_GUI_ID_CHANGELOG) {
-				SetBkColor((HDC)arg1, RGB(250, 250, 250));
-				SetTextColor((HDC)arg1, RGB(80,44,44));
-				return (LRESULT)GetStockObject(HOLLOW_BRUSH);
-			} else if (id == MG_GUI_ID_STATUS_LEFT ||
+			if (id == MG_GUI_ID_STATUS_LEFT ||
 					id == MG_GUI_ID_STATUS_RIGHT ||
 					id == MG_GUI_ID_VERSION) {
 				SetBkMode((HDC)arg1, TRANSPARENT);
@@ -416,18 +456,31 @@ WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 		}
 		case WM_NOTIFY: {
 			LPNMHDR lpnmhdr = (LPNMHDR)arg2;
-			LPNMCUSTOMDRAW item = (LPNMCUSTOMDRAW)lpnmhdr;
 			struct gui_button *btn;
 			unsigned ret = CDRF_DODEFAULT;
 
-			if (lpnmhdr->code != NM_CUSTOMDRAW) {
-				return CDRF_DODEFAULT;
-			}
+			if (lpnmhdr->code == EN_LINK) {
+				ENLINK *enlink = (ENLINK *)lpnmhdr;
 
-			btn = gui_button_get(lpnmhdr->idFrom);
-			if (btn) {
-				assert(btn->draw_cb);
-				ret = btn->draw_cb(btn, item);
+				if (enlink->msg == WM_LBUTTONUP) {
+					char url[256];
+					snprintf(url, sizeof(url), "%.*s",
+							(int)(enlink->chrg.cpMax - enlink->chrg.cpMin),
+							g_changelog_txt + enlink->chrg.cpMin);
+
+					ShellExecute(NULL, "open", url, NULL, NULL, SW_SHOWNORMAL);
+					return CDRF_SKIPDEFAULT;
+				}
+
+				return CDRF_DODEFAULT;
+			} else if (lpnmhdr->code == NM_CUSTOMDRAW) {
+				LPNMCUSTOMDRAW item = (LPNMCUSTOMDRAW)lpnmhdr;
+
+				btn = gui_button_get(lpnmhdr->idFrom);
+				if (btn) {
+					assert(btn->draw_cb);
+					ret = btn->draw_cb(btn, item);
+				}
 			}
 
 			return ret;
@@ -445,17 +498,27 @@ WndProcChangelogBox(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 {
 	LRESULT ret;
 
-	switch(msg) {
-		case EM_REPLACESEL:
-		case EM_SETSEL:
-		case EM_GETSEL:
-			return 0;
-	}
-
 	ret = CallWindowProc(g_orig_changelog_event_handler, hwnd, msg, arg1, arg2);
 	switch(msg) {
+		case WM_LBUTTONDOWN:
 		case WM_SETFOCUS:
 			HideCaret(hwnd);
+			break;
+		case WM_KILLFOCUS:
+			ShowCaret(hwnd);
+			break;
+		case WM_CONTEXTMENU: {
+			HMENU menu = CreatePopupMenu();
+			InsertMenu(menu, 0, MF_BYCOMMAND | MF_STRING | MF_ENABLED, 102, "Copy");
+			TrackPopupMenu(menu, TPM_TOPALIGN | TPM_LEFTALIGN, LOWORD(arg2),HIWORD(arg2), 0, hwnd, NULL);
+		}
+		case WM_COMMAND: {
+			int hwnd_id = LOWORD(arg2);
+			if (hwnd_id == 102) {
+				SendMessage(hwnd, WM_COPY, 0, 0);
+			}
+		}
+		default:
 			break;
 	}
 
@@ -506,6 +569,8 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrevInstance,
 
 	setlocale(LC_ALL, "en_US.UTF-8");
 	freopen("patcher/launcher.log", "w", stderr);
+
+	LoadLibrary("RichEd20.dll");
 
 	g_win_tid = GetCurrentThreadId();
 	g_cmdline = lpCmdLine;
