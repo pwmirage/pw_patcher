@@ -5,14 +5,11 @@
 #ifndef PW_GAME_CONFIG_H
 #define PW_GAME_CONFIG_H
 
-struct game_config_opt {
-	char key[128];
-	char *val;
-};
-
 int game_config_parse(const char *filepath);
-const char *game_config_get(const char *key, const char *defval);
-struct game_config_opt *game_config_set(const char *key, const char *value);
+const char *game_config_get_str(const char *category, const char *key, const char *defval);
+int game_config_get_int(const char *category, const char *key, int defval);
+int game_config_set_str(const char *category, const char *key, const char *value);
+int game_config_set_int(const char *category, const char *key, int value);
 void game_config_save(void);
 
 #endif /* PW_GAME_CONFIG_H */

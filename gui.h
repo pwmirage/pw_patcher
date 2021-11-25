@@ -44,6 +44,7 @@ void enable_button(int btn_id, bool enable);
 void show_ui(HWND ui, bool enable);
 void set_banner(const char *path);
 void quit_cb(void *arg1, void *arg2);
+void init_profile_list(void);
 
 struct button_brush {
 	struct button_state_brush {

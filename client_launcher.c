@@ -131,6 +131,8 @@ on_init(int argc, char *argv[])
 		return;
 	}
 
+	init_profile_list();
+
 	if (g_quickupdate) {
 		g_branch_name = g_version.branch;
 	}
@@ -496,7 +498,7 @@ on_button_click(int btn)
 
 		SetCurrentDirectory("element");
 
-		if (game_config_get("d3d8", "0")[0] == '1') {
+		if (game_config_get_int("Global", "d3d8", 0)) {
 			rename("d3d8.dll", "_d3d8.dll");
 		} else {
 			rename("_d3d8.dll", "d3d8.dll");
