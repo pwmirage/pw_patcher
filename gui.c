@@ -32,7 +32,7 @@ HBITMAP g_bmp;
 HDC g_hdc;
 unsigned g_win_tid;
 
-static int g_profiles[16];
+static int g_profiles[8];
 static int g_num_profiles;
 static char *g_changelog_txt;
 static HWND g_combo_hwnd;
@@ -391,7 +391,6 @@ init_profile_list(void)
 {
 	if (game_config_get_int("Global", "default_profile", -1) == -1) {
 		game_config_set_int("Global", "default_profile", 1);
-
 	}
 
 	for (int i = 0; i < sizeof(g_profiles) / sizeof(g_profiles[0]); i++) {
@@ -407,6 +406,26 @@ init_profile_list(void)
 
 		g_profiles[g_num_profiles++] = i;
 		SendMessage(g_combo_hwnd, CB_ADDSTRING, 0, (LPARAM)name);
+	}
+
+	if (g_num_profiles == 0) {
+		game_config_set_str("Profile 1", "name", "Default");
+		game_config_set_int("Profile 1", "x", -1);
+		game_config_set_int("Profile 1", "y", -1);
+		game_config_set_int("Profile 1", "width", 1366);
+		game_config_set_int("Profile 1", "height", 768);
+		game_config_set_int("Profile 1", "fullscreen", 0);
+		g_profiles[g_num_profiles++] = 1;
+		SendMessage(g_combo_hwnd, CB_ADDSTRING, 0, (LPARAM)"Default");
+
+		game_config_set_str("Profile 2", "name", "Profile #2");
+		game_config_set_int("Profile 2", "x", 30);
+		game_config_set_int("Profile 2", "y", 30);
+		game_config_set_int("Profile 2", "width", 800);
+		game_config_set_int("Profile 2", "height", 600);
+		game_config_set_int("Profile 2", "fullscreen", 0);
+		g_profiles[g_num_profiles++] = 2;
+		SendMessage(g_combo_hwnd, CB_ADDSTRING, 0, (LPARAM)"Profile #2");
 	}
 
 	bool cur_sel_set = false;
@@ -427,6 +446,23 @@ init_profile_list(void)
 	}
 }
 
+int
+get_selected_profile_id(void)
+{
+	int index;
+
+	index = SendMessage((HWND)g_combo_hwnd, CB_GETCURSEL, 0, 0);
+	if (index == CB_ERR) {
+		return -1;
+	}
+
+	if (index >= g_num_profiles) {
+		return -1;
+	}
+
+	return g_profiles[index];
+}
+
 static LRESULT CALLBACK
 WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 {
@@ -440,19 +476,6 @@ WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 			break;
 		}
 		case WM_COMMAND: {
-			if (HIWORD(arg1) == CBN_SELCHANGE) {
-				int index;
-				char buf[MAX_GAME_PROFILE_LEN + 1];
-
-				index = SendMessage((HWND)arg2, CB_GETCURSEL, 0, 0);
-				if (index == CB_ERR) {
-					return 0;
-				}
-
-				SendMessage((HWND)arg2, CB_GETLBTEXT,
-						(WPARAM)index, (LPARAM)buf);
-				break;
-			}
 			int btn_id = (int)LOWORD(arg1);
 			struct gui_button *btn = gui_button_get(btn_id);
 
@@ -533,7 +556,6 @@ WndProc(HWND hwnd, UINT msg, WPARAM arg1, LPARAM arg2)
 			return ret;
 	       }
 		case WM_DESTROY:
-			game_config_save();
 			PostQuitMessage(0);
 			break;
 	}
@@ -609,9 +631,9 @@ parse_patcher_msg(enum mg_patcher_msg_command type, unsigned param)
 	}
 }
 
-int WINAPI
-WinMain(HINSTANCE hInst, HINSTANCE hPrevInstance,
-				LPSTR lpCmdLine, int nCmdShow)
+
+int __declspec(dllexport)
+init(HINSTANCE hInst)
 {
 	MSG msg;
 
@@ -621,7 +643,7 @@ WinMain(HINSTANCE hInst, HINSTANCE hPrevInstance,
 	LoadLibrary("RichEd20.dll");
 
 	g_win_tid = GetCurrentThreadId();
-	g_cmdline = lpCmdLine;
+	g_cmdline = strdup(GetCommandLine());
 
 	g_cursor_arrow = LoadCursor(0, IDC_ARROW);
 	g_cursor_hand = LoadCursor(0, IDC_HAND);

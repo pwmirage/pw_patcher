@@ -10,6 +10,7 @@ const char *game_config_get_str(const char *category, const char *key, const cha
 int game_config_get_int(const char *category, const char *key, int defval);
 int game_config_set_str(const char *category, const char *key, const char *value);
 int game_config_set_int(const char *category, const char *key, int value);
-void game_config_save(void);
+int game_config_set_invalid(const char *category, const char *val);
+void game_config_save(bool close);
 
 #endif /* PW_GAME_CONFIG_H */

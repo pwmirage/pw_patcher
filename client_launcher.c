@@ -91,7 +91,7 @@ on_init(int argc, char *argv[])
 
 	char **a = argv;
 	while (argc > 0) {
-		if (argc >= 2 && (strcmp(*a, "-b") == 0 || strcmp(*a, "-branch") == 0)) {
+		if (argc >= 2 && (strcmp(*a, "-b") == 0 || strcmp(*a, "--branch") == 0)) {
 			g_branch_name = *(a + 1);
 			a++;
 			argc--;
@@ -243,22 +243,18 @@ on_init(int argc, char *argv[])
 		}
 	}
 
-	if (JSi(g_latest_version, "launcher_version") > 2300) {
+	if (JSi(g_latest_version, "launcher_version") > 2500) {
 		set_progress_state(PBST_PAUSED);
 
 		g_patcher_outdated = true;
 		set_text(MG_GUI_ID_PATCH, "Update");
 		enable_button(MG_GUI_ID_PATCH, true);
-		set_text(MG_GUI_ID_STATUS_RIGHT, "Launcher outdated. Click the update button or download at pwmirage.com/launcher");
+		set_text(MG_GUI_ID_STATUS_LEFT, "Launcher outdated. Click Update or visit pwmirage.com/launcher");
+		set_text(MG_GUI_ID_STATUS_RIGHT, "");
 		rc = MessageBox(g_win, "New version of the launcher is available! "
 				"Would you like to download it now?", "Launcher Update", MB_YESNO);
 		if (rc == IDYES) {
-			rc = MessageBox(g_win,
-					"Many antiviruses block the auto-updater.\n"
-					"If the launcher doesn't restart, please try to\n"
-					"run patcher/updater.exe from the game dir manually.\n"
-					"We're sorry for this!", "Note", MB_OK);
-			ShellExecute(NULL, NULL, "patcher\\updater.exe", NULL, NULL, SW_SHOW);
+			ShellExecute(NULL, NULL, "pwmirage.exe", "--update-self", NULL, SW_SHOW);
 			ui_thread(quit_cb, NULL, NULL);
 			return;
 		}
@@ -338,7 +334,7 @@ on_init(int argc, char *argv[])
 void
 on_fini(void)
 {
-	game_config_save();
+	game_config_save(true);
 
 	if (g_latest_version) {
 		cjson_free(g_latest_version);
@@ -428,7 +424,7 @@ patch_cb(void *arg1, void *arg2)
 		rc = MessageBox(g_win, "New version of the launcher is available! "
 				"Would you like to download it now?", "Launcher Update", MB_YESNO);
 		if (rc == IDYES) {
-			ShellExecute(NULL, NULL, "patcher\\updater.exe", NULL, NULL, SW_SHOW);
+			ShellExecute(NULL, NULL, "pwmirage.exe", "--update-self", NULL, SW_SHOW);
 			ui_thread(quit_cb, NULL, NULL);
 			return;
 		}
@@ -495,6 +491,7 @@ on_button_click(int btn)
 		STARTUPINFO pw_proc_startup_info = {0};
 		PROCESS_INFORMATION pw_proc_info = {0};
 		BOOL result = FALSE;
+		char buf[128];
 
 		SetCurrentDirectory("element");
 
@@ -504,10 +501,9 @@ on_button_click(int btn)
 			rename("_d3d8.dll", "d3d8.dll");
 		}
 
-		game_config_save();
-
 		pw_proc_startup_info.cb = sizeof(STARTUPINFO);
-		char buf[] = "game.exe game:mpw";
+		snprintf(buf, sizeof(buf), "game.exe --profile %d",
+				get_selected_profile_id());
 		result = CreateProcess(NULL, buf,
 				NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, NULL,
 				&pw_proc_startup_info, &pw_proc_info);

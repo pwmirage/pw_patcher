@@ -16,13 +16,16 @@
 #include "game_config.h"
 #include "common.h"
 
+struct game_config_category;
+
 struct game_config {
 	FILE *fp;
+	bool init;
+	struct game_config_category *last_cat;
 	int max_category_order;
 	struct pw_avl *categories;
 } g_config;
 
-struct game_config_category;
 struct game_config_opt {
 	struct game_config_category *category;
 	char key[128];
@@ -78,6 +81,10 @@ _config_set_category(const char *name)
 	}
 
 	if (!cat) {
+		if (g_config.init && g_config.last_cat) {
+			game_config_set_invalid(g_config.last_cat->name, "");
+		}
+
 		cat = pw_avl_alloc(g_config.categories);
 		if (!cat) {
 			return NULL;
@@ -90,6 +97,7 @@ _config_set_category(const char *name)
 			return NULL;
 		}
 		cat->order = g_config.max_category_order++;
+		g_config.last_cat = cat;
 		do_insert = true;
 	}
 
@@ -359,6 +367,7 @@ game_config_parse(const char *filepath)
 		}
 	}
 
+	g_config.init = true;
 	return 0;
 }
 
@@ -416,7 +425,7 @@ save_category(struct game_config_category *cat)
 }
 
 void
-game_config_save(void)
+game_config_save(bool close)
 {
 	struct game_config_category **cats;
 	int i, rc = 0;
@@ -450,6 +459,8 @@ game_config_save(void)
 
 	fflush(g_config.fp);
 	ftruncate(fileno(g_config.fp), ftell(g_config.fp));
-	fclose(g_config.fp);
+	if (close) {
+		fclose(g_config.fp);
+	}
 }
 

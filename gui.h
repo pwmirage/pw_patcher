@@ -36,6 +36,7 @@ void ui_thread(mg_callback cb, void *arg1, void *arg2);
 void task(mg_callback cb, void *arg1, void *arg2);
 void reload_banner(const char *path);
 void on_button_click(int btn);
+int get_selected_profile_id(void);
 
 void set_text(int hwnd_id, const char *txt);
 void set_progress(int percent);

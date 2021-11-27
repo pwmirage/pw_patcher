@@ -34,9 +34,13 @@ build/client_patcher: build/gcc_ver.h $(OBJECTS:%.o=build/%.o) build/client_patc
 	windres -i patcher.rc -o patcher_rc.o
 	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ patcher_rc.o -Wl,--no-whole-archive -lwininet -mwindows -lcrypt32 -Wl,-Bstatic -lz -liconv -Wl,-Bdynamic
 
-build/client_launcher: build/gcc_ver.h build/cjson.o build/common.o build/sha1.o build/gui.o build/gui_button.o build/client_launcher.o build/client_launcher_settings.o build/game_config.o build/avl.o
+build/launcher.dll: build/gcc_ver.h build/cjson.o build/common.o build/sha1.o build/gui.o build/gui_button.o build/client_launcher.o build/client_launcher_settings.o build/game_config.o build/avl.o
+	gcc $(CFLAGS) -o $@ -shared -fPIC $^ -Wl,--subsystem,windows -lwininet -mwindows -lcrypt32 -static-libgcc
+
+build/client_launcher: build/pwmirage.exe ;
+build/pwmirage.exe: build/client_launcher_exe.o build/launcher.dll
 	windres -i launcher.rc -o launcher_rc.o
-	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ launcher_rc.o -Wl,--no-whole-archive -Wl,--subsystem,windows -lwininet -mwindows -lcrypt32
+	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive build/client_launcher_exe.o launcher_rc.o -Wl,--no-whole-archive -Wl,--subsystem,windows -mwindows -lwininet
 
 build/updater: build/gcc_ver.h build/updater.o
 	windres -i updater.rc -o updater_rc.o
