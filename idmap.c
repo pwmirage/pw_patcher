@@ -280,6 +280,10 @@ pw_idmap_set(struct pw_idmap *map, long long lid, long type, void *data)
 	if (el) {
 		struct pw_idmap_async_fn_head *async_head = el->data;
 
+		if (el->type == 0) {
+			el->type = type;
+		}
+
 		el->is_async_fn = 0;
 		el->data = data;
 
