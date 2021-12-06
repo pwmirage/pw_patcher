@@ -284,12 +284,20 @@ deserialize_trigger_id_fn(struct cjson *f, struct serializer *slzr, void *data)
 	}
 
 	if (val >= 0x80000000) {
+		/* use trigger's id (same as ai_id) */
 		int rc = pw_idmap_get_async(g_triggers_map, val, 0, deserialize_id_field_async_fn, data);
 		if (rc) {
 			assert(false);
 		}
 	} else {
+		struct pw_idmap_el *el;
+
+		/* use trigger's ai_id (because it's different from id) */
 		deserialize_log(f, data);
+		el = pw_idmap_get(g_triggers_map, val, 0);
+		if (el) {
+			val = *(uint32_t *)(el->data + 4);
+		}
 		*(uint32_t *)(data) = (uint32_t)val;
 	}
 
@@ -301,6 +309,14 @@ serialize_trigger_id_fn(FILE *fp, struct serializer *f, void *data)
 {
 	uint32_t id = *(uint32_t *)data;
 
+	if (id && id < 0x80000000) {
+		struct pw_idmap_el *el;
+
+		el = pw_idmap_get(g_triggers_map, id, 0);
+		if (el) {
+			id = *(uint32_t *)(el->data + 4);
+		}
+	}
 	if (id) {
 		fprintf(fp, "\"%s\":%d,", f->name, id);
 	}
