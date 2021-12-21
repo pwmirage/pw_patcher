@@ -333,7 +333,7 @@ pw_idmap_set(struct pw_idmap *map, long long lid, long type, void *data)
 
 			if (!map->can_set) {
 				PWLOG(LOG_ERROR, "Unexpected lid=0x%x\n", lid);
-				assert(false);
+				*(int *)0x0 = 42;
 				return NULL;
 			}
 

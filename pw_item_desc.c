@@ -42,8 +42,8 @@ pw_item_desc_load(const char *filepath)
 	struct pw_item_desc_entry *entry;
 	int i, rc = 0;
 
-	g_state.filename = strdup(filepath);
-	if (!g_state.filename) {
+	g_state.filename = filepath ? strdup(filepath) : NULL;
+	if (filepath && !g_state.filename) {
 		return -ENOMEM;
 	}
 
@@ -51,6 +51,10 @@ pw_item_desc_load(const char *filepath)
 	if (!g_state.avl) {
 		free(g_state.filename);
 		return -ENOMEM;
+	}
+
+	if (!filepath) {
+		return 0;
 	}
 
 	FILE *fp = fopen(filepath, "rb");
@@ -106,6 +110,10 @@ pw_item_desc_get(int id)
 {
 	struct pw_item_desc_entry *entry;
 
+	if (!g_state.avl) {
+		return NULL;
+	}
+
 	entry = pw_avl_get(g_state.avl, id);
 	while (entry && entry->id != id) {
 		entry = pw_avl_get_next(g_state.avl, entry);
@@ -118,6 +126,10 @@ int
 pw_item_desc_set(int id, const char *desc)
 {
 	struct pw_item_desc_entry *entry;
+
+	if (!g_state.avl) {
+		return -ENOENT;
+	}
 
 	entry = pw_item_desc_get(id);
 	if (!entry) {
@@ -175,10 +187,10 @@ save_entry_cb(void *el, void *ctx1, void *ctx2)
 }
 
 int
-pw_item_desc_save(void)
+pw_item_desc_save(const char *filepath)
 {
 	struct pw_item_desc_hdr hdr = {};
-	FILE *fp = fopen(g_state.filename, "wb");
+	FILE *fp = fopen(filepath, "wb");
 
 	if (!fp) {
 		return -errno;

@@ -1869,11 +1869,11 @@ pw_elements_patch_obj(struct pw_elements *elements, struct cjson *obj)
 	}
 
 	if (is_item) {
-		const char *desc = JSs(obj, "desc");
-		if (desc) {
+		struct cjson *desc = JS(obj, "desc");
+		if (desc->type == CJSON_TYPE_STRING) {
 			uint32_t id = *(uint32_t *)table_el;
 
-			pw_item_desc_set(id, desc);
+			pw_item_desc_set(id, desc->s);
 		}
 	}
 
@@ -2211,7 +2211,7 @@ pw_elements_load(struct pw_elements *el, const char *filename, const char *idmap
 	g_elements_recipes_idmap_id = pw_elements_get_idmap_type(el, "recipes");
 	g_elements_npc_idmap_id = pw_elements_get_idmap_type(el, "npcs");
 
-	return pw_item_desc_load("patcher/item_desc.data");
+	return 0;
 }
 
 static void
@@ -2315,11 +2315,7 @@ pw_elements_save(struct pw_elements *el, const char *filename, bool is_server)
 
 	fclose(fp);
 
-	if (is_server) {
-		return 0;
-	}
-
-	return pw_item_desc_save();
+	return 0;
 }
 
 int

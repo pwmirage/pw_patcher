@@ -21,6 +21,7 @@
 #include "pw_tasks.h"
 #include "pw_elements.h"
 #include "pw_tasks_npc.h"
+#include "pw_item_desc.h"
 #include "pw_pck.h"
 #include "client_ipc.h"
 
@@ -210,7 +211,7 @@ apply_patch(const char *url)
 	} while (rc > 0);
 	free(buf);
 	if (rc < 0) {
-		PWLOG(LOG_ERROR, "cjson_parse_arr_stream() failed: %d\n", url, rc);
+		PWLOG(LOG_ERROR, "cjson_parse_arr_stream() failed: %s, rc=%d\n", url, rc);
 		return rc;
 	}
 
@@ -363,18 +364,23 @@ patch(void)
 		const char *elements_path;
 		const char *tasks_path;
 		const char *tasks_npc_path;
+		const char *item_desc_path;
 
 		if (g_force_update) {
 			elements_path = "patcher/elements.data.src";
 			tasks_path = "patcher/tasks.data.src";
 			tasks_npc_path = "patcher/task_npc.data.src";
+			item_desc_path = NULL;
 		} else {
 			elements_path = "element/data/elements.data";
 			tasks_path = "element/data/tasks.data";
 			tasks_npc_path = "element/data/task_npc.data";
+			item_desc_path = "patcher/item_desc.data";
 		}
 
 		rc = pw_elements_load(g_elements, elements_path, "patcher/elements.imap");
+		pw_item_desc_load(item_desc_path);
+
 		if (rc != 0) {
 			set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_ELEMENTS_PARSING_FAILED, -rc, 0, 0);
 			return rc;
@@ -497,6 +503,13 @@ patch(void)
 		if (rc) {
 			PWLOG(LOG_ERROR, "Failed to save task_npc\n");
 			set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_SAVING_FAILED, 4, -rc, 0);
+			return rc;
+		}
+
+		rc = pw_item_desc_save("patcher/item_desc.data");
+		if (rc) {
+			PWLOG(LOG_ERROR, "Failed to save item descriptions\n");
+			set_text(MGP_MSG_SET_STATUS_RIGHT, MGP_RMSG_SAVING_FAILED, 5, -rc, 0);
 			return rc;
 		}
 	}

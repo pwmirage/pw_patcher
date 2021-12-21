@@ -18,6 +18,6 @@ struct pw_item_desc_entry {
 int pw_item_desc_load(const char *filepath);
 struct pw_item_desc_entry *pw_item_desc_get(int id);
 int pw_item_desc_set(int id, const char *desc);
-int pw_item_desc_save(void);
+int pw_item_desc_save(const char *filepath);
 
 #endif /* PW_ITEM_DESC_H */
