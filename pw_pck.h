@@ -51,7 +51,7 @@ struct pw_pck_entry {
 	struct pw_pck_entry *next;
 
 	/** for gen-patch */
-	bool in_gen_list;
+	struct pw_pck_entry **gen_prev_next_p;
 	struct pw_pck_entry *gen_next;
 };
 

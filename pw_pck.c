@@ -1071,10 +1071,19 @@ get_updated_files_by_log(struct pw_pck *pck, struct pw_pck_entry **list)
 		if (file && file->entry) {
 			if (cur_section == PW_PCK_ACTION_APPLY_PATCH) {
 				/* if it was queued before unqueue it now */
-				file->entry->in_gen_list = false;
-			} else if (!file->entry->in_gen_list) {
-				file->entry->in_gen_list = true;
+				if (file->entry->gen_prev_next_p) {
+					*file->entry->gen_prev_next_p = file->entry->gen_next;
+					file->entry->gen_prev_next_p = NULL;
+					file->entry->gen_next = NULL;
+				}
+			} else if (!file->entry->gen_prev_next_p) {
 				file->entry->gen_next = *list;
+				file->entry->gen_prev_next_p = list;
+
+				if (*list) {
+					(*list)->gen_prev_next_p = &file->entry->gen_next;
+				}
+
 				*list = file->entry;
 			}
 		}
@@ -1927,12 +1936,6 @@ pw_pck_gen_patch(struct pw_pck *pck, const char *patch_path, bool do_force)
 
 	struct pw_pck_entry **ep = &patch_files;
 	while (*ep) {
-		/* remove from the list if it shouldn't be here */
-		if (!(*ep)->in_gen_list) {
-			*ep = (*ep)->gen_next;
-			continue;
-		}
-
 		print_colored_utf8(COLOR_YELLOW, "\t+%s\n", (*ep)->path_aliased_utf8);
 
 		/* move data from pck to the patch file, also modify the org entry to our needs */
