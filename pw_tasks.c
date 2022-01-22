@@ -889,7 +889,7 @@ static struct serializer pw_task_serializer[] = {
 	{ "premise_apothecary_level", _INT32 },
 	{ "_m_DynTaskType", _INT8 },
 	{ "_special_award_type", _INT32 }, /* always 0 */
-	{ "team_recommended", _INT8 }, /* no effect? */
+	{ "solo_only", _INT8 },
 	{ "recv_in_team_only", _INT8 },
 	{ "m_bSharedTask", _INT8 },
 	{ "m_bSharedAchieved", _INT8 },
@@ -1143,6 +1143,7 @@ invert_bools(void *task)
 		"no_display_quest_title",
 		"cant_be_found",
 		"no_show_direction",
+		"solo_only"
 	};
 	int num = sizeof(fields) / sizeof(fields[0]);
 	int i;
