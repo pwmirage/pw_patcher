@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * Copyright(c) 2020-2021 Darek Stojaczyk for pwmirage.com
+ * Copyright(c) 2019-2022 Darek Stojaczyk for pwmirage.com
  */
 
 #include <stdio.h>
@@ -849,8 +849,8 @@ static struct serializer pw_task_serializer[] = {
 	{ "_ptr5", _INT32 },
 	{ "show_without_premise_items", _INT8 },
 	{ "_free_given_items_cnt", _INT32 },
-	{ "_free_given_common_items_cnt", _INT32 }, /* TODO */
-	{ "_free_given_task_items_cnt", _INT32 }, /* TODO */
+	{ "_free_given_common_items_cnt", _INT32 },
+	{ "_free_given_task_items_cnt", _INT32 },
 	{ "_ptr6", _INT32 },
 	{ "premise_coins", _INT32 },
 	{ "show_without_premise_coins", _INT8 },
@@ -1439,6 +1439,25 @@ write_task(struct pw_task_file *taskf, void *data, FILE *fp, bool is_client)
 	SAVE_TRUNCATED_TBL_CNT("req_items", slzr, data);
 	finalize_id_field("start_npc", slzr, data);
 	finalize_id_field("finish_npc", slzr, data);
+
+	struct pw_chain_table *free_given_items_tbl = *(void **)serializer_get_field(slzr, "free_given_items", data);
+	uint32_t free_given_common_items_cnt = 0, free_given_task_items_cnt = 0;
+	PW_CHAIN_TABLE_FOREACH(el, free_given_items_tbl) {
+		uint32_t id = *(uint32_t *)el;
+		uint8_t _is_common = *(uint8_t *)(el + 4);
+
+		if (id == 0) {
+			continue;
+		}
+
+		if (_is_common) {
+			free_given_common_items_cnt++;
+		} else {
+			free_given_task_items_cnt++;
+		}
+	}
+	*(uint32_t *)serializer_get_field(slzr, "_free_given_common_items_cnt", data) = free_given_common_items_cnt;
+	*(uint32_t *)serializer_get_field(slzr, "_free_given_task_items_cnt", data) = free_given_task_items_cnt;
 
 	struct serializer *dialogue_slzr = NULL;
 	int dialogue_ready_off = serializer_get_offset_slzr(slzr, "dialogue", &dialogue_slzr);
