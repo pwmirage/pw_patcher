@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * Copyright(c) 2020-2021 Darek Stojaczyk for pwmirage.com
+ * Copyright(c) 2020-2022 Darek Stojaczyk for pwmirage.com
  */
 
 #include <stdio.h>
@@ -771,12 +771,22 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 }
 
 int
-pw_npcs_serialize(struct pw_npc_file *npc, const char *path)
+pw_npcs_serialize(struct pw_npc_file *npc, const char *type, const char *path)
 {
-	FILE *fp = fopen(path, "wb");
+	FILE *fp;
 	void *el;
 	int count = 0;
+	struct pw_chain_table *table;
 
+	if (strcmp(type, "triggers") == 0) {
+		table = &npc->triggers;
+	} else if (strcmp(type, "spawners") == 0) {
+		table = &npc->spawners;
+	} else {
+		return -EINVAL;
+	}
+
+	fp = fopen(path, "wb");
 	if (fp == NULL) {
 		PWLOG(LOG_ERROR, "cant open %s\n", path);
 		return 1;
@@ -784,8 +794,8 @@ pw_npcs_serialize(struct pw_npc_file *npc, const char *path)
 
 	fprintf(fp, "[");
 
-	PW_CHAIN_TABLE_FOREACH(el, &npc->triggers) {
-		struct serializer *tmp_slzr = npc->triggers.serializer;
+	PW_CHAIN_TABLE_FOREACH(el, table) {
+		struct serializer *tmp_slzr = table->serializer;
 		size_t pos_begin = ftell(fp);
 		void *tmp_el = el;
 

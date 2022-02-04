@@ -176,7 +176,10 @@ print_npcgen()
 		pw_npcs_load(&npc, map->name, tmpbuf, true);
 
 		snprintf(tmpbuf, sizeof(tmpbuf), "json/%s/triggers.json", map->name);
-		pw_npcs_serialize(&npc, tmpbuf);
+		pw_npcs_serialize(&npc, "triggers", tmpbuf);
+
+		snprintf(tmpbuf, sizeof(tmpbuf), "json/%s/spawners.json", map->name);
+		pw_npcs_serialize(&npc, "spawners", tmpbuf);
 	}
 
 	return 0;
