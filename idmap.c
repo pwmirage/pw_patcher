@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * Copyright(c) 2020 Darek Stojaczyk for pwmirage.com
+ * Copyright(c) 2019-2022 Darek Stojaczyk for pwmirage.com
  */
 
 #include <stdlib.h>
@@ -12,6 +12,12 @@
 #include "idmap.h"
 #include "common.h"
 #include "avl.h"
+#include "cjson.h"
+#include "cjson_ext.h"
+
+#ifndef ESTALE
+#define ESTALE 116
+#endif
 
 #define IDMAP_VERSION 3
 
@@ -48,12 +54,135 @@ struct pw_idmap_async_fn_head {
 	struct pw_idmap_async_fn_el **tail;
 };
 
+static bool
+str_ends_with(const char *str, const char *ends_with)
+{
+	if (!ends_with) {
+		return true;
+	}
+
+	str = strrchr(str, ends_with[0]);
+	if (!str) {
+		return false;
+	}
+
+	return strcmp(str, ends_with) == 0;
+}
+
+static void
+idmap_add_entry(struct pw_idmap *map, struct pw_idmap_file_entry e)
+{
+	struct pw_idmap_file_entry *entry;
+	struct pw_idmap_file_entry **id_entry;
+
+	entry = pw_avl_alloc(map->lid_mappings);
+	assert(entry);
+	id_entry = pw_avl_alloc(map->id_mappings);
+	assert(id_entry);
+
+	*id_entry = entry;
+
+	*entry = e;
+
+	PWLOG(LOG_INFO, "%s: lid=0x%llx, id=%u\n", map->name, entry->lid, entry->id);
+	pw_avl_insert(map->lid_mappings, entry->lid, entry);
+	pw_avl_insert(map->id_mappings, entry->id, id_entry);
+
+	if (entry->id > map->max_id) {
+		map->max_id = entry->id;
+	}
+}
+
+static int
+idmap_load_dat(struct pw_idmap *map, const char *filename)
+{
+	FILE *fp = fopen(filename, "rb");
+	if (fp == NULL) {
+		/* we'll create it on pw_idmap_save(), no problem */
+		return 0;
+	}
+
+	struct pw_idmap_file_hdr hdr;
+	fread(&hdr, 1, sizeof(hdr), fp);
+
+	if (hdr.version != IDMAP_VERSION) {
+		/* pretend it's not even there */
+		fclose(fp);
+		return -ESTALE;
+	}
+
+	size_t fpos = ftell(fp);
+	fseek(fp, 0, SEEK_END);
+	size_t fsize = ftell(fp);
+	fseek(fp, fpos, SEEK_SET);
+	int entry_cnt = (fsize - fpos) / sizeof(struct pw_idmap_file_entry);
+
+	for (int i = 0; i < entry_cnt; i++) {
+		struct pw_idmap_file_entry entry;
+
+		fread(&entry, 1, sizeof(entry), fp);
+		idmap_add_entry(map, entry);
+	}
+
+	fclose(fp);
+	return 0;
+}
+
+static void
+idmap_load_json_cb(void *_map, struct cjson *obj)
+{
+	struct pw_idmap *map = _map;
+	struct pw_idmap_file_entry e;
+
+	struct cjson *lid_o = JS(obj, "lid");
+	if (lid_o->type == CJSON_TYPE_STRING) {
+		const char *s = lid_o->s;
+		int rc, pid, off;
+
+
+		if (s[0] == '#') {
+			s++;
+		}
+
+		rc = sscanf(s, "%u:%u", &pid, &off);
+		if (rc == 2) {
+			e.lid = (pid > 0 ? 0x80000000 : 0) + 0x100000 * pid + off;
+		} else {
+			e.lid = pid;
+		}
+	} else {
+		e.lid = lid_o->i;
+	}
+
+	e.id = JSi(obj, "id");
+	e.type = JSi(obj, "type");
+
+	idmap_add_entry(map, e);
+}
+
+static int
+idmap_load_json(struct pw_idmap *map, const char *filename)
+{
+	char *buf;
+	size_t buflen;
+	int rc;
+
+	rc = readfile(filename, &buf, &buflen);
+	if (rc != 0) {
+		/* we'll create it on pw_idmap_save(), no problem */
+		return 0;
+	}
+
+	rc = cjson_parse_arr_stream(buf, idmap_load_json_cb, map);
+	free(buf);
+	return rc;
+}
+
 struct pw_idmap *
 pw_idmap_init(const char *name, const char *filename, int can_set)
 {
 	struct pw_idmap *map;
-	FILE *fp;
-	int i;
+	int rc;
 
 	map = calloc(1, sizeof(*map));
 	if (!map) {
@@ -100,50 +229,16 @@ pw_idmap_init(const char *name, const char *filename, int can_set)
 		return map;
 	}
 
-	fp = fopen(filename, "rb");
-	if (fp == NULL) {
-		/* we'll create it on pw_idmap_save(), no problem */
-		return map;
+	if (str_ends_with(filename, ".json")) {
+		rc = idmap_load_json(map, filename);
+	} else {
+		rc = idmap_load_dat(map, filename);
 	}
+	if (rc != 0 && rc != -ESTALE) {
+		free(map->name);
+		free(map);
+		return NULL;	}
 
-	struct pw_idmap_file_hdr hdr;
-	fread(&hdr, 1, sizeof(hdr), fp);
-
-	if (hdr.version != IDMAP_VERSION) {
-		/* pretend it's not even there */
-		fclose(fp);
-		return map;
-	}
-
-	size_t fpos = ftell(fp);
-	fseek(fp, 0, SEEK_END);
-	size_t fsize = ftell(fp);
-	fseek(fp, fpos, SEEK_SET);
-	int entry_cnt = (fsize - fpos) / sizeof(struct pw_idmap_file_entry);
-
-	for (i = 0; i < entry_cnt; i++) {
-		struct pw_idmap_file_entry *entry;
-		struct pw_idmap_file_entry **id_entry;
-
-		entry = pw_avl_alloc(map->lid_mappings);
-		assert(entry);
-		id_entry = pw_avl_alloc(map->id_mappings);
-		assert(id_entry);
-
-		*id_entry = entry;
-
-		fread(entry, 1, sizeof(*entry), fp);
-
-		PWLOG(LOG_INFO, "%s: lid=0x%llx, id=%u\n", map->name, entry->lid, entry->id);
-		pw_avl_insert(map->lid_mappings, entry->lid, entry);
-		pw_avl_insert(map->id_mappings, entry->id, id_entry);
-
-		if (entry->id > map->max_id) {
-			map->max_id = entry->id;
-		}
-	}
-
-	fclose(fp);
 	return map;
 }
 
@@ -367,7 +462,7 @@ pw_idmap_set(struct pw_idmap *map, long long lid, long type, void *data)
 }
 
 static void
-idmap_save_cb(void *_node, void *ctx1, void *ctx2)
+idmap_save_dat_cb(void *_node, void *ctx1, void *ctx2)
 {
 	struct pw_avl_node *node = _node;
 	struct pw_idmap_file_entry *entry = (void *)node->data;
@@ -378,14 +473,10 @@ idmap_save_cb(void *_node, void *ctx1, void *ctx2)
 	fwrite(entry, 1, sizeof(*entry), fp);
 }
 
-int
-pw_idmap_save(struct pw_idmap *map, const char *filename)
+static int
+idmap_save_dat(struct pw_idmap *map, const char *filename)
 {
-	FILE *fp;
-
-	assert(map->can_set);
-
-	fp = fopen(filename, "wb");
+	FILE *fp = fopen(filename, "wb");
 	if (fp == NULL) {
 		PWLOG(LOG_ERROR, "Cant open %s\n", filename);
 		return -errno;
@@ -395,7 +486,51 @@ pw_idmap_save(struct pw_idmap *map, const char *filename)
 	hdr.version = IDMAP_VERSION;
 	fwrite(&hdr, 1, sizeof(hdr), fp);
 
-	pw_avl_foreach(map->lid_mappings, idmap_save_cb, fp, map);
+	pw_avl_foreach(map->lid_mappings, idmap_save_dat_cb, fp, map);
 	fclose(fp);
 	return 0;
+}
+
+static void
+idmap_save_json_cb(void *_node, void *ctx1, void *ctx2)
+{
+	struct pw_avl_node *node = _node;
+	struct pw_idmap_file_entry *entry = (void *)node->data;
+	FILE *fp = ctx1;
+	struct pw_idmap *map = ctx2;
+
+	PWLOG(LOG_INFO, "%s: lid=0x%llx, id=%u\n", map->name, entry->lid, entry->id);
+	if (ftell(fp) > 2) {
+		fprintf(fp, ",\n");
+	}
+	fprintf(fp, "{\"lid\":%"PRIu64",\"id\":%u,\"type\":%u}", entry->lid, entry->id, entry->type);
+}
+
+static int
+idmap_save_json(struct pw_idmap *map, const char *filename)
+{
+	FILE *fp = fopen(filename, "w");
+	if (fp == NULL) {
+		PWLOG(LOG_ERROR, "Cant open %s\n", filename);
+		return -errno;
+	}
+
+	fprintf(fp, "[\n");
+	pw_avl_foreach(map->lid_mappings, idmap_save_json_cb, fp, map);
+	fprintf(fp, "\n]\n");
+
+	fclose(fp);
+	return 0;
+}
+
+int
+pw_idmap_save(struct pw_idmap *map, const char *filename)
+{
+	assert(map->can_set);
+
+	if (str_ends_with(filename, ".json")) {
+		return idmap_save_json(map, filename);
+	} else {
+		return idmap_save_dat(map, filename);
+	}
 }
