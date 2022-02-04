@@ -30,6 +30,9 @@ build/srv_patcher: build/gcc_ver.h $(OBJECTS:%.o=build/%.o) build/srv_patcher.o
 build/idmap_gen: build/gcc_ver.h $(OBJECTS:%.o=build/%.o) build/idmap_gen.o
 	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ -Wl,--no-whole-archive
 
+build/idmap_convert: build/gcc_ver.h $(OBJECTS:%.o=build/%.o) build/idmap_convert.o
+	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ -Wl,--no-whole-archive
+
 build/client_patcher: build/gcc_ver.h $(OBJECTS:%.o=build/%.o) build/client_patcher.o build/pw_pck.o build/zpipe.o
 	windres -i patcher.rc -o patcher_rc.o
 	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ patcher_rc.o -Wl,--no-whole-archive -lwininet -mwindows -lcrypt32 -Wl,-Bstatic -lz -liconv -Wl,-Bdynamic
