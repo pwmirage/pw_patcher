@@ -190,7 +190,7 @@ import_stream_cb(void *ctx, struct cjson *obj)
 		const char *mapid = type + 9;
 		int i;
 
-		for (i = 0; i < PW_MAX_MAPS; i++) {
+		for (i = 1; i < PW_MAX_MAPS; i++) {
 			npcfile = &g_npc_files[i];
 
 			if (strcmp(npcfile->name, mapid) == 0) {
@@ -361,7 +361,7 @@ main(int argc, char *argv[])
 			return 1;
 		}
 
-		for (i = 0; i < PW_MAX_MAPS; i++) {
+		for (i = 1; i < PW_MAX_MAPS; i++) {
 			const struct map_name *map = &g_map_names[i];
 			struct pw_npc_file *npc = &g_npc_files[i];
 			const char *dir;
@@ -425,7 +425,7 @@ main(int argc, char *argv[])
 		pw_elements_save(g_elements, "config/elements.data", true);
 		pw_tasks_save(g_tasks, "config/tasks.data", true);
 
-		for (i = 0; i < PW_MAX_MAPS; i++) {
+		for (i = 1; i < PW_MAX_MAPS; i++) {
 			const struct map_name *map = &g_map_names[i];
 			struct pw_npc_file *npc = &g_npc_files[i];
 

@@ -17,13 +17,14 @@
 #define TRIGGER_ID(r) (*(uint32_t *)((r) + 0))
 
 struct map_name {
+	int id;
 	const char *name;
 	const char *dir_name;
 };
 
 struct pw_chain_table;
 
-#define PW_MAX_MAPS 32
+#define PW_MAX_MAPS 33
 extern const struct map_name g_map_names[];
 extern struct pw_idmap *g_triggers_map;
 

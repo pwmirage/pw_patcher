@@ -166,7 +166,7 @@ print_npcgen()
 	char tmpbuf[1024];
 	int i;
 
-	for (i = 0; i < PW_MAX_MAPS; i++) {
+	for (i = 1; i < PW_MAX_MAPS; i++) {
 		const struct map_name *map = &g_map_names[i];
 		snprintf(tmpbuf, sizeof(tmpbuf), "mkdir -p json/%s", map->name);
 		system(tmpbuf);
