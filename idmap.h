@@ -22,7 +22,6 @@ struct pw_idmap_el {
 typedef void (*pw_idmap_async_fn)(struct pw_idmap_el *node, void *ctx);
 
 struct pw_idmap *pw_idmap_init(const char *name, const char *filename, int can_set);
-void pw_idmap_ignore_dups(struct pw_idmap *map);
 long pw_idmap_register_type(struct pw_idmap *map);
 struct pw_idmap_el *pw_idmap_get(struct pw_idmap *map, long long lid, long type);
 int pw_idmap_get_async(struct pw_idmap *map, long long lid, long type, pw_idmap_async_fn fn, void *fn_ctx);

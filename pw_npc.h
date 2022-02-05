@@ -37,6 +37,7 @@ struct pw_npc_file {
 		uint32_t triggers_count;
 	} hdr;
 
+	int map_id;
 	const char *name;
 	struct pw_chain_table spawners;
 	struct pw_chain_table resources;
@@ -46,7 +47,15 @@ struct pw_npc_file {
 };
 
 struct cjson;
-int pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, bool clean_load);
+
+int pw_npcs_load_static(const char *triggers_idmap_path);
+void pw_npcs_save_static(const char *triggers_idmap_path);
+size_t pw_npcs_serialize_trigger_id(FILE *fp, struct serializer *f, void *data);
+size_t pw_npcs_deserialize_trigger_id(struct cjson *f, struct serializer *slzr, void *data);
+size_t pw_npc_serialize_trigger_ai_id(FILE *fp, struct serializer *f, void *data);
+size_t pw_npc_deserialize_trigger_ai_id(struct cjson *f, struct serializer *slzr, void *data);
+
+int pw_npcs_load(struct pw_npc_file *npc, int map_id, const char *name, const char *file_path, bool clean_load);
 int pw_npcs_serialize(struct pw_npc_file *npc, const char *type, const char *path);
 int pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj);
 int pw_npcs_save(struct pw_npc_file *npc, const char *file_path);

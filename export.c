@@ -173,7 +173,7 @@ print_npcgen()
 
 		memset(&npc, 0, sizeof(npc));
 		snprintf(tmpbuf, sizeof(tmpbuf), "config/%s/npcgen.data", map->dir_name);
-		pw_npcs_load(&npc, map->name, tmpbuf, true);
+		pw_npcs_load(&npc, map->id, map->name, tmpbuf, true);
 
 		snprintf(tmpbuf, sizeof(tmpbuf), "json/%s/triggers.json", map->name);
 		pw_npcs_serialize(&npc, "triggers", tmpbuf);

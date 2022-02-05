@@ -22,7 +22,6 @@
 #include "pw_npc.h"
 
 extern struct pw_idmap *g_elements_map;
-struct pw_idmap *g_triggers_map;
 
 const struct map_name g_map_names[PW_MAX_MAPS] = {
 	{ 0, "INVALID", "INVALID" },
@@ -59,6 +58,118 @@ const struct map_name g_map_names[PW_MAX_MAPS] = {
 	{ 31, "is33", "a33" },
 	{ 32, "a26b", "a26b" },
 };
+
+struct pw_idmap *g_triggers_map;
+
+int
+pw_npcs_load_static(const char *triggers_idmap_path)
+{
+	assert(!g_triggers_map);
+	g_triggers_map = pw_idmap_init("npcgen_triggers", triggers_idmap_path, true);
+	if (!g_triggers_map) {
+		return 1;
+	}
+
+	return 0;
+}
+
+void
+pw_npcs_save_static(const char *triggers_idmap_path)
+{
+	pw_idmap_save(g_triggers_map, triggers_idmap_path);
+	g_triggers_map = NULL;
+}
+
+size_t
+pw_npcs_serialize_trigger_id(FILE *fp, struct serializer *f, void *data)
+{
+	uint32_t trigger = *(uint32_t *)data;
+
+	if (trigger) {
+		fprintf(fp, "\"%s\":\"%u\",", f->name, trigger);
+	}
+	return 4;
+}
+
+static void
+deserialize_trigger_id_async_fn(struct pw_idmap_el *node, void *target_data)
+{
+	uint32_t id = TRIGGER_ID(node->data);
+	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)target_data, id);
+	*(uint32_t *)target_data = id;
+}
+
+size_t
+pw_npcs_deserialize_trigger_id(struct cjson *f, struct serializer *slzr, void *data)
+{
+	int64_t val = JSi(f);
+
+	if (f->type == CJSON_TYPE_NONE) {
+		return 4;
+	}
+
+	if (val >= 0x80000000) {
+		int rc = pw_idmap_get_async(g_triggers_map, val, 0,
+				deserialize_trigger_id_async_fn, data);
+		if (rc) {
+			assert(false);
+		}
+	} else {
+		deserialize_log(f, data);
+		*(uint32_t *)(data) = (uint32_t)val;
+	}
+
+	return 4;
+}
+
+static void
+deserialize_trigger_ai_id_async_fn(struct pw_idmap_el *node, void *target_data)
+{
+	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)target_data, node->id);
+	*(uint32_t *)target_data = node->id;
+}
+
+size_t
+pw_npc_deserialize_trigger_ai_id(struct cjson *f, struct serializer *slzr, void *data)
+{
+	int64_t val = JSi(f);
+
+	if (f->type == CJSON_TYPE_NONE) {
+		return 4;
+	}
+
+	if (!g_triggers_map) {
+		*(uint32_t *)(data) = 0;
+		return 4;
+	}
+
+	if (val >= 0x80000000) {
+		/* use trigger's id (same as ai_id) */
+		int rc = pw_idmap_get_async(g_triggers_map, val, 0,
+				deserialize_trigger_ai_id_async_fn, data);
+		if (rc) {
+			assert(false);
+		}
+	} else {
+		/* assume the caller knows what they're doing. This is kept for
+		 * compatibility reasons and shouldn't happen in any new changes.
+		 */
+		*(uint32_t *)(data) = (uint32_t)val;
+	}
+
+	return 4;
+}
+
+size_t
+pw_npc_serialize_trigger_ai_id(FILE *fp, struct serializer *f, void *data)
+{
+	uint32_t id = *(uint32_t *)data;
+
+	if (id) {
+		fprintf(fp, "\"%s\":%d,", f->name, id);
+	}
+	return 4;
+}
 
 static size_t
 serialize_spawner_type_fn(FILE *fp, struct serializer *f, void *data)
@@ -150,46 +261,6 @@ serialize_elements_id_field_fn(FILE *fp, struct serializer *f, void *data)
 	return 4;
 }
 
-static size_t
-serialize_trigger_id_fn(FILE *fp, struct serializer *f, void *data)
-{
-	uint32_t trigger = *(uint32_t *)data;
-
-	fprintf(fp, "\"trigger\":\"%u\",", trigger);
-	return 4;
-}
-
-static void
-deserialize_trigger_id_async_fn(struct pw_idmap_el *node, void *target_data)
-{
-	uint32_t id = TRIGGER_ID(node->data);
-	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)target_data, id);
-	*(uint32_t *)target_data = id;
-}
-
-static size_t
-deserialize_trigger_id_fn(struct cjson *f, struct serializer *slzr, void *data)
-{
-	int64_t val = JSi(f);
-
-	if (f->type == CJSON_TYPE_NONE) {
-		return 4;
-	}
-
-	if (val >= 0x80000000) {
-		int rc = pw_idmap_get_async(g_triggers_map, val, 0, deserialize_trigger_id_async_fn, data);
-
-		if (rc) {
-			assert(false);
-		}
-	} else {
-		deserialize_log(f, data);
-		*(uint32_t *)(data) = (uint32_t)val;
-	}
-
-	return 4;
-}
-
 static struct serializer spawner_group_serializer[] = {
 	{ "type", _CUSTOM, serialize_elements_id_field_fn, deserialize_elements_id_field_fn },
 	{ "count", _INT32 },
@@ -231,7 +302,7 @@ static struct serializer spawner_serializer[] = {
 	{ "_unused1", _INT8 },
 	{ "_removed", _CUSTOM, serialize_id_removed_fn, deserialize_id_removed_fn },
 	{ "id", _INT32 },
-	{ "trigger", _CUSTOM, serialize_trigger_id_fn, deserialize_trigger_id_fn },
+	{ "trigger", _CUSTOM, pw_npcs_serialize_trigger_id, pw_npcs_deserialize_trigger_id },
 	{ "lifetime", _FLOAT },
 	{ "max_num", _INT32 },
 	{ "groups", _CHAIN_TABLE, spawner_group_serializer },
@@ -273,7 +344,7 @@ static struct serializer resource_serializer[] = {
 		{ "", _INT8 },
 	{ "", _ARRAY_END },
 	{ "rad", _INT8 },
-	{ "trigger", _CUSTOM, serialize_trigger_id_fn, deserialize_trigger_id_fn },
+	{ "trigger", _CUSTOM, pw_npcs_serialize_trigger_id, pw_npcs_deserialize_trigger_id },
 	{ "max_num", _INT32 },
 	{ "groups", _CHAIN_TABLE, resource_group_serializer },
 	{ "", _TYPE_END },
@@ -288,7 +359,7 @@ static struct serializer dynamic_serializer[] = {
 		{ "", _INT8 },
 	{ "", _ARRAY_END },
 	{ "rad", _INT8 },
-	{ "trigger", _CUSTOM, serialize_trigger_id_fn, deserialize_trigger_id_fn },
+	{ "trigger", _CUSTOM, pw_npcs_serialize_trigger_id, pw_npcs_deserialize_trigger_id },
 	{ "scale", _INT8 },
 	{ "", _TYPE_END },
 };
@@ -324,25 +395,17 @@ static struct serializer trigger_serializer[] = {
 };
 
 int
-pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, bool clean_load)
+pw_npcs_load(struct pw_npc_file *npc, int map_id, const char *name, const char *file_path, bool clean_load)
 {
 	FILE *fp;
 	int rc;
 	char buf[128];
 	char buf2[256];
 
-	if (!g_triggers_map) {
-		g_triggers_map = pw_idmap_init("npcgen_triggers", "patcher/triggers.imap", true);
-		if (!g_triggers_map) {
-			PWLOG(LOG_ERROR, "pw_idmap_init() failed\n");
-			return 1;
-		}
-		pw_idmap_ignore_dups(g_triggers_map);
-	}
-
 	memset(npc, 0, sizeof(*npc));
 	snprintf(buf, sizeof(buf), "npcgen_%s", name);
 
+	npc->map_id = map_id;
 	npc->name = name;
 	snprintf(buf2, sizeof(buf2), "patcher/%s.imap", buf);
 	npc->idmap = pw_idmap_init(buf, clean_load ? NULL : buf2, true);
@@ -499,7 +562,7 @@ pw_npcs_load(struct pw_npc_file *npc, const char *name, const char *file_path, b
 		PWLOG(LOG_DEBUG_5, "trigger parsed, off=%u, id=%u\n", ftell(fp), id);
 
 		pw_idmap_set(npc->idmap, id, npc->triggers.idmap_type, el);
-		struct pw_idmap_el *g_node = pw_idmap_set(g_triggers_map, id, 0, el);
+		struct pw_idmap_el *g_node = pw_idmap_set(g_triggers_map, id, npc->map_id, el);
 		if (g_node) {
 			g_node->id = id;
 		}
@@ -601,7 +664,7 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 
 			*(uint32_t *)serializer_get_field(trigger_serializer, "_ai_id", table_el) = node->id;
 
-			struct pw_idmap_el *g_node = pw_idmap_set(g_triggers_map, id, table->idmap_type, table_el);
+			struct pw_idmap_el *g_node = pw_idmap_set(g_triggers_map, id, npc->map_id, table_el);
 			g_node->id = node->id;
 		}
 	}
@@ -760,12 +823,7 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 
 	fclose(fp);
 
-	/* save idmap immediately, it's only used server-side */
-	if (g_triggers_map) {
-		pw_idmap_save(g_triggers_map, "patcher/triggers.imap");
-		g_triggers_map = NULL;
-	}
-
+	/* save idmaps immediately, it's only used server-side */
 	char tmpbuf[1024];
 	snprintf(tmpbuf, sizeof(tmpbuf), "patcher/npcgen_%s.imap", npc->name);
 	return pw_idmap_save(npc->idmap, tmpbuf);

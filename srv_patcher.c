@@ -361,6 +361,12 @@ main(int argc, char *argv[])
 			return 1;
 		}
 
+		rc = pw_npcs_load_static("patcher/triggers.imap");
+		if (rc != 0) {
+			PWLOG(LOG_ERROR, "pw_npcs_load_static(\"patcher/triggers.imap\") failed: %d\n", rc);
+			return 1;
+		}
+
 		for (i = 1; i < PW_MAX_MAPS; i++) {
 			const struct map_name *map = &g_map_names[i];
 			struct pw_npc_file *npc = &g_npc_files[i];
@@ -373,7 +379,7 @@ main(int argc, char *argv[])
 			}
 
 			snprintf(tmpbuf, sizeof(tmpbuf), "%s/%s/npcgen.data", dir, map->dir_name);
-			rc = pw_npcs_load(npc, map->name, tmpbuf, !is_cumulative);
+			rc = pw_npcs_load(npc, map->id, map->name, tmpbuf, !is_cumulative);
 			if (rc) {
 				PWLOG(LOG_ERROR, "pw_npcs_load(\"%s\") failed: %d\n", map->name, rc);
 				return 1;
@@ -436,6 +442,8 @@ main(int argc, char *argv[])
 				return 1;
 			}
 		}
+
+		pw_npcs_save_static("patcher/triggers.imap");
 	}
 
 	version.version = JSi(ver_cjson, "version");

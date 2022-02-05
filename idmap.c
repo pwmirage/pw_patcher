@@ -40,7 +40,6 @@ struct pw_idmap {
 	struct pw_avl *id_mappings;
 	struct pw_avl *by_lid;
 	struct pw_avl *by_id;
-	bool ignore_dups;
 };
 
 struct pw_idmap_async_fn_el {
@@ -242,12 +241,6 @@ pw_idmap_init(const char *name, const char *filename, int can_set)
 	return map;
 }
 
-void
-pw_idmap_ignore_dups(struct pw_idmap *map)
-{
-	map->ignore_dups = true;
-}
-
 long
 pw_idmap_register_type(struct pw_idmap *map)
 {
@@ -363,10 +356,6 @@ pw_idmap_set(struct pw_idmap *map, long long lid, long type, void *data)
 
 	el = _idmap_get(map, lid, type, true);
 	if (el && !el->is_async_fn) {
-		if (map->ignore_dups) {
-			return NULL;
-		}
-
 		PWLOG(LOG_ERROR, "Conflict at lid=0x%x, type=%d (el->type=%d, el->id=%d)\n", lid, type, el->type, el->id);
 		assert(false);
 		return NULL;

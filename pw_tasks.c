@@ -275,64 +275,6 @@ serialize_tasks_id_field_fn(FILE *fp, struct serializer *f, void *data)
 }
 
 static size_t
-deserialize_trigger_id_fn(struct cjson *f, struct serializer *slzr, void *data)
-{
-	int64_t val = JSi(f);
-
-	if (f->type == CJSON_TYPE_NONE) {
-		return 4;
-	}
-
-	if (!g_triggers_map) {
-		*(uint32_t *)(data) = 0;
-		return 4;
-	}
-
-	if (val >= 0x80000000) {
-		/* use trigger's id (same as ai_id) */
-		int rc = pw_idmap_get_async(g_triggers_map, val, 0, deserialize_id_field_async_fn, data);
-		if (rc) {
-			assert(false);
-		}
-	} else {
-		struct pw_idmap_el *el;
-
-		/* use trigger's ai_id (because it's different from id) */
-		deserialize_log(f, data);
-		el = pw_idmap_get(g_triggers_map, val, 0);
-		if (el) {
-			val = *(uint32_t *)(el->data + 4);
-		}
-		*(uint32_t *)(data) = (uint32_t)val;
-	}
-
-	return 4;
-}
-
-static size_t
-serialize_trigger_id_fn(FILE *fp, struct serializer *f, void *data)
-{
-	uint32_t id = *(uint32_t *)data;
-
-	if (!g_triggers_map) {
-		return 4;
-	}
-
-	if (id && id < 0x80000000) {
-		struct pw_idmap_el *el;
-
-		el = pw_idmap_get(g_triggers_map, id, 0);
-		if (el) {
-			id = *(uint32_t *)(el->data + 4);
-		}
-	}
-	if (id) {
-		fprintf(fp, "\"%s\":%d,", f->name, id);
-	}
-	return 4;
-}
-
-static size_t
 serialize_id_removed_fn(FILE *fp, struct serializer *f, void *data)
 {
 	/* TODO? */
@@ -460,7 +402,7 @@ static struct serializer pw_task_award_serializer[] = {
 	{ "petbag_slots", _INT32 },
 	{ "chi", _INT32 },
 	{ "tp", _OBJECT_START, NULL, NULL, pw_task_point_serializer },
-	{ "ai_trigger", _CUSTOM, serialize_trigger_id_fn, deserialize_trigger_id_fn },
+	{ "ai_trigger", _CUSTOM, pw_npc_serialize_trigger_ai_id, pw_npc_deserialize_trigger_ai_id },
 	{ "ai_trigger_enable", _INT8 },
 	{ "level_multiplier", _INT8 },
 	{ "divorce", _INT8 },
@@ -828,7 +770,7 @@ static struct serializer pw_task_serializer[] = {
 	{ "start_on_enter_location", _OBJECT_START, NULL, NULL, pw_task_location_serializer },
 	{ "instant_teleport", _INT8 },
 	{ "instant_teleport_point", _OBJECT_START, NULL, NULL, pw_task_point_serializer },
-	{ "ai_trigger", _CUSTOM, serialize_trigger_id_fn, deserialize_trigger_id_fn },
+	{ "ai_trigger", _CUSTOM, pw_npc_serialize_trigger_ai_id, pw_npc_deserialize_trigger_ai_id },
 	{ "ai_trigger_enable", _INT8 },
 	{ "_auto_trigger", _INT8 },
 	{ "_trigger_on_death", _INT8 },
