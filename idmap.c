@@ -174,7 +174,7 @@ idmap_load_json(struct pw_idmap *map, const char *filename)
 
 	rc = cjson_parse_arr_stream(buf, idmap_load_json_cb, map);
 	free(buf);
-	return rc;
+	return rc > 0 ? 0 : rc;
 }
 
 struct pw_idmap *
