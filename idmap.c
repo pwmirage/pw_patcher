@@ -492,7 +492,10 @@ idmap_save_json_cb(void *_node, void *ctx1, void *ctx2)
 	if (ftell(fp) > 2) {
 		fprintf(fp, ",\n");
 	}
-	fprintf(fp, "{\"lid\":%"PRIu64",\"id\":%u,\"type\":%u}", entry->lid, entry->id, entry->type);
+
+	unsigned pid = entry->lid < 0x80000000 ? 0 : ((entry->lid - 0x80000000) / 0x100000);
+	unsigned lid_off = entry->lid % 0x100000;
+	fprintf(fp, "{\"lid\":\"#%u:%u\",\"id\":%u,\"type\":%u}", pid, lid_off, entry->id, entry->type);
 }
 
 static int
