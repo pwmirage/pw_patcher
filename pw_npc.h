@@ -26,7 +26,6 @@ struct pw_chain_table;
 
 #define PW_MAX_MAPS 33
 extern const struct map_name g_map_names[];
-extern struct pw_idmap *g_triggers_map;
 
 struct pw_npc_file {
 	struct pw_npc_header {
@@ -43,13 +42,12 @@ struct pw_npc_file {
 	struct pw_chain_table resources;
 	struct pw_chain_table dynamics;
 	struct pw_chain_table triggers;
-	struct pw_idmap *idmap;
 };
 
 struct cjson;
 
-int pw_npcs_load_static(const char *triggers_idmap_path);
-void pw_npcs_save_static(const char *triggers_idmap_path);
+int pw_npcs_load_static(const char *triggers_idmap_path, const char *spawners_idmap_path);
+void pw_npcs_save_static(const char *triggers_idmap_path, const char *spawners_idmap_path);
 size_t pw_npcs_serialize_trigger_id(FILE *fp, struct serializer *f, void *data);
 size_t pw_npcs_deserialize_trigger_id(struct cjson *f, struct serializer *slzr, void *data);
 size_t pw_npc_serialize_trigger_ai_id(FILE *fp, struct serializer *f, void *data);

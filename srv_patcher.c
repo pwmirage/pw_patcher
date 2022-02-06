@@ -361,9 +361,9 @@ main(int argc, char *argv[])
 			return 1;
 		}
 
-		rc = pw_npcs_load_static("patcher/triggers.imap");
+		rc = pw_npcs_load_static("patcher/triggers.imap", "patcher/spawners.imap");
 		if (rc != 0) {
-			PWLOG(LOG_ERROR, "pw_npcs_load_static(\"patcher/triggers.imap\") failed: %d\n", rc);
+			PWLOG(LOG_ERROR, "pw_npcs_load_static(\"patcher/triggers.imap\", \"patcher/spawners.imap\") failed: %d\n", rc);
 			return 1;
 		}
 
@@ -443,7 +443,7 @@ main(int argc, char *argv[])
 			}
 		}
 
-		pw_npcs_save_static("patcher/triggers.imap");
+		pw_npcs_save_static("patcher/triggers.imap", "patcher/spawners.imap");
 	}
 
 	version.version = JSi(ver_cjson, "version");

@@ -59,10 +59,11 @@ const struct map_name g_map_names[PW_MAX_MAPS] = {
 	{ 32, "a26b", "a26b" },
 };
 
-struct pw_idmap *g_triggers_map;
+static struct pw_idmap *g_triggers_map;
+static struct pw_idmap *g_spawners_map;
 
 int
-pw_npcs_load_static(const char *triggers_idmap_path)
+pw_npcs_load_static(const char *triggers_idmap_path, const char *spawners_idmap_path)
 {
 	assert(!g_triggers_map);
 	g_triggers_map = pw_idmap_init("npcgen_triggers", triggers_idmap_path, true);
@@ -70,13 +71,20 @@ pw_npcs_load_static(const char *triggers_idmap_path)
 		return 1;
 	}
 
+	g_spawners_map = pw_idmap_init("npcgen_spawners", spawners_idmap_path, true);
+	if (!g_spawners_map) {
+		return 1;
+	}
+
 	return 0;
 }
 
 void
-pw_npcs_save_static(const char *triggers_idmap_path)
+pw_npcs_save_static(const char *triggers_idmap_path, const char *spawners_idmap_path)
 {
 	pw_idmap_save(g_triggers_map, triggers_idmap_path);
+	pw_idmap_save(g_spawners_map, spawners_idmap_path);
+	g_triggers_map = NULL;
 	g_triggers_map = NULL;
 }
 
@@ -408,11 +416,6 @@ pw_npcs_load(struct pw_npc_file *npc, int map_id, const char *name, const char *
 	npc->map_id = map_id;
 	npc->name = name;
 	snprintf(buf2, sizeof(buf2), "patcher/%s.imap", buf);
-	npc->idmap = pw_idmap_init(buf, clean_load ? NULL : buf2, true);
-	if (!npc->idmap) {
-		PWLOG(LOG_ERROR, "pw_idmap_init() failed\n");
-		return 1;
-	}
 
 	fp = fopen(file_path, "rb");
 	if (fp == NULL) {
@@ -444,7 +447,6 @@ pw_npcs_load(struct pw_npc_file *npc, int map_id, const char *name, const char *
 		goto err;
 	}
 
-	npc->spawners.idmap_type = pw_idmap_register_type(npc->idmap);
 	npc->spawners.chain->count = npc->hdr.creature_sets_count;
 	for (int i = 0;	i < npc->hdr.creature_sets_count; i++) {
 		void *el = npc->spawners.chain->data + i * npc->spawners.el_size;
@@ -472,7 +474,8 @@ pw_npcs_load(struct pw_npc_file *npc, int map_id, const char *name, const char *
 		}
 		id = SPAWNER_ID(el) & ~(1UL << 31);
 		PWLOG(LOG_DEBUG_5, "spawner parsed, off=%u, id=%u, groups=%u\n", off, id, groups_count);
-		pw_idmap_set(npc->idmap, id, npc->spawners.idmap_type, el);
+		pw_idmap_set(g_spawners_map, id, npc->map_id, el);
+
 	}
 
 	rc = pw_chain_table_init(&npc->resources, "resources", resource_serializer, serializer_get_size(resource_serializer), npc->hdr.resource_sets_count);
@@ -481,7 +484,6 @@ pw_npcs_load(struct pw_npc_file *npc, int map_id, const char *name, const char *
 		goto err;
 	}
 
-	npc->resources.idmap_type = pw_idmap_register_type(npc->idmap);
 	npc->resources.chain->count = npc->hdr.resource_sets_count;
 	for (int i = 0;	i < npc->hdr.resource_sets_count; i++) {
 		void *el = npc->resources.chain->data + i * npc->resources.el_size;
@@ -511,7 +513,7 @@ pw_npcs_load(struct pw_npc_file *npc, int map_id, const char *name, const char *
 		}
 		id = RESOURCE_ID(el) & ~(1UL << 31);
 		PWLOG(LOG_DEBUG_5, "resource parsed, off=%u, id=%u, groups=%u\n", off, id, groups_count);
-		pw_idmap_set(npc->idmap, id, npc->resources.idmap_type, el);
+		pw_idmap_set(g_spawners_map, id, npc->map_id, el);
 	}
 
 	rc = pw_chain_table_init(&npc->dynamics, "dynamics", dynamic_serializer, 24, npc->hdr.dynamics_count);
@@ -520,7 +522,6 @@ pw_npcs_load(struct pw_npc_file *npc, int map_id, const char *name, const char *
 		goto err;
 	}
 
-	npc->dynamics.idmap_type = pw_idmap_register_type(npc->idmap);
 	npc->dynamics.chain->count = npc->hdr.dynamics_count;
 	for (int i = 0;	i < npc->hdr.dynamics_count; i++) {
 		void *el = (void *)(npc->dynamics.chain->data + i * npc->dynamics.el_size);
@@ -538,7 +539,7 @@ pw_npcs_load(struct pw_npc_file *npc, int map_id, const char *name, const char *
 		}
 
 		PWLOG(LOG_DEBUG_5, "dynamic parsed, off=%u, id=%u\n", ftell(fp), i + 1);
-		pw_idmap_set(npc->idmap, i + 1, npc->dynamics.idmap_type, el);
+		//pw_idmap_set(npc->idmap, i + 1, npc->dynamics.idmap_type, el);
 	}
 
 	rc = pw_chain_table_init(&npc->triggers, "triggers", trigger_serializer, 199, npc->hdr.triggers_count);
@@ -547,7 +548,6 @@ pw_npcs_load(struct pw_npc_file *npc, int map_id, const char *name, const char *
 		goto err;
 	}
 
-	npc->triggers.idmap_type = pw_idmap_register_type(npc->idmap);
 	npc->triggers.chain->count = npc->hdr.triggers_count;
 	for (int i = 0;	i < npc->hdr.triggers_count; i++) {
 		void *el = (void *)(npc->triggers.chain->data + i * npc->triggers.el_size);
@@ -561,11 +561,7 @@ pw_npcs_load(struct pw_npc_file *npc, int map_id, const char *name, const char *
 		id = TRIGGER_ID(el) & ~(1UL << 31);
 		PWLOG(LOG_DEBUG_5, "trigger parsed, off=%u, id=%u\n", ftell(fp), id);
 
-		pw_idmap_set(npc->idmap, id, npc->triggers.idmap_type, el);
-		struct pw_idmap_el *g_node = pw_idmap_set(g_triggers_map, id, npc->map_id, el);
-		if (g_node) {
-			g_node->id = id;
-		}
+		pw_idmap_set(g_triggers_map, id, npc->map_id, el);
 	}
 
 	fclose(fp);
@@ -599,7 +595,7 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 	obj_type = JSs(obj, "type");
 	if (strncmp(db_type, "triggers_", strlen("triggers_")) == 0) {
 		table = &npc->triggers;
-		node = pw_idmap_get(npc->idmap, id, table->idmap_type);
+		node = pw_idmap_get(g_triggers_map, id, npc->map_id);
 	} else if (strlen(obj_type) > 0) {
 		if (strcmp(obj_type, "npc") == 0) {
 			table = &npc->spawners;
@@ -612,17 +608,13 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 			return -1;
 		}
 
-		node = pw_idmap_get(npc->idmap, id, table->idmap_type);
+		node = pw_idmap_get(g_spawners_map, id, npc->map_id);
 	} else {
 		table = &npc->spawners;
-		node = pw_idmap_get(npc->idmap, id, table->idmap_type);
+		node = pw_idmap_get(g_spawners_map, id, npc->map_id);
 		if (!node) {
-			table = &npc->resources;
-			node = pw_idmap_get(npc->idmap, id, table->idmap_type);
-			if (!node) {
-				PWLOG(LOG_ERROR, "new spawner without obj.type set: %"PRIu64"\n", id);
-				return -1;
-			}
+			PWLOG(LOG_ERROR, "new spawner without obj.type set: %"PRIu64"\n", id);
+			return -1;
 		}
 	}
 
@@ -630,11 +622,11 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 		table_el = node->data;
 	} else {
 		table_el = pw_chain_table_new_el(table);
-		node = pw_idmap_set(npc->idmap, id, table->idmap_type, table_el);
 
 		if (table == &npc->spawners) {
 			struct pw_chain_table *grp_tbl;
 
+			node = pw_idmap_set(g_spawners_map, id, npc->map_id, table_el);
 			SPAWNER_ID(table_el) = node->id;
 			*(uint32_t *)serializer_get_field(table->serializer, "type", table_el) = 1;
 			*(uint8_t *)serializer_get_field(table->serializer, "auto_spawn", table_el) = 1;
@@ -651,6 +643,7 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 		} else if (table == &npc->resources) {
 			struct pw_chain_table *grp_tbl;
 
+			node = pw_idmap_set(g_spawners_map, id, npc->map_id, table_el);
 			RESOURCE_ID(table_el) = node->id;
 
 			grp_tbl = pw_chain_table_alloc("spawner_group", resource_group_serializer, serializer_get_size(resource_group_serializer), 8);
@@ -659,13 +652,14 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 				return -1;
 			}
 			*(void **)serializer_get_field(table->serializer, "groups", table_el) = grp_tbl;
-		} else if (table == &npc->triggers) {
-			TRIGGER_ID(table_el) = node->id;
-
-			*(uint32_t *)serializer_get_field(trigger_serializer, "_ai_id", table_el) = node->id;
 
 			struct pw_idmap_el *g_node = pw_idmap_set(g_triggers_map, id, npc->map_id, table_el);
 			g_node->id = node->id;
+		} else if (table == &npc->triggers) {
+			node = pw_idmap_set(g_triggers_map, id, npc->map_id, table_el);
+			TRIGGER_ID(table_el) = node->id;
+
+			*(uint32_t *)serializer_get_field(trigger_serializer, "_ai_id", table_el) = node->id;
 		}
 	}
 
@@ -822,11 +816,7 @@ pw_npcs_save(struct pw_npc_file *npc, const char *file_path)
 	PWLOG(LOG_DEBUG_5, "triggers_count: %u\n", triggers_count);
 
 	fclose(fp);
-
-	/* save idmaps immediately, it's only used server-side */
-	char tmpbuf[1024];
-	snprintf(tmpbuf, sizeof(tmpbuf), "patcher/npcgen_%s.imap", npc->name);
-	return pw_idmap_save(npc->idmap, tmpbuf);
+	return 0;
 }
 
 int
