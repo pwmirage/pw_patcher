@@ -85,7 +85,7 @@ pw_npcs_save_static(const char *triggers_idmap_path, const char *spawners_idmap_
 	pw_idmap_save(g_triggers_map, triggers_idmap_path);
 	pw_idmap_save(g_spawners_map, spawners_idmap_path);
 	g_triggers_map = NULL;
-	g_triggers_map = NULL;
+	g_spawners_map = NULL;
 }
 
 size_t
@@ -102,9 +102,8 @@ pw_npcs_serialize_trigger_id(FILE *fp, struct serializer *f, void *data)
 static void
 deserialize_trigger_id_async_fn(struct pw_idmap_el *node, void *target_data)
 {
-	uint32_t id = TRIGGER_ID(node->data);
-	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)target_data, id);
-	*(uint32_t *)target_data = id;
+	PWLOG(LOG_INFO, "patching (prev:%u, new: %u)\n", *(uint32_t *)target_data, node->id);
+	*(uint32_t *)target_data = node->id;
 }
 
 size_t
@@ -151,18 +150,18 @@ pw_npc_deserialize_trigger_ai_id(struct cjson *f, struct serializer *slzr, void 
 		return 4;
 	}
 
-	if (val >= 0x80000000) {
-		/* use trigger's id (same as ai_id) */
+	struct pw_idmap_el *node = pw_idmap_get(g_triggers_map, val, 0);
+	if (node) {
+		/* the element is initialized, so its ai_id might differ from id
+		 * -> try to use it */
+		*(uint32_t *)(data) = *(uint32_t *)(node->data + 4);
+	} else if (val >= 0x80000000) {
+		/* use trigger's id (guaranteed to be the same as ai_id) */
 		int rc = pw_idmap_get_async(g_triggers_map, val, 0,
 				deserialize_trigger_ai_id_async_fn, data);
 		if (rc) {
 			assert(false);
 		}
-	} else {
-		/* assume the caller knows what they're doing. This is kept for
-		 * compatibility reasons and shouldn't happen in any new changes.
-		 */
-		*(uint32_t *)(data) = (uint32_t)val;
 	}
 
 	return 4;
@@ -652,9 +651,6 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 				return -1;
 			}
 			*(void **)serializer_get_field(table->serializer, "groups", table_el) = grp_tbl;
-
-			struct pw_idmap_el *g_node = pw_idmap_set(g_triggers_map, id, npc->map_id, table_el);
-			g_node->id = node->id;
 		} else if (table == &npc->triggers) {
 			node = pw_idmap_set(g_triggers_map, id, npc->map_id, table_el);
 			TRIGGER_ID(table_el) = node->id;
