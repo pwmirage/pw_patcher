@@ -27,7 +27,7 @@ _serialize(FILE *fp, struct serializer **slzr_table_p, void **data_p,
 		unsigned data_cnt, bool skip_empty_objs, bool newlines, bool force_object)
 {
 	unsigned data_idx;
-	struct serializer *slzr;
+	struct serializer *slzr = NULL;
 	void *data = *data_p;
 	bool nonzero, obj_printed;
 	long sz, arr_sz;
