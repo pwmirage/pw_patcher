@@ -609,11 +609,16 @@ pw_npcs_patch_obj(struct pw_npc_file *npc, struct cjson *obj)
 
 		node = pw_idmap_get(g_spawners_map, id, npc->map_id);
 	} else {
-		table = &npc->spawners;
 		node = pw_idmap_get(g_spawners_map, id, npc->map_id);
 		if (!node) {
 			PWLOG(LOG_ERROR, "new spawner without obj.type set: %"PRIu64"\n", id);
 			return -1;
+		}
+
+		if (node->id >= 100000) {
+			table = &npc->resources;
+		} else {
+			table = &npc->spawners;
 		}
 	}
 
