@@ -202,7 +202,9 @@ on_init(int argc, char *argv[])
 				strcmp(get_extension(name), "dll") == 0) {
 			snprintf(namebuf, sizeof(namebuf), "element\\%s", name);
 		} else if (strcmp(name, "calibrib.ttf") == 0) {
-			snprintf(namebuf, sizeof(namebuf), "element\\fonts\\%s", name);
+			snprintf(namebuf, sizeof(namebuf), "element\\data\\%s", name);
+		} else if (strcmp(name, "fontawesome-webfont.ttf") == 0) {
+			snprintf(namebuf, sizeof(namebuf), "element\\data\\%s", name);
 		} else {
 			snprintf(namebuf, sizeof(namebuf), "patcher\\%s", name);
 		}
@@ -243,7 +245,7 @@ on_init(int argc, char *argv[])
 		}
 	}
 
-	if (JSi(g_latest_version, "launcher_version") > 2500) {
+	if (JSi(g_latest_version, "launcher_version") > 2501) {
 		set_progress_state(PBST_PAUSED);
 
 		g_patcher_outdated = true;
