@@ -20,7 +20,6 @@
 #define MG_GUI_ID_VERSION 9
 #define MG_GUI_ID_PROGRESS 10
 #define MG_GUI_ID_IMAGE 11
-#define MG_GUI_ID_PROFILE 12
 
 enum mg_patcher_msg_command {
 	MGP_MSG_INIT = 0,

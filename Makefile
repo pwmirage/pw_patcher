@@ -3,7 +3,7 @@ ALL_OBJECTS := $(OBJECTS) export.o srv_patcher.o idmap_gen.o mgpck.o zpipe.o ext
 _CFLAGS := -O3 -MMD -MP -fno-strict-aliasing -Wall -Wno-format-truncation $(CFLAGS)
 
 ifeq ($(OS),Windows_NT)
-	ALL_OBJECTS := $(ALL_OBJECTS) gui.o gui_button.o client_patcher.o client_launcher.o client_launcher_settings.o updater.o sha1.o pw_pck.o game_config.o
+	ALL_OBJECTS := $(ALL_OBJECTS) gui.o gui_button.o client_patcher.o client_launcher.o client_launcher_settings.o updater.o sha1.o pw_pck.o csh_config.o
 	_CFLAGS := -D_WIN32_WINNT=0x0502 $(_CFLAGS)
 endif
 
@@ -37,7 +37,7 @@ build/client_patcher: build/gcc_ver.h $(OBJECTS:%.o=build/%.o) build/client_patc
 	windres -i patcher.rc -o patcher_rc.o
 	gcc $(_CFLAGS) -o $@ -Wl,--whole-archive $^ patcher_rc.o -Wl,--no-whole-archive -lwininet -mwindows -lcrypt32 -Wl,-Bstatic -lz -liconv -Wl,-Bdynamic
 
-build/launcher.dll: build/gcc_ver.h build/cjson.o build/common.o build/sha1.o build/gui.o build/gui_button.o build/client_launcher.o build/client_launcher_settings.o build/game_config.o build/avl.o
+build/launcher.dll: build/gcc_ver.h build/cjson.o build/common.o build/sha1.o build/gui.o build/gui_button.o build/client_launcher.o build/client_launcher_settings.o build/csh_config.o build/avl.o
 	gcc $(CFLAGS) -o $@ -shared -fPIC $^ -Wl,--subsystem,windows -lwininet -mwindows -lcrypt32 -static-libgcc
 
 build/client_launcher: build/pwmirage.exe ;

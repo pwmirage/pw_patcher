@@ -44,6 +44,9 @@ extern const char g_zeroes[4096];
 extern FILE *g_nullfile;
 extern int g_idmap_can_set;
 
+extern bool g_cfg_d3d8;
+extern bool g_cfg_custom_font;
+
 #define PW_VERSION_MAGIC 0xb78e97a1
 struct pw_version {
 	uint32_t magic;

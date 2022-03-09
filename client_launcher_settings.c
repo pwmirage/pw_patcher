@@ -9,13 +9,16 @@
 
 #include "gui.h"
 #include "common.h"
-#include "game_config.h"
 #include "client_ipc.h"
+#include "csh_config.h"
 
 #define CHECKBOX_D3D8 1
 #define CHECKBOX_CFONT 2
 #define CHECKBOX_MAX 3
 #define BUTTON_REPAIR 4
+
+bool g_cfg_d3d8;
+bool g_cfg_custom_font;
 
 static BOOL CALLBACK
 hwnd_set_font(HWND child, LPARAM font)
@@ -83,12 +86,10 @@ init_gui(HWND hwnd, HINSTANCE hInst)
                 hwnd, (HMENU)CHECKBOX_CFONT, hInst, NULL);
 
 	CheckDlgButton(hwnd, CHECKBOX_D3D8,
-			game_config_get_int("Global", "d3d8", 0) ?
-			BST_CHECKED : BST_UNCHECKED);
+			g_cfg_d3d8 ? BST_CHECKED : BST_UNCHECKED);
 
 	CheckDlgButton(hwnd, CHECKBOX_CFONT,
-			game_config_get_int("Global", "custom_tag_font", 0) ?
-			BST_CHECKED : BST_UNCHECKED);
+			g_cfg_custom_font ? BST_CHECKED : BST_UNCHECKED);
 
 	CreateWindow("Button", "Repair files",
                 WS_VISIBLE | WS_CHILD,
@@ -121,13 +122,13 @@ WndProc(HWND hwnd, UINT msg, WPARAM data, LPARAM ldata)
 			case CHECKBOX_D3D8: {
 				bool check = !IsDlgButtonChecked(hwnd, id);
 				CheckDlgButton(hwnd, id, check ? BST_CHECKED : BST_UNCHECKED);
-				game_config_set_int("Global", "d3d8", check);
+				csh_cfg_save_i("set r_d3d8", check, true);
 				break;
 			}
 			case CHECKBOX_CFONT: {
 				bool check = !IsDlgButtonChecked(hwnd, id);
 				CheckDlgButton(hwnd, id, check ? BST_CHECKED : BST_UNCHECKED);
-				game_config_set_int("Global", "custom_tag_font", check);
+                                csh_cfg_save_i("set r_custom_tag_font", check, true);
 				break;
 			}
 			case BUTTON_REPAIR: {

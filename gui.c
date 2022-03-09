@@ -12,10 +12,8 @@
 #include "gui.h"
 #include "common.h"
 #include "client_ipc.h"
-#include "game_config.h"
 
 #define MG_CB_MSG (WM_USER + 165)
-#define MAX_GAME_PROFILE_LEN 63
 
 HINSTANCE g_instance;
 HWND g_win;
@@ -32,10 +30,7 @@ HBITMAP g_bmp;
 HDC g_hdc;
 unsigned g_win_tid;
 
-static int g_profiles[8];
-static int g_num_profiles;
 static char *g_changelog_txt;
-static HWND g_combo_hwnd;
 static LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 static LRESULT CALLBACK WndProcChangelogBox(HWND, UINT, WPARAM, LPARAM);
 
@@ -301,11 +296,6 @@ init_gui(HWND hwnd, HINSTANCE hInst)
 	btn->draw_ctx = &g_brush_settings;
 	btn->enabled = true;
 
-	g_combo_hwnd = CreateWindow("Combobox", NULL,
-		WS_CHILD |  WS_VISIBLE | CBS_DROPDOWNLIST | CBS_HASSTRINGS,
-		420, 19, 100, 32,
-		hwnd, (HMENU)MG_GUI_ID_PROFILE, hInst, 0);
-
 	btn = gui_button_init(MG_GUI_ID_QUIT, "Quit",
 			471, 289, 83, 23, hwnd, hInst);
 	btn->enabled = true;
@@ -328,17 +318,8 @@ init_gui(HWND hwnd, HINSTANCE hInst)
 	lf.lfWeight = FW_BOLD;
 	HFONT bold_font = CreateFontIndirect(&lf);
 
-	LOGFONT lf_combo = lf;
-	GetObject(default_font, sizeof(lf), &lf_combo);
-	strcpy(lf_combo.lfFaceName, "Microsoft Sans Serif");
-	lf_combo.lfWeight = FW_BOLD;
-	lf_combo.lfWidth = 0;
-	lf_combo.lfHeight = 16;
-	HFONT combo_font = CreateFontIndirect(&lf_combo);
-
 	EnumChildWindows(hwnd, (WNDENUMPROC)hwnd_set_font, (LPARAM)bold_font);
 	SendMessage(g_changelog_lbl, WM_SETFONT, (WPARAM)default_font, TRUE);
-	SendMessage(g_combo_hwnd, WM_SETFONT, (WPARAM)combo_font, TRUE);
 
 	CHARFORMAT cf;
 	cf.cbSize = sizeof(cf);
@@ -384,83 +365,6 @@ on_init_cb(void *arg1, void *arg2)
 	}
 
 	on_init(argc, argv);
-}
-
-void
-init_profile_list(void)
-{
-	if (game_config_get_int("Global", "default_profile", -1) == -1) {
-		game_config_set_int("Global", "default_profile", 1);
-	}
-
-	for (int i = 0; i < sizeof(g_profiles) / sizeof(g_profiles[0]); i++) {
-		char buf[MAX_GAME_PROFILE_LEN + 1];
-		const char *name;
-
-		snprintf(buf, sizeof(buf), "Profile %d", i);
-		name = game_config_get_str(buf, "name", NULL);
-
-		if (!name) {
-			continue;
-		}
-
-		g_profiles[g_num_profiles++] = i;
-		SendMessage(g_combo_hwnd, CB_ADDSTRING, 0, (LPARAM)name);
-	}
-
-	if (g_num_profiles == 0) {
-		game_config_set_str("Profile 1", "name", "Default");
-		game_config_set_int("Profile 1", "x", -1);
-		game_config_set_int("Profile 1", "y", -1);
-		game_config_set_int("Profile 1", "width", 1366);
-		game_config_set_int("Profile 1", "height", 768);
-		game_config_set_int("Profile 1", "fullscreen", 0);
-		g_profiles[g_num_profiles++] = 1;
-		SendMessage(g_combo_hwnd, CB_ADDSTRING, 0, (LPARAM)"Default");
-
-		game_config_set_str("Profile 2", "name", "Profile #2");
-		game_config_set_int("Profile 2", "x", 30);
-		game_config_set_int("Profile 2", "y", 30);
-		game_config_set_int("Profile 2", "width", 800);
-		game_config_set_int("Profile 2", "height", 600);
-		game_config_set_int("Profile 2", "fullscreen", 0);
-		g_profiles[g_num_profiles++] = 2;
-		SendMessage(g_combo_hwnd, CB_ADDSTRING, 0, (LPARAM)"Profile #2");
-	}
-
-	bool cur_sel_set = false;
-	int last_profile = game_config_get_int("Global", "default_profile", 0);
-	for (int i = 0; i < g_num_profiles; i++) {
-		int p = g_profiles[i];
-
-		if (p != last_profile) {
-			continue;
-		}
-
-		cur_sel_set = true;
-		SendMessage(g_combo_hwnd, CB_SETCURSEL, i, 0);
-	}
-
-	if (!cur_sel_set) {
-		SendMessage(g_combo_hwnd, CB_SETCURSEL, 0, 0);
-	}
-}
-
-int
-get_selected_profile_id(void)
-{
-	int index;
-
-	index = SendMessage((HWND)g_combo_hwnd, CB_GETCURSEL, 0, 0);
-	if (index == CB_ERR) {
-		return -1;
-	}
-
-	if (index >= g_num_profiles) {
-		return -1;
-	}
-
-	return g_profiles[index];
 }
 
 static LRESULT CALLBACK

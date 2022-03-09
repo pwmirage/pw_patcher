@@ -9,13 +9,14 @@
 #include <assert.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <errno.h>
 
 #include "common.h"
 #include "cjson.h"
 #include "cjson_ext.h"
 #include "gui.h"
-#include "game_config.h"
 #include "client_ipc.h"
+#include "csh_config.h"
 
 #define MG_GUI_ID_QUIT 1
 #define MG_GUI_ID_PATCH 2
@@ -82,6 +83,126 @@ check_deps(void)
 
 void patch_cb(void *arg1, void *arg2);
 
+static int
+split_string_to_words(char *input, char **argv, int *argc)
+{
+    char *c, *start;
+    bool in_quotes = false;
+	int cur_argc = 0;
+    int rc = 0;
+
+    #define NEW_WORD() \
+    ({ \
+        *c = 0; \
+		if (*start) { \
+			argv[cur_argc++] = start; \
+			if (cur_argc == *argc) { \
+				break; \
+			} \
+		} \
+        start = c + 1; \
+    })
+
+    c = start = input;
+    while (*c) {
+        if (*c == '"') {
+            if (in_quotes) {
+                if (*(c + 1) != ' ' && *(c + 1) != 0) {
+                    /* characters right after quote */
+                    return -EINVAL;
+                }
+
+                in_quotes = false;
+                NEW_WORD();
+				if (*(c + 1) != 0) { /* unless it's the end of input */
+					*(c + 1) = 0;  /* skip the space too */
+					c++; start++;
+				}
+            } else {
+                if (c > input && *(c - 1) != 0) {
+                    /* quote right after characters (a space would be modified into NUL) */
+                    return -EINVAL;
+                }
+
+                start = c + 1; /* dont include opening quote in the stirng */
+                in_quotes = true;
+            }
+        } else if (*c == ' ' && !in_quotes) {
+            NEW_WORD();
+        }
+        c++;
+    }
+
+    if (*c == 0) {
+        do {
+            NEW_WORD();
+        } while (0);
+    }
+
+	#undef NEW_WORD
+
+	*argc = cur_argc;
+    return rc;
+}
+
+static void
+launch_cfg_parse(const char *cmd, void *ctx)
+{
+	char buf[256];
+	char *words[4];
+	int numwords = 4;
+	int rc;
+
+	snprintf(buf, sizeof(buf), "%s", cmd);
+	rc = split_string_to_words(buf, words, &numwords);
+
+	if (rc != 0 || numwords != 3 || strcmp(words[0], "set") != 0) {
+		return;
+	}
+
+	if (strcmp(words[1], "r_d3d8") == 0) {
+		g_cfg_d3d8 = atoi(words[2]);
+	} else if (strcmp(words[1], "r_custom_tag_font") == 0) {
+		g_cfg_custom_font = atoi(words[2]);
+	}
+}
+
+static void
+remove_legacy_cfg(void)
+{
+	char *filedata;
+	size_t len;
+	int i, rc;
+	const char *cmps[] = {
+		"# PW Game settings v1.1",
+		"# PW Mirage Game settings"
+	};
+
+	rc = readfile("patcher\\game.cfg", &filedata, &len);
+	if (rc != 0) {
+		return;
+	}
+
+	for (i = 0; i < sizeof(cmps) / sizeof(cmps[0]); i++) {
+		if (strncmp(filedata, cmps[i], strlen(cmps[i])) == 0) {
+			break;
+		}
+	}
+
+	if (i == sizeof(cmps) / sizeof(cmps[0])) {
+		free(filedata);
+		return;
+	}
+
+	if (strstr(filedata, "\n[Global]") == NULL) {
+		free(filedata);
+		return;
+	}
+
+	free(filedata);
+	rename("patcher\\game.cfg", "patcher\\game.cfg.old");
+}
+
 void
 on_init(int argc, char *argv[])
 {
@@ -113,12 +234,15 @@ on_init(int argc, char *argv[])
 		return;
 	}
 
-	rc = game_config_parse("patcher\\game.cfg");
-	if (rc != 0) {
-		PWLOG(LOG_ERROR, "game_config_parse() failed with rc=%d\n", rc);
+	remove_legacy_cfg();
+
+	snprintf(g_csh_cfg.filename, sizeof(g_csh_cfg.filename), "patcher\\game.cfg");
+	rc = csh_cfg_parse(launch_cfg_parse, NULL);
+	if (rc != 0 && rc != -ENOENT) {
+		PWLOG(LOG_ERROR, "csh_cfg_parse() failed with rc=%d\n", rc);
 		set_text(MG_GUI_ID_STATUS_RIGHT, "Failed. Invalid file permissions?");
-		set_progress_state(PBST_ERROR);
 		set_progress(100);
+		set_progress_state(PBST_ERROR);
 		return;
 	}
 
@@ -126,12 +250,10 @@ on_init(int argc, char *argv[])
 	if (rc < 0) {
 		PWLOG(LOG_ERROR, "pw_version_load() failed with rc=%d\n", rc);
 		set_text(MG_GUI_ID_STATUS_RIGHT, "Failed. Invalid file permissions?");
-		set_progress_state(PBST_ERROR);
 		set_progress(100);
+		set_progress_state(PBST_ERROR);
 		return;
 	}
-
-	init_profile_list();
 
 	if (g_quickupdate) {
 		g_branch_name = g_version.branch;
@@ -162,8 +284,8 @@ on_init(int argc, char *argv[])
 		set_text(MG_GUI_ID_STATUS_RIGHT, "Can't parse patch list");
 		PWLOG(LOG_ERROR, "Can't parse patch list: %s\n", tmpbuf);
 		fprintf(stderr, g_latest_version_str);
-		set_progress_state(PBST_ERROR);
 		set_progress(100);
+		set_progress_state(PBST_ERROR);
 		return;
 	}
 
@@ -232,8 +354,8 @@ on_init(int argc, char *argv[])
 				i--;
 				continue;
 			} else {
-				set_progress_state(PBST_ERROR);
 				set_progress(100);
+				set_progress_state(PBST_ERROR);
 				snprintf(errmsg, sizeof(errmsg), "Failed to download \"%s\".", namebuf);
 				set_text(MG_GUI_ID_STATUS_RIGHT, errmsg);
 				return;
@@ -336,8 +458,6 @@ on_init(int argc, char *argv[])
 void
 on_fini(void)
 {
-	game_config_save(true);
-
 	if (g_latest_version) {
 		cjson_free(g_latest_version);
 	}
@@ -497,15 +617,8 @@ on_button_click(int btn)
 
 		SetCurrentDirectory("element");
 
-		if (game_config_get_int("Global", "d3d8", 0)) {
-			rename("d3d8.dll", "_d3d8.dll");
-		} else {
-			rename("_d3d8.dll", "d3d8.dll");
-		}
-
 		pw_proc_startup_info.cb = sizeof(STARTUPINFO);
-		snprintf(buf, sizeof(buf), "game.exe --profile %d",
-				get_selected_profile_id());
+		snprintf(buf, sizeof(buf), "game.exe");
 		result = CreateProcess(NULL, buf,
 				NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, NULL,
 				&pw_proc_startup_info, &pw_proc_info);
